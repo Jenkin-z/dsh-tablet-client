@@ -41,6 +41,7 @@ class MuxStream {
   void Function(String toolName)? onToolCall;
   void Function()? onToolResult;
   void Function()? onTurnEnd;
+  void Function(List<Map<String, dynamic>> queueItems)? onQueueUpdate;
   void Function()? onDisconnected;
   void Function(String message)? onError;
 
@@ -125,6 +126,13 @@ class MuxStream {
   bool _handleControl(
       String ptype, Map<String, dynamic> payload, String? frameRpcId) {
     switch (ptype) {
+      case 'session/queue':
+        if (sessionId != null && payload['sessionId'] != sessionId) return true;
+        final items = (payload['items'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        onQueueUpdate?.call(items);
+        return true;
       case 'approval/requested':
         onApproval?.call((
           rpcId: frameRpcId ?? '',

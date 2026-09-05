@@ -55,6 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
   DateTime? _lastSentAt;
   final ChangesTracker _changes = ChangesTracker();
   final List<PendingApproval> _approvals = [];
+  final Set<String> _queuedTexts = {};  // 当前 session/queue 快照中的消息文本
   PendingQuestion? _question;
   bool _questionDialogOpen = false;
   SessionRouter? _router;
@@ -281,6 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _agentRunning = false;
       _currentTitle = _titleFor(sessionId);
       _pendingEchoRpc.clear();
+      _queuedTexts.clear();
       _lastSentText = null;
       _lastSentAt = null;
       _changes.clear();
@@ -330,6 +332,7 @@ class _ChatScreenState extends State<ChatScreen> {
     };
     mux.onToolResult = _clearToolStatus;
     mux.onTurnEnd = _onTurnEnd;
+    mux.onQueueUpdate = _onQueueUpdate;
     mux.onDisconnected = () {
       if (!mounted) return;
       setState(() => _connected = false);
@@ -371,6 +374,35 @@ class _ChatScreenState extends State<ChatScreen> {
       SoundService.done(customPath: _settings.customSoundPath('done'));
     }
     _refreshSessions();
+  }
+
+  /// session/queue 快照：对比队列和已显示的气泡，移除被 PC 端删掉的消息
+  void _onQueueUpdate(List<Map<String, dynamic>> items) {
+    if (!mounted) return;
+    // 提取队列中每条消息的文本
+    final currentQueued = <String>{};
+    for (final item in items) {
+      final msg = item['message'] as Map<String, dynamic>?;
+      if (msg == null) continue;
+      final content = msg['content'] as List<dynamic>? ?? [];
+      final buf = StringBuffer();
+      for (final part in content) {
+        if (part is Map<String, dynamic> && part['type'] == 'text') {
+          buf.write(part['text'] as String? ?? '');
+        }
+      }
+      if (buf.isNotEmpty) currentQueued.add(buf.toString());
+    }
+    // 被删掉的：之前在队列里，现在不在了
+    final removed = _queuedTexts.difference(currentQueued);
+    _queuedTexts
+      ..clear()
+      ..addAll(currentQueued);
+    if (removed.isEmpty) return;
+    setState(() {
+      _messages.removeWhere(
+          (m) => m.role == 'user' && removed.contains(m.content));
+    });
   }
 
   void _checkApprovalsStale() {

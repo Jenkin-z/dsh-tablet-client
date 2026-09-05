@@ -130,8 +130,8 @@ ifconfig
 
 ```bash
 # 前置条件：Flutter 3.47+、Android SDK
-git clone https://github.com/<your-username>/dsh-tablet-client.git
-cd dsh_tablet_client
+git clone https://github.com/Jenkin-z/dsh-tablet-client.git
+cd dsh-tablet-client
 
 # 获取依赖
 flutter pub get

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
-import '../models/message.dart';
 
 /// DSH Host API 客户端
 ///
@@ -165,46 +164,5 @@ class DshApi {
     } catch (_) {
       return false;
     }
-  }
-
-  /// 从 history 事件中提取可展示的消息列表
-  static List<DshMessage> parseHistoryEvents(List<dynamic> events) {
-    final messages = <DshMessage>[];
-    for (final entry in events) {
-      final event = entry['event'] as Map<String, dynamic>?;
-      if (event == null) continue;
-
-      final type = event['type'] as String? ?? '';
-      final data = event['data'] as Map<String, dynamic>? ?? {};
-
-      if (type == 'user/message') {
-        final parts = data['content'] as List<dynamic>? ?? [];
-        final text = parts
-            .where((p) => p['type'] == 'text')
-            .map((p) => p['text'] as String)
-            .join();
-        if (text.isNotEmpty) {
-          messages.add(DshMessage(
-            id: event['seq']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            role: 'user',
-            content: text,
-          ));
-        }
-      } else if (type == 'assistant/message') {
-        final parts = data['content'] as List<dynamic>? ?? [];
-        final text = parts
-            .where((p) => p['type'] == 'text')
-            .map((p) => p['text'] as String)
-            .join();
-        if (text.isNotEmpty) {
-          messages.add(DshMessage(
-            id: event['seq']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            role: 'assistant',
-            content: text,
-          ));
-        }
-      }
-    }
-    return messages;
   }
 }

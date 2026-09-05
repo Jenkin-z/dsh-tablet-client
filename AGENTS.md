@@ -105,23 +105,13 @@ flutter analyze          # 零警告
 flutter build apk --release  # 构建成功
 ```
 
-## 当前技术债务（v1.2.2 审计）
+## 当前技术债务（v1.2.3）
 
-> 以下为已知超标项，后续迭代逐步修复。
+| 文件 | 状态 |
+|------|------|
+| `chat_screen.dart` | 已抽出会话抽屉 / 输入栏 / 工具条；业务回调仍偏多 |
+| `console_screen.dart` | 已抽出卡片与动画 |
+| `mux_stream.dart` | 解析已抽出 `mux_history.dart` |
+| `settings_screen.dart` | 仍超 400 行，下次拆区块 |
 
-| 文件 | 行数 | 问题 | 优先级 |
-|------|------|------|--------|
-| `chat_screen.dart` | 1033 | 35 个方法，State 类过大 | 🔴 高 |
-| `console_screen.dart` | 705 | 15 个类挤在一个文件 | 🟡 中 |
-| `settings_screen.dart` | 500 | 接近上限，尚未超标 | ⚪ 观察 |
-
-### chat_screen.dart 拆分计划
-
-1. 会话抽屉（workspace 分组逻辑）→ `widgets/session_drawer.dart`
-2. 审批/问题处理（`_onApproval` ~ `_submitQuestion`）→ `services/approval_handler.dart` 或 mixin
-3. Mux 回调注册（`_connectMux` 中 12 个回调）→ 独立方法或用 Map 批量绑定
-
-### console_screen.dart 拆分计划
-
-1. 动画组件（`_Entrance`, `_PulseDot`, `_BreathBadge`, `_EmptyState`）→ `widgets/animated_widgets.dart`
-2. 会话卡片（`_RunningCard`, `_UnviewedCard`, `_RecentTile`）→ `widgets/session_cards.dart`
+已修：任务中断后「正在调用工具」卡住（`tool/result`、本地取消、session.list running 跃迁三路清条）。

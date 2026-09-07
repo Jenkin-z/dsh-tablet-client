@@ -7,7 +7,7 @@ import '../services/dsh_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 
-/// 扫码或粘贴 /pair-accept?pair= 链接，配对一台 PC
+/// 扫码或粘贴 /pair-accept?pair= 链接。RK3288 只有前摄，默认开前置。
 class PairScreen extends StatefulWidget {
   final String? existingServerId;
   const PairScreen({super.key, this.existingServerId});
@@ -18,10 +18,42 @@ class PairScreen extends StatefulWidget {
 
 class _PairScreenState extends State<PairScreen> {
   final _paste = TextEditingController();
-  final _scanner = MobileScannerController();
+  late final MobileScannerController _scanner;
   bool _busy = false;
   String? _error;
   bool _handled = false;
+  CameraFacing _facing = CameraFacing.front;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanner = MobileScannerController(
+      facing: CameraFacing.front,
+      autoStart: false,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startCam(CameraFacing.front));
+  }
+
+  Future<void> _startCam(CameraFacing facing) async {
+    try {
+      await _scanner.stop();
+    } catch (_) {}
+    try {
+      await _scanner.start(cameraDirection: facing);
+      if (mounted) setState(() => _facing = facing);
+    } catch (_) {
+      if (facing == CameraFacing.front) {
+        await _startCam(CameraFacing.back);
+      }
+    }
+  }
+
+  Future<void> _flipCam() async {
+    final next = _facing == CameraFacing.front
+        ? CameraFacing.back
+        : CameraFacing.front;
+    await _startCam(next);
+  }
 
   @override
   void dispose() {
@@ -63,8 +95,7 @@ class _PairScreenState extends State<PairScreen> {
           s.host == target.host &&
           s.port == target.port &&
           (existingId == null || s.id == existingId));
-      final id = existingId ??
-          (same.isEmpty ? const Uuid().v4() : same.first.id);
+      final id = existingId ?? (same.isEmpty ? const Uuid().v4() : same.first.id);
       final prev = settings.servers.where((s) => s.id == id);
       await settings.upsertServer(DshServer(
         id: id,
@@ -92,7 +123,16 @@ class _PairScreenState extends State<PairScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('添加 / 配对 PC')),
+      appBar: AppBar(
+        title: const Text('添加 / 配对 PC'),
+        actions: [
+          IconButton(
+            tooltip: _facing == CameraFacing.front ? '切换后置' : '切换前置',
+            icon: const Icon(Icons.cameraswitch_outlined),
+            onPressed: _busy ? null : _flipCam,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -100,6 +140,15 @@ class _PairScreenState extends State<PairScreen> {
               children: [
                 MobileScanner(
                   controller: _scanner,
+                  errorBuilder: (context, error, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        '摄像头打不开（${error.errorCode}）。\n请用下面输入框粘贴配对链接。',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
                   onDetect: (barcodes) {
                     if (_handled || _busy) return;
                     final v = barcodes.barcodes
@@ -110,6 +159,18 @@ class _PairScreenState extends State<PairScreen> {
                     _handled = true;
                     _submit(v);
                   },
+                ),
+                const Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Text(
+                    '这块平板只有前置摄像头，请把屏幕朝向 PC 上的二维码',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, shadows: [
+                      Shadow(blurRadius: 6, color: Colors.black),
+                    ]),
+                  ),
                 ),
                 if (_busy)
                   const ColoredBox(
@@ -138,7 +199,8 @@ class _PairScreenState extends State<PairScreen> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 8),
-                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  Text(_error!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 ],
               ],
             ),

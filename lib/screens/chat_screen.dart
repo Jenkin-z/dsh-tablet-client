@@ -5,8 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../models/message.dart';
 import '../services/changes_tracker.dart';
 import '../services/dsh_api.dart';
+import '../services/dsh_auth.dart';
 import '../services/mux_stream.dart';
-import '../services/session_monitor.dart';
+import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
 import '../services/sound_service.dart';
@@ -59,7 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
   PendingQuestion? _question;
   bool _questionDialogOpen = false;
   SessionRouter? _router;
-  SessionMonitor? _monitor;
+  ServerManager? _manager;
   bool _wasCurrentRunning = false;
   Timer? _approvalPollTimer;
   String _deltaBuffer = '';
@@ -78,19 +79,20 @@ class _ChatScreenState extends State<ChatScreen> {
       _router = Provider.of<SessionRouter>(context, listen: false);
       _router!.addListener(_onRouteRequest);
     }
-    if (_monitor == null) {
-      _monitor = Provider.of<SessionMonitor>(context, listen: false);
-      _monitor!.addListener(_onMonitorTick);
+    if (_manager == null) {
+      _manager = Provider.of<ServerManager>(context, listen: false);
+      _manager!.addListener(_onMonitorTick);
     }
   }
 
   /// PC 端中断/取消时 mux 可能丢 turn/end；用 session.list 的 running 跃迁清工具条
   void _onMonitorTick() {
     if (!mounted) return;
+    final srv = _settings.active;
     final id = _settings.sessionId;
-    if (id == null) return;
+    if (srv == null || id == null) return;
     Map<String, dynamic>? current;
-    for (final s in _monitor?.sessions ?? const []) {
+    for (final s in _manager?.monitorOf(srv.id)?.sessions ?? const []) {
       if (s['sessionId'] == id) {
         current = s;
         break;
@@ -113,8 +115,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void _onRouteRequest() {
     final router = _router;
     if (router == null || !mounted) return;
-    final target = router.target;
-    if (target == null || target == _settings.sessionId) return;
+    final target = router.sessionId;
+    final serverId = router.serverId;
+    if (target == null || serverId == null) return;
+    if (serverId != _settings.activeServerId) return;
+    if (target == _settings.sessionId && _connected) {
+      router.consume(router.token);
+      return;
+    }
     if (!router.consume(router.token)) return;
     _switchSession(target);
   }
@@ -122,7 +130,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _router?.removeListener(_onRouteRequest);
-    _monitor?.removeListener(_onMonitorTick);
+    _manager?.removeListener(_onMonitorTick);
     _reconnectTimer?.cancel();
     _deltaFlushTimer?.cancel();
     _approvalPollTimer?.cancel();
@@ -140,17 +148,50 @@ class _ChatScreenState extends State<ChatScreen> {
       _connecting = true;
       _error = null;
     });
-    _api = DshApi(baseUrl: _settings.serverUrl);
-
-    final ok = await _api!.testConnection();
-    if (!mounted) return;
-    if (!ok) {
+    final srv = _settings.active;
+    if (srv == null) {
       setState(() {
         _connecting = false;
         _connected = false;
-        _error = '连接失败: ${_settings.serverUrl}\n请检查 PC 端 DSH 是否启动、同一局域网。';
+        _error = '还没有 PC，去设置里扫码添加。';
       });
-      _scheduleReconnect();
+      return;
+    }
+    if (srv.unpaired) {
+      setState(() {
+        _connecting = false;
+        _connected = false;
+        _error = '「${srv.name}」需要重新扫码配对。';
+      });
+      return;
+    }
+    _api = DshApi(baseUrl: srv.httpUrl, deviceId: srv.deviceId);
+
+    try {
+      final ok = await _api!.testConnection();
+      if (!mounted) return;
+      if (!ok) {
+        setState(() {
+          _connecting = false;
+          _connected = false;
+          _error = '连接失败: ${srv.httpUrl}\n请检查 PC 端 DSH 是否启动、同一局域网。';
+        });
+        _scheduleReconnect();
+        return;
+      }
+    } on DshAuthException catch (e) {
+      if (!mounted) return;
+      if (e.unpaired || (e.status == 401 && srv.deviceId == null)) {
+        await _settings.patchServer(
+          srv.id,
+          (s) => s.copyWith(unpaired: true, lastError: e.message),
+        );
+      }
+      setState(() {
+        _connecting = false;
+        _connected = false;
+        _error = e.message;
+      });
       return;
     }
 
@@ -162,7 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       sessionId ??= await _api!.createSession();
       await _settings.setSessionId(sessionId);
-      await _settings.markSeen(sessionId);
+      await _settings.markSeen(_settings.seenKey(srv.id, sessionId));
       await _refreshSessions();
       await _loadHistory(sessionId);
       _connectMux(sessionId);
@@ -275,7 +316,10 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     Navigator.of(context).maybePop();
     await _settings.setSessionId(sessionId);
-    await _settings.markSeen(sessionId);
+    final srv = _settings.active;
+    if (srv != null) {
+      await _settings.markSeen(_settings.seenKey(srv.id, sessionId));
+    }
     setState(() {
       _messages.clear();
       _activeTool = null;
@@ -317,7 +361,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _connectMux(String sessionId) {
     _mux?.dispose();
-    final mux = MuxStream(wsBaseUrl: _settings.wsUrl);
+    final mux = MuxStream(
+      wsBaseUrl: _settings.wsUrl,
+      deviceId: _settings.active?.deviceId,
+    );
     mux.sessionId = sessionId;
     mux.onTextDelta = _onDelta;
     mux.onAssistantMessage = _onAssistantFinal;
@@ -765,7 +812,12 @@ class _ChatScreenState extends State<ChatScreen> {
             _buildStatusDot(),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(_currentTitle, overflow: TextOverflow.ellipsis),
+              child: Text(
+                _settings.active == null
+                    ? _currentTitle
+                    : '${_settings.active!.name} · $_currentTitle',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

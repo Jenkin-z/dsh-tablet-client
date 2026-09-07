@@ -7,10 +7,12 @@ export 'mux_history.dart';
 
 /// DSH mux 事件流订阅
 ///
-/// 连 `ws://<host>:<port>/api/events.mux`，连上后什么都不发（发任何消息
-/// 服务端都会以 1008 关闭——这是下行专用通道，上行走 HTTP）。
+/// 已配对：`ws://host:port/remote/api/remote.mux?device=`
+/// 未配对老 DSH：`ws://host:port/api/events.mux`
+/// 连上后什么都不发（发任何消息服务端都会以 1008 关闭）。
 class MuxStream {
   final String wsBaseUrl;
+  final String? deviceId;
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
   bool _disposed = false;
@@ -45,7 +47,7 @@ class MuxStream {
   void Function()? onDisconnected;
   void Function(String message)? onError;
 
-  MuxStream({required this.wsBaseUrl});
+  MuxStream({required this.wsBaseUrl, this.deviceId});
 
   bool get isConnected => _channel != null;
 
@@ -53,7 +55,11 @@ class MuxStream {
     if (_disposed) return;
     disconnect();
     try {
-      final url = Uri.parse('$wsBaseUrl/api/events.mux');
+      final remote = deviceId != null && deviceId!.isNotEmpty;
+      final url = remote
+          ? Uri.parse(
+              '$wsBaseUrl/remote/api/remote.mux?device=${Uri.encodeQueryComponent(deviceId!)}')
+          : Uri.parse('$wsBaseUrl/api/events.mux');
       _channel = WebSocketChannel.connect(url);
       _sub = _channel!.stream.listen(
         _onData,

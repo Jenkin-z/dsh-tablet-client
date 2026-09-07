@@ -9,6 +9,7 @@ import '../services/dsh_api.dart';
 import '../services/settings_service.dart';
 import '../services/sound_service.dart';
 import '../services/update_service.dart';
+import '../widgets/server_list_card.dart';
 import '../widgets/update_dialog.dart';
 
 /// 设置界面：服务器地址、常亮、前台保活、会话管理
@@ -20,41 +21,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _hostController = TextEditingController();
-  final _portController = TextEditingController();
-  bool _editing = false;
   bool _testing = false;
   String? _testResult;
-
-  @override
-  void initState() {
-    super.initState();
-    final s = Provider.of<SettingsService>(context, listen: false);
-    _hostController.text = s.serverHost;
-    _portController.text = s.serverPort.toString();
-  }
-
-  @override
-  void dispose() {
-    _hostController.dispose();
-    _portController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveServer() async {
-    final s = Provider.of<SettingsService>(context, listen: false);
-    final host = _hostController.text.trim();
-    final port = int.tryParse(_portController.text.trim());
-    if (host.isEmpty || port == null || port < 1 || port > 65535) {
-      setState(() => _testResult = '地址或端口无效');
-      return;
-    }
-    await s.setServer(host, port);
-    setState(() {
-      _editing = false;
-      _testResult = '已保存，返回对话页会自动重连';
-    });
-  }
 
   Future<void> _testConnection() async {
     setState(() {
@@ -63,7 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl);
+      final api = DshApi(baseUrl: s.serverUrl, deviceId: s.active?.deviceId);
       final ok = await api.testConnection();
       if (!mounted) return;
       setState(() => _testResult = ok ? '连接正常 ✓' : '连接失败 ✗');
@@ -120,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _newSession() async {    try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl);
+      final api = DshApi(baseUrl: s.serverUrl, deviceId: s.active?.deviceId);
       final id = await api.createSession();
       await s.setSessionId(id);
       if (!mounted) return;
@@ -143,76 +111,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('服务器'),
+            _sectionTitle('PC'),
+            const ServerListCard(),
+            const SizedBox(height: 8),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    TextField(
-                      controller: _hostController,
-                      enabled: _editing,
-                      decoration: const InputDecoration(
-                        labelText: 'PC 局域网 IP',
-                        hintText: '192.168.10.171',
-                        prefixIcon: Icon(Icons.computer),
-                      ),
-                      onChanged: (_) {
-                        if (!_editing) return;
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _portController,
-                      enabled: _editing,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: '端口',
-                        hintText: '3080',
-                        prefixIcon: Icon(Icons.numbers),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        if (!_editing)
-                          FilledButton.tonal(
-                            onPressed: () => setState(() => _editing = true),
-                            child: const Text('修改'),
-                          )
-                        else ...[
-                          FilledButton(
-                            onPressed: _saveServer,
-                            child: const Text('保存'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            onPressed: () {
-                              _hostController.text = s.serverHost;
-                              _portController.text = s.serverPort.toString();
-                              setState(() => _editing = false);
-                            },
-                            child: const Text('取消'),
-                          ),
-                        ],
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: _testing ? null : _testConnection,
-                          child: _testing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text('测试连接'),
-                        ),
-                      ],
-                    ),
-                    if (_testResult != null) ...[
-                      const SizedBox(height: 8),
-                      Text(_testResult!, style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -220,6 +126,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _testing ? null : _testConnection,
+                      child: _testing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('测试当前连接'),
+                    ),
+                    if (_testResult != null) ...[
+                      const SizedBox(height: 8),
+                      Text(_testResult!,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
                   ],
                 ),
               ),

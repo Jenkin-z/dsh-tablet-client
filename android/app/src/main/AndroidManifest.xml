@@ -19,6 +19,9 @@
     <!-- 应用内更新：调起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- 扫码配对 PC -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application
         android:label="DSH Agent"
         android:name="${applicationName}"

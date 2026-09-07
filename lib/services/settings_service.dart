@@ -1,37 +1,43 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import '../models/dsh_server.dart';
+import 'seen_store.dart';
 
-/// 持久化设置：服务器地址、Session ID、亮屏开关等
+/// 持久化：多 PC 列表、主题、声音、未读水位
 class SettingsService extends ChangeNotifier {
   late SharedPreferences _prefs;
+  final _uuid = const Uuid();
+  final SeenStore _seen = SeenStore();
 
-  String _serverHost = '192.168.10.171';
-  int _serverPort = 3080;
-  String? _sessionId;
+  List<DshServer> _servers = [];
+  String? _activeServerId;
   bool _keepScreenOn = true;
   bool _autoReconnect = true;
-  // 提示音：总开关 + 分类开关；customSounds 预留后期自定义（名 -> 本地音频路径）
   bool _soundEnabled = true;
   bool _approvalSound = true;
   bool _completionSound = true;
   Map<String, String> _customSounds = {};
-  // 侧栏工作区展开状态（默认全收起，存展开的 id）
   Set<String> _expandedWs = {};
-  // 启动时自动检查更新（默认开，局域网小文件请求）
   bool _updateAutoCheck = true;
-  // 主题：system 跟随系统 / light 浅色 / dark 深色
   String _themeModeKey = 'system';
-  // 控制台已读水位：sessionId -> 最后查看时间；未读集合；基线是否已播种
-  Map<String, int> _seenAt = {};
-  Set<String> _unviewed = {};
-  bool _seenSeeded = false;
 
-  String get serverHost => _serverHost;
-  int get serverPort => _serverPort;
-  String get serverUrl => 'http://$_serverHost:$_serverPort';
-  String get wsUrl => 'ws://$_serverHost:$_serverPort';
-  String? get sessionId => _sessionId;
+  List<DshServer> get servers => List.unmodifiable(_servers);
+  String? get activeServerId => _activeServerId;
+  DshServer? get active {
+    if (_servers.isEmpty) return null;
+    for (final s in _servers) {
+      if (s.id == _activeServerId) return s;
+    }
+    return _servers.first;
+  }
+
+  String get serverHost => active?.host ?? '192.168.10.171';
+  int get serverPort => active?.port ?? 3080;
+  String get serverUrl => active?.httpUrl ?? 'http://192.168.10.171:3080';
+  String get wsUrl => active?.wsUrl ?? 'ws://192.168.10.171:3080';
+  String? get sessionId => active?.lastSessionId;
   bool get keepScreenOn => _keepScreenOn;
   bool get autoReconnect => _autoReconnect;
   bool get soundEnabled => _soundEnabled;
@@ -41,17 +47,14 @@ class SettingsService extends ChangeNotifier {
   Set<String> get expandedWs => Set.unmodifiable(_expandedWs);
   bool get updateAutoCheck => _updateAutoCheck;
   String get themeModeKey => _themeModeKey;
-  bool get seenSeeded => _seenSeeded;
-  Set<String> get unviewedIds => Set.unmodifiable(_unviewed);
-  int lastSeen(String id) => _seenAt[id] ?? 0;
-  // 后期自定义提示音时调用：name = approval/question/done，path = 本地音频文件
+  Set<String> get unviewedIds => Set.unmodifiable(_seen.unviewed);
+  int lastSeen(String id) => _seen.lastSeen(id);
   String? customSoundPath(String name) => _customSounds[name];
+  String seenKey(String serverId, String sessionId) =>
+      DshServer.sessionKey(serverId, sessionId);
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
-    _serverHost = _prefs.getString('serverHost') ?? '192.168.10.171';
-    _serverPort = _prefs.getInt('serverPort') ?? 3080;
-    _sessionId = _prefs.getString('sessionId');
     _keepScreenOn = _prefs.getBool('keepScreenOn') ?? true;
     _autoReconnect = _prefs.getBool('autoReconnect') ?? true;
     _soundEnabled = _prefs.getBool('soundEnabled') ?? true;
@@ -61,26 +64,118 @@ class SettingsService extends ChangeNotifier {
     _expandedWs = (_prefs.getStringList('expandedWs') ?? []).toSet();
     _updateAutoCheck = _prefs.getBool('updateAutoCheck') ?? true;
     _themeModeKey = _prefs.getString('themeMode') ?? 'system';
-    _loadSeen();
+    _seen.load(_prefs);
+    _loadServers();
+    notifyListeners();
+  }
+
+  void _loadServers() {
+    final raw = _prefs.getString('serversJson');
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List<dynamic>;
+        _servers = list
+            .whereType<Map<String, dynamic>>()
+            .map(DshServer.fromJson)
+            .where((s) => s.id.isNotEmpty && s.host.isNotEmpty)
+            .toList();
+      } catch (_) {
+        _servers = [];
+      }
+    }
+    _activeServerId = _prefs.getString('activeServerId');
+    if (_servers.isEmpty) {
+      final host = _prefs.getString('serverHost') ?? '192.168.10.171';
+      final port = _prefs.getInt('serverPort') ?? 3080;
+      final sid = _prefs.getString('sessionId');
+      final id = _uuid.v4();
+      _servers = [
+        DshServer(
+            id: id, name: host, host: host, port: port, lastSessionId: sid),
+      ];
+      _activeServerId = id;
+      _seen.rekeyBareIds(id);
+      _seen.save(_prefs);
+      _saveServers();
+      return;
+    }
+    if (_activeServerId == null ||
+        !_servers.any((s) => s.id == _activeServerId)) {
+      _activeServerId = _servers.first.id;
+    }
+  }
+
+  Future<void> _saveServers() async {
+    await _prefs.setString(
+        'serversJson', jsonEncode(_servers.map((s) => s.toJson()).toList()));
+    if (_activeServerId != null) {
+      await _prefs.setString('activeServerId', _activeServerId!);
+    }
+    final a = active;
+    if (a == null) return;
+    await _prefs.setString('serverHost', a.host);
+    await _prefs.setInt('serverPort', a.port);
+    if (a.lastSessionId != null) {
+      await _prefs.setString('sessionId', a.lastSessionId!);
+    }
+  }
+
+  Future<void> upsertServer(DshServer server) async {
+    final i = _servers.indexWhere((s) => s.id == server.id);
+    if (i >= 0) {
+      _servers[i] = server;
+    } else {
+      _servers.add(server);
+    }
+    _activeServerId ??= server.id;
+    await _saveServers();
+    notifyListeners();
+  }
+
+  Future<void> removeServer(String id) async {
+    _servers.removeWhere((s) => s.id == id);
+    if (_activeServerId == id) {
+      _activeServerId = _servers.isEmpty ? null : _servers.first.id;
+    }
+    await _saveServers();
+    notifyListeners();
+  }
+
+  Future<void> setActiveServer(String id) async {
+    if (!_servers.any((s) => s.id == id)) return;
+    _activeServerId = id;
+    await _saveServers();
+    notifyListeners();
+  }
+
+  Future<void> patchServer(String id, DshServer Function(DshServer) fn) async {
+    final i = _servers.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    _servers[i] = fn(_servers[i]);
+    await _saveServers();
     notifyListeners();
   }
 
   Future<void> setServer(String host, int port) async {
-    _serverHost = host;
-    _serverPort = port;
-    await _prefs.setString('serverHost', host);
-    await _prefs.setInt('serverPort', port);
-    notifyListeners();
+    final a = active;
+    if (a == null) {
+      final id = _uuid.v4();
+      await upsertServer(
+          DshServer(id: id, name: host, host: host, port: port));
+      await setActiveServer(id);
+      return;
+    }
+    await patchServer(
+        a.id, (s) => s.copyWith(host: host, port: port, name: s.name));
   }
 
   Future<void> setSessionId(String? id) async {
-    _sessionId = id;
-    if (id != null) {
-      await _prefs.setString('sessionId', id);
-    } else {
-      await _prefs.remove('sessionId');
-    }
-    notifyListeners();
+    final a = active;
+    if (a == null) return;
+    await patchServer(
+      a.id,
+      (s) => s.copyWith(lastSessionId: id, clearSessionId: id == null),
+    );
   }
 
   Future<void> setKeepScreenOn(bool value) async {
@@ -113,7 +208,6 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 后期自定义提示音预留：存 name -> 本地音频路径
   Future<void> setCustomSound(String name, String? path) async {
     if (path == null || path.isEmpty) {
       _customSounds.remove(name);
@@ -132,7 +226,6 @@ class SettingsService extends ChangeNotifier {
     }
   }
 
-  /// 工作区展开/收起持久化
   Future<void> setWsExpanded(String id, bool expanded) async {
     if (expanded) {
       _expandedWs.add(id);
@@ -149,7 +242,6 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 主题：system / light / dark
   Future<void> setThemeMode(String key) async {
     if (key != 'system' && key != 'light' && key != 'dark') return;
     _themeModeKey = key;
@@ -157,74 +249,21 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------- 控制台已读/未读 ----------
-
-  void _loadSeen() {
-    try {
-      final raw = _prefs.getString('seenAtMap');
-      if (raw != null && raw.isNotEmpty) {
-        final m = jsonDecode(raw) as Map<String, dynamic>;
-        _seenAt = {
-          for (final e in m.entries)
-            if (e.value is num) e.key: (e.value as num).toInt()
-        };
-      }
-    } catch (_) {
-      _seenAt = {};
-    }
-    _unviewed = (_prefs.getStringList('unviewedIds') ?? []).toSet();
-    _seenSeeded = _prefs.getBool('seenSeeded') ?? false;
+  Future<void> rememberBaseline(String id, int at) async {
+    await _seen.rememberBaseline(_prefs, id, at);
   }
 
-  Future<void> _saveSeen() async {
-    // 上限保护：只保留最近 300 条水位
-    if (_seenAt.length > 300) {
-      final sorted = _seenAt.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      _seenAt = {for (final e in sorted.take(300)) e.key: e.value};
-    }
-    await _prefs.setString('seenAtMap', jsonEncode(_seenAt));
-    await _prefs.setStringList('unviewedIds', _unviewed.toList());
-    await _prefs.setBool('seenSeeded', _seenSeeded);
-  }
-
-  /// 首次成功拉取时以当前快照为已读基线（避免历史会话一次性全标未读）
-  Future<void> seedSeen(Map<String, int> snapshot) async {
-    if (_seenSeeded) return;
-    _seenAt = Map.of(snapshot);
-    _seenSeeded = true;
-    await _saveSeen();
-    notifyListeners();
-  }
-
-  /// 标为已读
   Future<void> markSeen(String id) async {
-    _seenAt[id] = DateTime.now().millisecondsSinceEpoch;
-    if (_unviewed.remove(id)) {
-      await _saveSeen();
-      notifyListeners();
-    } else {
-      await _saveSeen();
-    }
-  }
-
-  /// 批量标为已读
-  Future<void> markAllSeen(Iterable<String> ids) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    var changed = false;
-    for (final id in ids) {
-      _seenAt[id] = now;
-      if (_unviewed.remove(id)) changed = true;
-    }
-    await _saveSeen();
+    final changed = await _seen.markSeen(_prefs, id);
     if (changed) notifyListeners();
   }
 
-  /// 标为未读（后台完成/他端有新活动时）
+  Future<void> markAllSeen(Iterable<String> ids) async {
+    final changed = await _seen.markAllSeen(_prefs, ids);
+    if (changed) notifyListeners();
+  }
+
   Future<void> addUnviewed(String id) async {
-    if (_unviewed.add(id)) {
-      await _prefs.setStringList('unviewedIds', _unviewed.toList());
-      notifyListeners();
-    }
+    if (await _seen.addUnviewed(_prefs, id)) notifyListeners();
   }
 }

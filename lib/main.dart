@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'services/session_monitor.dart';
+import 'services/server_manager.dart';
 import 'services/session_router.dart';
 import 'services/settings_service.dart';
 import 'screens/chat_screen.dart';
@@ -16,10 +16,8 @@ void main() async {
   final settings = SettingsService();
   await settings.init();
 
-  // 屏幕常亮（按设置）
   await WakelockPlus.toggle(enable: settings.keepScreenOn);
 
-  // 前台服务初始化（通知渠道等）
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'dsh_tablet_client',
@@ -44,9 +42,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider(create: (_) => SessionRouter()),
-        ChangeNotifierProvider(
-          create: (_) => SessionMonitor(settings),
-        ),
+        ChangeNotifierProvider(create: (_) => ServerManager(settings)),
       ],
       child: const DshTabletApp(),
     ),
@@ -66,7 +62,6 @@ class _DshTabletAppState extends State<DshTabletApp> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 只绑定一次，避免重复 addListener
     if (_settings == null) {
       _settings = Provider.of<SettingsService>(context, listen: false);
       _settings!.addListener(_syncWakelock);
@@ -85,7 +80,6 @@ class _DshTabletAppState extends State<DshTabletApp> {
 
   @override
   Widget build(BuildContext context) {
-    // 监听主题设置（跟随系统/浅色/深色）
     final settings = Provider.of<SettingsService>(context);
     final mode = switch (settings.themeModeKey) {
       'light' => ThemeMode.light,
@@ -120,12 +114,11 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   bool _updateChecked = false;
-  SessionMonitor? _monitor;
+  ServerManager? _manager;
 
   @override
   void initState() {
     super.initState();
-    // 启动后自动检查一次更新（有更新才弹窗）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_updateChecked || !mounted) return;
       _updateChecked = true;
@@ -139,36 +132,39 @@ class _MainShellState extends State<MainShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 会话监控常驻轮询（App 存活期间一直跑，控制台与提示音都靠它）
-    if (_monitor == null) {
-      _monitor = Provider.of<SessionMonitor>(context, listen: false);
-      _monitor!.start();
+    if (_manager == null) {
+      _manager = Provider.of<ServerManager>(context, listen: false);
+      _manager!.start();
     }
   }
 
   @override
   void dispose() {
-    _monitor?.stop();
+    _manager?.stop();
     super.dispose();
   }
 
-  /// 控制台点某会话：发路由意图 + 切到对话页（聊天页实际执行切换）
-  void _openSession(String sessionId) {
-    Provider.of<SessionRouter>(context, listen: false).request(sessionId);
+  Future<void> _openSession(String serverId, String sessionId) async {
+    final settings = Provider.of<SettingsService>(context, listen: false);
+    if (settings.activeServerId != serverId) {
+      await settings.setActiveServer(serverId);
+    }
+    await settings.setSessionId(sessionId);
+    if (!mounted) return;
+    Provider.of<SessionRouter>(context, listen: false)
+        .request(serverId, sessionId);
     setState(() => _currentIndex = 1);
   }
 
   @override
   Widget build(BuildContext context) {
-    // 监听设置页返回：如果服务器地址变了，聊天页重建以重连
     final settings = Provider.of<SettingsService>(context);
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: [
           ConsoleScreen(onOpenSession: _openSession),
-          // key 绑定 serverUrl，地址变更时自动重建并重连
-          ChatScreen(key: ValueKey(settings.serverUrl)),
+          ChatScreen(key: ValueKey(settings.activeServerId)),
           const SettingsScreen(),
         ],
       ),
@@ -197,7 +193,6 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// 前台服务权限申请包装（Android 13+ 需要 POST_NOTIFICATIONS）
 class ForegroundStarter {
   static Future<bool> requestPermissions() async {
     final status = await FlutterForegroundTask.checkNotificationPermission();

@@ -124,7 +124,11 @@ class _MainShellState extends State<MainShell> {
       _updateChecked = true;
       final s = Provider.of<SettingsService>(context, listen: false);
       if (s.updateAutoCheck) {
-        UpdateFlow.checkAndPrompt(context, s.serverHost, auto: true);
+        UpdateFlow.checkAndPrompt(
+          context,
+          s.servers.map((e) => e.host).followedBy([s.serverHost]),
+          auto: true,
+        );
       }
     });
   }

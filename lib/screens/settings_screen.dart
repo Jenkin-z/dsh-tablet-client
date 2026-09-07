@@ -294,7 +294,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text(snap.data ?? '…', style: const TextStyle(fontSize: 12)),
                       trailing: OutlinedButton(
                         onPressed: () => UpdateFlow.checkAndPrompt(
-                            context, s.serverHost),
+                          context,
+                          s.servers.map((e) => e.host).followedBy([s.serverHost]),
+                        ),
                         child: const Text('检查更新'),
                       ),
                     ),

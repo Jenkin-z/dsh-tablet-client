@@ -91,8 +91,13 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
         );
         return;
       }
-      Navigator.of(context).pop();
-      await UpdateService.installApk(file.path);
+      try {
+        await UpdateService.installApk(file.path);
+        if (mounted) Navigator.of(context).pop();
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _error = '安装失败: $e');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '下载失败: $e');
@@ -139,19 +144,24 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
 
 /// 更新流程编排：检查 → 弹新版 → 下载 → 安装
 class UpdateFlow {
-  /// auto=true 时：无更新/网络失败静默；有更新才弹窗
-  /// auto=false（手动点）：无更新给 Toast
+  /// auto=true：有更新才弹；连不上更新服静默
+  /// auto=false：无更新 / 失败都给 Toast
   static Future<void> checkAndPrompt(
     BuildContext context,
-    String serverHost, {
+    Iterable<String> hosts, {
     bool auto = false,
   }) async {
-    final info = await UpdateService.check(serverHost);
+    final result = await UpdateService.checkHosts(hosts);
     if (!context.mounted) return;
+    final info = result.info;
     if (info == null) {
       if (!auto) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已是最新版本')),
+          SnackBar(
+            content: Text(result.error == null
+                ? '已是最新版本'
+                : '检查更新失败：${result.error}'),
+          ),
         );
       }
       return;

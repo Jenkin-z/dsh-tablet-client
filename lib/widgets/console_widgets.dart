@@ -2,98 +2,8 @@ import 'package:flutter/material.dart';
 import 'console_animations.dart';
 
 export 'console_animations.dart';
-export 'console_cards.dart';
 
-/// 顶部统计条：运行中 / 待查看 / 全部
-class ConsoleStatStrip extends StatelessWidget {
-  final int running;
-  final int unviewed;
-  final int total;
-
-  const ConsoleStatStrip({
-    super.key,
-    required this.running,
-    required this.unviewed,
-    required this.total,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatChip(
-            icon: Icons.sync,
-            label: '运行中',
-            value: running,
-            color: Colors.green,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatChip(
-            icon: Icons.mark_as_unread_outlined,
-            label: '待查看',
-            value: unviewed,
-            color: Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatChip(
-            icon: Icons.forum_outlined,
-            label: '全部会话',
-            value: total,
-            color: Colors.blueGrey,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color color;
-
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: Text(
-                '$value',
-                key: ValueKey(value),
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Text(label, style: theme.textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+/// 列表分节标题（带计数与可选强调徽标）
 class ConsoleSectionHeader extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -153,6 +63,25 @@ class ConsoleSectionHeader extends StatelessWidget {
           const Spacer(),
           if (action != null) action!,
         ],
+      ),
+    );
+  }
+}
+
+class ConsoleQuietLine extends StatelessWidget {
+  final String text;
+  const ConsoleQuietLine({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(fontStyle: FontStyle.italic),
       ),
     );
   }

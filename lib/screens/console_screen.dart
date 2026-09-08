@@ -3,14 +3,17 @@ import 'package:provider/provider.dart';
 import '../models/dsh_server.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
+import '../widgets/console_devices.dart';
 import '../widgets/console_widgets.dart';
 import 'pair_screen.dart';
 
-/// 控制台：按 PC 分组，展示进行中 / 待查看 / 最近活跃
+/// 控制台：顶部每设备一张状态卡，下方合并会话列表（最近 3 小时活跃）
 class ConsoleScreen extends StatelessWidget {
   final void Function(String serverId, String sessionId) onOpenSession;
 
   const ConsoleScreen({super.key, required this.onOpenSession});
+
+  static const _window = Duration(hours: 3);
 
   @override
   Widget build(BuildContext context) {
@@ -54,199 +57,166 @@ class ConsoleScreen extends StatelessWidget {
     List<ServerGroup> groups,
   ) {
     if (groups.isEmpty) {
-      return const Center(child: Text('还没有 PC，去设置里扫码添加'));
+      return const Center(child: Text('还没有 PC，去设置里添加'));
     }
     final loading = groups.every((g) => g.monitor.loading) &&
         groups.every((g) => g.monitor.sessions.isEmpty);
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    final merged = _mergedRecent(groups);
+    final currentKey = settings.active == null
+        ? null
+        : settings.seenKey(settings.active!.id, settings.sessionId ?? '');
+    final unviewedKeys = merged
+        .where((m) =>
+            settings.unviewedIds.contains(
+                settings.seenKey(m.group.server.id, m.sessionIdAsString)))
+        .map((m) =>
+            settings.seenKey(m.group.server.id, m.sessionIdAsString))
+        .toSet();
     return RefreshIndicator(
       onRefresh: manager.refreshAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         children: [
-          ConsoleStatStrip(
-            running: manager.runningCount,
-            unviewed: manager.unviewedCount,
-            total: manager.totalCount,
+          _DeviceCards(
+            groups: groups,
+            activeId: settings.activeServerId,
+            onSelect: (server) async {
+              if (server.unpaired) {
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PairScreen(existingServerId: server.id),
+                ));
+                return;
+              }
+              await settings.setActiveServer(server.id);
+            },
           ),
-          for (final g in groups) ...[
-            const SizedBox(height: 12),
-            _PcHeader(group: g),
-            if (g.server.unpaired)
-              _PairHint(server: g.server)
-            else if (g.monitor.error != null && g.monitor.sessions.isEmpty)
-              ConsoleQuietLine(text: '离线：${g.monitor.error}')
-            else
-              _PcSessions(
-                group: g,
-                currentKey: settings.active == null
-                    ? null
-                    : settings.seenKey(
-                        settings.active!.id, settings.sessionId ?? ''),
-                onOpen: onOpenSession,
-                onMarkAll: () => settings.markAllSeen(
-                  g.unviewed.map((s) => settings.seenKey(
-                      g.server.id, s['sessionId'] as String? ?? '')),
-                ),
+          const SizedBox(height: 12),
+          ConsoleSectionHeader(
+            icon: Icons.forum_outlined,
+            iconColor: Colors.blueGrey,
+            title: '最近 3 小时',
+            count: merged.length,
+            badge: unviewedKeys.isNotEmpty,
+            action: unviewedKeys.isEmpty
+                ? null
+                : TextButton(
+                    onPressed: () => settings.markAllSeen(
+                        unviewedKeys.toList(growable: false)),
+                    child: const Text('全部已读'),
+                  ),
+          ),
+          if (merged.isEmpty)
+            const Card(
+              child: ListTile(
+                dense: true,
+                title: Text('最近 3 小时没有活跃会话',
+                    textAlign: TextAlign.center),
               ),
-          ],
+            )
+          else
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var i = 0; i < merged.length; i++) ...[
+                    if (i > 0) const Divider(height: 1),
+                    ConsoleMergedTile(
+                      key: ValueKey(
+                          '${merged[i].group.server.id}::${merged[i].sessionIdAsString}'),
+                      session: merged[i].session,
+                      deviceName: merged[i].group.server.name,
+                      deviceOnline:
+                          merged[i].group.monitor.online &&
+                              !merged[i].group.server.unpaired,
+                      isCurrent: currentKey ==
+                          '${merged[i].group.server.id}::${merged[i].sessionIdAsString}',
+                      isUnviewed: unviewedKeys.contains(settings.seenKey(
+                          merged[i].group.server.id,
+                          merged[i].sessionIdAsString)),
+                      onTap: () => onOpenSession(merged[i].group.server.id,
+                          merged[i].sessionIdAsString),
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
-}
 
-class _PcHeader extends StatelessWidget {
-  final ServerGroup group;
-  const _PcHeader({required this.group});
-
-  @override
-  Widget build(BuildContext context) {
-    final online = group.monitor.online && !group.server.unpaired;
-    return Row(
-      children: [
-        Icon(
-          Icons.computer,
-          size: 18,
-          color: online ? Colors.green : Colors.grey,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            group.server.name,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-        Text(
-          online ? group.server.host : (group.server.unpaired ? '需配对' : '离线'),
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
-    );
+  /// 合并所有设备的会话，仅保留最近 3 小时活跃的，按最近活动排序
+  List<_MergedSession> _mergedRecent(List<ServerGroup> groups) {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
+    final out = <_MergedSession>[];
+    for (final g in groups) {
+      if (g.server.unpaired) continue;
+      for (final s in g.monitor.sessions) {
+        final id = s['sessionId'] as String? ?? '';
+        if (id.isEmpty || s['blank'] == true) continue;
+        if (g.monitor.archivedIds.contains(id)) continue;
+        final updatedAt = (s['updatedAt'] as num?)?.toInt() ?? 0;
+        if (updatedAt < cutoff) continue;
+        out.add(_MergedSession(group: g, session: s));
+      }
+    }
+    out.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return out;
   }
 }
 
-class _PairHint extends StatelessWidget {
-  final DshServer server;
-  const _PairHint({required this.server});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.qr_code_scanner),
-        title: const Text('需要重新扫码配对'),
-        subtitle: Text(server.lastError ?? server.host),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PairScreen(existingServerId: server.id),
-          ),
-        ),
-      ),
-    );
-  }
+class _MergedSession {
+  final ServerGroup group;
+  final Map<String, dynamic> session;
+  int get updatedAt => (session['updatedAt'] as num?)?.toInt() ?? 0;
+  String get sessionIdAsString => session['sessionId'] as String? ?? '';
+  const _MergedSession({required this.group, required this.session});
 }
 
-class _PcSessions extends StatelessWidget {
-  final ServerGroup group;
-  final String? currentKey;
-  final void Function(String serverId, String sessionId) onOpen;
-  final VoidCallback onMarkAll;
+/// 顶部设备卡区：按宽度自适应列数
+class _DeviceCards extends StatelessWidget {
+  final List<ServerGroup> groups;
+  final String? activeId;
+  final void Function(DshServer server) onSelect;
 
-  const _PcSessions({
-    required this.group,
-    required this.currentKey,
-    required this.onOpen,
-    required this.onMarkAll,
+  const _DeviceCards({
+    required this.groups,
+    required this.activeId,
+    required this.onSelect,
   });
 
   @override
   Widget build(BuildContext context) {
-    final sid = group.server.id;
-    final running = group.running;
-    final unviewed = group.unviewed;
-    final recent = group.recent;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ConsoleSectionHeader(
-          icon: Icons.sync,
-          iconColor: Colors.green,
-          title: '进行中',
-          count: running.length,
-        ),
-        if (running.isEmpty)
-          const ConsoleQuietLine(text: '暂无运行中的会话')
-        else
-          for (var i = 0; i < running.length; i++)
-            ConsoleEntrance(
-              key: ValueKey('run:$sid:${running[i]['sessionId']}'),
-              index: i,
-              child: ConsoleRunningCard(
-                session: running[i],
-                workspaces: group.monitor.workspaces,
-                isCurrent:
-                    currentKey == '$sid::${running[i]['sessionId']}',
-                onTap: () => onOpen(sid, running[i]['sessionId'] as String),
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final cols = (cons.maxWidth / 240).floor().clamp(1, 4);
+        final cardW = (cons.maxWidth - (cols - 1) * 8) / cols;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final g in groups)
+              SizedBox(
+                width: cardW,
+                child: ConsoleDeviceCard(
+                  name: g.server.name,
+                  hostLabel: '${g.server.host}:${g.server.port}',
+                  online: g.monitor.online,
+                  needsAuth: g.server.unpaired,
+                  running: g.running.length,
+                  unviewed: g.unviewed.length,
+                  error: g.monitor.error,
+                  active: activeId == g.server.id,
+                  onTap: () => onSelect(g.server),
+                ),
               ),
-            ),
-        ConsoleSectionHeader(
-          icon: Icons.mark_as_unread_outlined,
-          iconColor: Colors.orange,
-          title: '待查看',
-          count: unviewed.length,
-          badge: unviewed.isNotEmpty,
-          action: unviewed.isEmpty
-              ? null
-              : TextButton(onPressed: onMarkAll, child: const Text('全部已读')),
-        ),
-        if (unviewed.isEmpty)
-          const ConsoleQuietLine(text: '没有未查看的完成会话')
-        else
-          for (var i = 0; i < unviewed.length; i++)
-            ConsoleEntrance(
-              key: ValueKey('unv:$sid:${unviewed[i]['sessionId']}'),
-              index: i,
-              child: ConsoleUnviewedCard(
-                session: unviewed[i],
-                workspaces: group.monitor.workspaces,
-                onTap: () => onOpen(sid, unviewed[i]['sessionId'] as String),
-              ),
-            ),
-        ConsoleSectionHeader(
-          icon: Icons.history,
-          iconColor: Colors.blueGrey,
-          title: '最近活跃',
-          count: recent.length,
-        ),
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              if (recent.isEmpty)
-                const ListTile(
-                  dense: true,
-                  title: Text('暂无', textAlign: TextAlign.center),
-                )
-              else
-                for (var i = 0; i < recent.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  ConsoleRecentTile(
-                    session: recent[i],
-                    workspaces: group.monitor.workspaces,
-                    isCurrent:
-                        currentKey == '$sid::${recent[i]['sessionId']}',
-                    onTap: () =>
-                        onOpen(sid, recent[i]['sessionId'] as String),
-                  ),
-                ],
-            ],
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

@@ -3,11 +3,10 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../utils/session_format.dart';
 
-/// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开，平铺显示全部会话。
+/// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开。
+/// 默认全部收起；当前会话所在目录自动展开；每组最多先显示 5 条。
 class SessionDrawer extends StatelessWidget {
   final List<Map<String, dynamic>> sessions;
-
-  /// 当前活动服务器 ID（未读标记 seenKey 前缀）
   final String serverId;
   final String? activeId;
   final bool loading;
@@ -83,6 +82,17 @@ class SessionDrawer extends StatelessWidget {
   }
 
   List<Widget> _buildGroups(BuildContext context, SettingsService settings) {
+    // 计算当前会话所在目录（用于默认展开）
+    String? currentCwd;
+    if (activeId != null) {
+      for (final s in sessions) {
+        if (s['sessionId'] == activeId) {
+          currentCwd = s['cwd'] as String? ?? '';
+          break;
+        }
+      }
+    }
+
     final order = <String>[];
     final byCwd = <String, List<Map<String, dynamic>>>{};
     for (final s in sessions) {
@@ -101,45 +111,45 @@ class SessionDrawer extends StatelessWidget {
     for (final cwd in groups) {
       final items = byCwd[cwd]!
         ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
-      final expanded = !settings.collapsedWs.contains(cwd);
-      widgets.add(ListTile(
-        dense: true,
-        leading: Icon(
-          cwd.isEmpty ? Icons.inbox_outlined : Icons.folder_outlined,
-          size: 20,
-        ),
-        title: Text(
-          cwd.isEmpty ? '未分组' : _dirLabel(cwd),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: cwd.isEmpty ? null : Text(cwd, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (cwd.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.add, size: 18),
-                tooltip: '在此目录新建会话',
-                onPressed: () => onCreateInWorkspace(cwd),
-              ),
-            Icon(
-              expanded ? Icons.expand_less : Icons.expand_more,
-              size: 20,
-            ),
-          ],
-        ),
-        onTap: () => settings.setCollapsedWs(cwd, !expanded),
+      // collapsedWs 为空 = 默认状态：只展开当前会话所在目录
+      final isExpanded = settings.collapsedWs.isEmpty
+          ? cwd == (currentCwd ?? '')
+          : !settings.collapsedWs.contains(cwd);
+      widgets.add(_GroupHeader(
+        cwd: cwd,
+        isExpanded: isExpanded,
+        onCreate: cwd.isEmpty ? null : () => onCreateInWorkspace(cwd),
+        onToggle: () => settings.setCollapsedWs(cwd, !isExpanded),
       ));
-      if (expanded) {
-        for (final s in items) {
+      if (isExpanded) {
+        final visible = items.take(5).toList();
+        for (final s in visible) {
           widgets.add(_SessionTile(
             session: s,
             serverId: serverId,
             activeId: activeId,
             indented: cwd.isNotEmpty,
             onSelect: onSelectSession,
+          ));
+        }
+        if (items.length > 5) {
+          widgets.add(StatefulBuilder(
+            builder: (context, setLocal) {
+              bool showAll = false;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.only(
+                  left: cwd.isEmpty ? 16 : 32,
+                  right: 16,
+                ),
+                title: Text(
+                  _groupLabel(items.length, showAll),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: const Icon(Icons.expand_more, size: 18),
+                onTap: () => setLocal(() => showAll = !showAll),
+              );
+            },
           ));
         }
       }
@@ -149,6 +159,9 @@ class SessionDrawer extends StatelessWidget {
     return widgets;
   }
 
+  String _groupLabel(int total, bool expanded) =>
+      expanded ? '收起' : '显示全部 $total 条';
+
   int _latestOf(List<Map<String, dynamic>> items) => items.isEmpty
       ? 0
       : items.map(activityOf).reduce((a, b) => a > b ? a : b);
@@ -157,6 +170,54 @@ class SessionDrawer extends StatelessWidget {
     final parts =
         cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
     return parts.isEmpty ? cwd : parts.last;
+  }
+}
+
+class _GroupHeader extends StatelessWidget {
+  final String cwd;
+  final bool isExpanded;
+  final VoidCallback? onCreate;
+  final VoidCallback onToggle;
+
+  const _GroupHeader({
+    required this.cwd,
+    required this.isExpanded,
+    required this.onCreate,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      leading: Icon(
+        cwd.isEmpty ? Icons.inbox_outlined : Icons.folder_outlined,
+        size: 20,
+      ),
+      title: Text(
+        cwd.isEmpty ? '未分组' : SessionDrawer._dirLabel(cwd),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      subtitle: cwd.isEmpty ? null : Text(cwd, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onCreate != null)
+            IconButton(
+              icon: const Icon(Icons.add, size: 18),
+              tooltip: '在此目录新建会话',
+              onPressed: onCreate,
+            ),
+          Icon(
+            isExpanded ? Icons.expand_less : Icons.expand_more,
+            size: 20,
+          ),
+        ],
+      ),
+      onTap: onToggle,
+    );
   }
 }
 

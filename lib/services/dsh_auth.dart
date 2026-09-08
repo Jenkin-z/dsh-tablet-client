@@ -42,12 +42,15 @@ class PairingClient {
         token: uri.queryParameters['pair'],
       );
     }
+    // 纯令牌
+    final token = RegExp(r'^[0-9a-fA-F]{32}$').firstMatch(t);
+    if (token != null) {
+      return PairTarget(host: '192.168.10.171', port: 3080, token: t);
+    }
+    // IP:port
     final hp = RegExp(r'^([\w.-]+):(\d+)$').firstMatch(t);
     if (hp != null) {
       return PairTarget(host: hp.group(1)!, port: int.parse(hp.group(2)!));
-    }
-    if (RegExp(r'^[\w.-]+$').hasMatch(t)) {
-      return PairTarget(host: t);
     }
     return null;
   }

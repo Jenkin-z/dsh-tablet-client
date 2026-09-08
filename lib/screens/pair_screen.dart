@@ -227,8 +227,8 @@ class _PairScreenState extends State<PairScreen> {
                 TextField(
                   controller: _paste,
                   decoration: const InputDecoration(
-                    labelText: 'PC 地址',
-                    hintText: '192.168.10.171:3080 或完整链接',
+                    labelText: '配对链接或令牌',
+                    hintText: '完整链接，或仅粘贴 32 位令牌',
                   ),
                 ),
                 const SizedBox(height: 8),

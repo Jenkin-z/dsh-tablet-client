@@ -124,7 +124,34 @@ ifconfig
 2. 下载完成后点击安装
 3. 首次安装需允许"安装未知应用"
 
-> **注意**：`8099` 端口的下载服务需要提前启动。如果不可用，可用方式二。
+### PC 端：下载服务与自动授权
+
+平板能下载 APK 和自动授权，依赖 PC 上两个 PowerShell 脚本：
+
+| 脚本 | 作用 | 何时运行 |
+|------|------|----------|
+| `tool/release_apk.ps1` | 构建 release APK → 拷贝到 `flutter-apk/` → 生成 `version.json` | 每次发新版前 |
+| `tool/publish_launch_token.ps1` | 从 `dsh-autostart.log` 提取最新启动令牌 → 生成 `launch-token.json` | DSH 每次重启后 |
+
+运行方式（必须用 **pwsh 7**，否则中文会乱码）：
+
+```powershell
+# 发布启动令牌（自动授权用）
+pwsh -File .\tool\publish_launch_token.ps1
+
+# 构建并发布 APK（更新用）
+pwsh -File .\tool\release_apk.ps1 -Changelog "更新说明"
+```
+
+`release_apk.ps1` 会同时写 `version.json`，平板启动 App 会自动检查 `http://<PC_IP>:8099/version.json` 并提示更新。
+
+`publish_launch_token.ps1` 默认读取 `D:\software\deepseek-harness\dsh-autostart.log`，也可通过参数指定日志路径：
+
+```powershell
+pwsh -File .\tool\publish_launch_token.ps1 -LogPath "D:\your-path\dsh-autostart.log"
+```
+
+> 安全提示：启动令牌只在 DSH 进程生命周期内有效；授权换到的是 30 天 browser cookie。不用时删除 `flutter-apk/launch-token.json` 即可停止发布令牌。
 
 ### 方式二：自行构建
 

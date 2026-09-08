@@ -283,6 +283,15 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     Navigator.of(context).maybePop();
     await _settings.setSessionId(sessionId);
+    try {
+      final session = _sessions.firstWhere((s) => s['sessionId'] == sessionId);
+      final cwd = session['cwd'] as String? ?? '';
+      if (cwd.isNotEmpty) {
+        await _settings.setWsExpanded(cwd, true);
+      }
+    } on StateError {
+      // session not in local list yet; cwd auto-expand will happen on next refresh
+    }
     final srv = _settings.active;
     if (srv != null) {
       await _settings.markSeen(_settings.seenKey(srv.id, sessionId));

@@ -8,8 +8,6 @@ String _dirLabel(String cwd) {
   return parts.isEmpty ? cwd : parts.last;
 }
 
-int _min(int a, int b) => a < b ? a : b;
-
 /// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开。
 /// 默认全部收起；当前会话所在目录自动展开；展开后最多显示 5 条。
 class SessionDrawer extends StatefulWidget {
@@ -39,35 +37,7 @@ class SessionDrawer extends StatefulWidget {
 }
 
 class _SessionDrawerState extends State<SessionDrawer> {
-  final Map<String, bool> _groupExpanded = {};
   final Map<String, bool> _groupShowAll = {};
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncFromSettings();
-  }
-
-  void _syncFromSettings() {
-    final settings = context.read<SettingsService>();
-    final currentCwd = _currentCwd();
-    final keys = _allGroupKeys().toSet();
-    for (final cwd in keys) {
-      if (!_groupExpanded.containsKey(cwd)) {
-        _groupExpanded[cwd] =
-            settings.expandedWs.contains(cwd) || cwd == (currentCwd ?? '');
-      }
-    }
-    for (final cwd in _groupExpanded.keys.toList()) {
-      if (!keys.contains(cwd)) _groupExpanded.remove(cwd);
-    }
-    for (final cwd in keys) {
-      _groupShowAll.putIfAbsent(cwd, () => false);
-    }
-    for (final cwd in _groupShowAll.keys.toList()) {
-      if (!keys.contains(cwd)) _groupShowAll.remove(cwd);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,8 +81,10 @@ class _SessionDrawerState extends State<SessionDrawer> {
             Expanded(
               child: widget.sessions.isEmpty
                   ? const Center(child: Text('暂无会话'))
-                  : ListView(
-                      children: _buildGroups(),
+                  : Consumer<SettingsService>(
+                      builder: (context, settings, _) => ListView(
+                        children: _buildGroups(settings),
+                      ),
                     ),
             ),
           ],
@@ -121,25 +93,8 @@ class _SessionDrawerState extends State<SessionDrawer> {
     );
   }
 
-  Iterable<String> _allGroupKeys() sync* {
-    final seen = <String>{};
-    for (final s in widget.sessions) {
-      final key = (s['cwd'] as String?) ?? '';
-      if (seen.add(key)) yield key;
-    }
-  }
-
-  String? _currentCwd() {
-    if (widget.activeId == null) return null;
-    for (final s in widget.sessions) {
-      if (s['sessionId'] == widget.activeId) {
-        return s['cwd'] as String? ?? '';
-      }
-    }
-    return null;
-  }
-
-  List<Widget> _buildGroups() {
+  List<Widget> _buildGroups(SettingsService settings) {
+    final currentCwd = _currentCwd();
     final order = <String>[];
     final byCwd = <String, List<Map<String, dynamic>>>{};
     for (final s in widget.sessions) {
@@ -158,18 +113,18 @@ class _SessionDrawerState extends State<SessionDrawer> {
     for (final cwd in groups) {
       final items = byCwd[cwd]!
         ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
-      final expanded = _groupExpanded[cwd] ?? false;
-      final showAll = _groupShowAll[cwd] ?? false;
-
+      final expanded = settings.expandedWs.contains(cwd) ||
+          (settings.expandedWs.isEmpty && cwd == (currentCwd ?? ''));
       widgets.add(_GroupHeader(
         cwd: cwd,
         isExpanded: expanded,
         onCreate: cwd.isEmpty ? null : () => widget.onCreateInWorkspace(cwd),
-        onToggle: () => _toggleGroup(cwd),
+        onToggle: () => settings.setWsExpanded(cwd, !expanded),
       ));
-
       if (expanded) {
-        final visibleCount = showAll ? items.length : _min(5, items.length);
+        final showAll = _groupShowAll[cwd] ?? false;
+        final visibleCount =
+            showAll ? items.length : (items.length > 5 ? 5 : items.length);
         for (var i = 0; i < visibleCount; i++) {
           widgets.add(_SessionTile(
             session: items[i],
@@ -185,7 +140,12 @@ class _SessionDrawerState extends State<SessionDrawer> {
             showAll: showAll,
             total: items.length,
             indented: cwd.isNotEmpty,
-            onToggleShowAll: () => _toggleShowAll(cwd),
+            onToggleShowAll: () {
+              if (!mounted) return;
+              setState(() {
+                _groupShowAll[cwd] = !(_groupShowAll[cwd] ?? false);
+              });
+            },
           ));
         }
       }
@@ -195,24 +155,14 @@ class _SessionDrawerState extends State<SessionDrawer> {
     return widgets;
   }
 
-  void _toggleGroup(String cwd) {
-    final newValue = !(_groupExpanded[cwd] ?? false);
-    setState(() {
-      _groupExpanded[cwd] = newValue;
-    });
-    final currentCwd = _currentCwd();
-    final isAutoExpanded =
-        !context.read<SettingsService>().expandedWs.contains(cwd) &&
-            cwd == (currentCwd ?? '');
-    if (!isAutoExpanded || newValue == false) {
-      context.read<SettingsService>().setWsExpanded(cwd, newValue);
+  String? _currentCwd() {
+    if (widget.activeId == null) return null;
+    for (final s in widget.sessions) {
+      if (s['sessionId'] == widget.activeId) {
+        return s['cwd'] as String? ?? '';
+      }
     }
-  }
-
-  void _toggleShowAll(String cwd) {
-    setState(() {
-      _groupShowAll[cwd] = !(_groupShowAll[cwd] ?? false);
-    });
+    return null;
   }
 
   int _latestOf(List<Map<String, dynamic>> items) => items.isEmpty

@@ -129,9 +129,11 @@ ifconfig
 平板能下载 APK 和自动授权，依赖 PC 上两个 PowerShell 脚本：
 
 | 脚本 | 作用 | 何时运行 |
-|------|------|----------|
+|------|------|------|
 | `tool/release_apk.ps1` | 构建 release APK → 拷贝到 `flutter-apk/` → 生成 `version.json` | 每次发新版前 |
 | `tool/publish_launch_token.ps1` | 从 `dsh-autostart.log` 提取最新启动令牌 → 生成 `launch-token.json` | DSH 每次重启后 |
+
+> 两台 PC 分工：脚本可以都在 DSH 主机上跑；也可以 `release_apk.ps1` 在 DSH 主机，`publish_launch_token.ps1` 在跑 8099 下载服务的机器上——只要日志文件可达、且能写入对方机器上的 `flutter-apk/` 共享目录即可。
 
 运行方式（必须用 **pwsh 7**，否则中文会乱码）：
 
@@ -145,12 +147,26 @@ pwsh -File .\tool\release_apk.ps1 -Changelog "更新说明"
 
 `release_apk.ps1` 会同时写 `version.json`，平板启动 App 会自动检查 `http://<PC_IP>:8099/version.json` 并提示更新。
 
-`publish_launch_token.ps1` 默认读取 `D:\software\deepseek-harness\dsh-autostart.log`，也可通过参数指定日志路径：
+`publish_launch_token.ps1` 参数：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `-LogPath` | `D:\software\deepseek-harness\dsh-autostart.log` | DSH 启动日志路径，换机器必改 |
+| `-LanHost` | `192.168.10.171` | 写入 `launch-token.json` 的 URL 主机名 |
+| `-DshPort` | `3080` | DSH HTTP 端口 |
+
+示例（日志在别的路径 / 主机时）：
 
 ```powershell
-pwsh -File .\tool\publish_launch_token.ps1 -LogPath "D:\your-path\dsh-autostart.log"
+# 日志在远程共享目录
+pwsh -File .\tool\publish_launch_token.ps1 -LogPath "\\server\share\dsh-autostart.log"
+
+# 下载服务在别的机器
+pwsh -File .\tool\publish_launch_token.ps1 -LanHost "192.168.10.100"
 ```
 
+> 注意：`publish_launch_token.ps1` 会把 `launch-token.json` 写到仓库下的 `build/app/outputs/flutter-apk/`，因此**至少要先跑一次 `release_apk.ps1`**（或手动创建该目录），否则脚本会因目录不存在失败。
+>
 > 安全提示：启动令牌只在 DSH 进程生命周期内有效；授权换到的是 30 天 browser cookie。不用时删除 `flutter-apk/launch-token.json` 即可停止发布令牌。
 
 ### 方式二：自行构建

@@ -152,20 +152,18 @@ pwsh -File .\tool\release_apk.ps1 -Changelog "更新说明"
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `-LogPath` | `D:\software\deepseek-harness\dsh-autostart.log` | DSH 启动日志路径，换机器必改 |
-| `-LanHost` | `192.168.10.171` | 写入 `launch-token.json` 的 URL 主机名 |
+| `-LanHost` | `192.168.10.171` | DSH 主机 IP（`launch-token.json` 里 `url` 字段的主机名） |
 | `-DshPort` | `3080` | DSH HTTP 端口 |
+| `-OutDir` | 仓库下 `build/app/outputs/flutter-apk/` | `launch-token.json` 输出目录；换机器时建议显式指定共享目录 |
 
-示例（日志在别的路径 / 主机时）：
+示例（另一台机器 minimal 部署）：
 
 ```powershell
-# 日志在远程共享目录
-pwsh -File .\tool\publish_launch_token.ps1 -LogPath "\\server\share\dsh-autostart.log"
-
-# 下载服务在别的机器
-pwsh -File .\tool\publish_launch_token.ps1 -LanHost "192.168.10.100"
+# 只复制这一个 ps1 文件过去，指定日志路径和输出目录（共享的 flutter-apk 目录）
+pwsh -File .\publish_launch_token.ps1 -LogPath "\\192.168.10.171\share\dsh-autostart.log" -OutDir "\\192.168.10.171\share\flutter-apk"
 ```
 
-> 注意：`publish_launch_token.ps1` 会把 `launch-token.json` 写到仓库下的 `build/app/outputs/flutter-apk/`，因此**至少要先跑一次 `release_apk.ps1`**（或手动创建该目录），否则脚本会因目录不存在失败。
+> 注意：`publish_launch_token.ps1` 默认依赖仓库相对路径找输出目录；单独复制到别处运行时，**必须用 `-OutDir` 指定 8099 下载服务实际托管的目录**（共享目录或另一台机器上的 `flutter-apk/`），否则脚本会因找不到目录失败。
 >
 > 安全提示：启动令牌只在 DSH 进程生命周期内有效；授权换到的是 30 天 browser cookie。不用时删除 `flutter-apk/launch-token.json` 即可停止发布令牌。
 

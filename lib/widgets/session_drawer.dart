@@ -3,9 +3,16 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../utils/session_format.dart';
 
+String _dirLabel(String cwd) {
+  final parts = cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
+  return parts.isEmpty ? cwd : parts.last;
+}
+
+int _min(int a, int b) => a < b ? a : b;
+
 /// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开。
-/// 默认全部收起；当前会话所在目录自动展开；每组最多先显示 5 条。
-class SessionDrawer extends StatelessWidget {
+/// 默认全部收起；当前会话所在目录自动展开；展开后最多显示 5 条。
+class SessionDrawer extends StatefulWidget {
   final List<Map<String, dynamic>> sessions;
   final String serverId;
   final String? activeId;
@@ -28,6 +35,41 @@ class SessionDrawer extends StatelessWidget {
   });
 
   @override
+  State<SessionDrawer> createState() => _SessionDrawerState();
+}
+
+class _SessionDrawerState extends State<SessionDrawer> {
+  final Map<String, bool> _groupExpanded = {};
+  final Map<String, bool> _groupShowAll = {};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncFromSettings();
+  }
+
+  void _syncFromSettings() {
+    final settings = context.read<SettingsService>();
+    final currentCwd = _currentCwd();
+    final keys = _allGroupKeys().toSet();
+    for (final cwd in keys) {
+      if (!_groupExpanded.containsKey(cwd)) {
+        _groupExpanded[cwd] =
+            settings.expandedWs.contains(cwd) || cwd == (currentCwd ?? '');
+      }
+    }
+    for (final cwd in _groupExpanded.keys.toList()) {
+      if (!keys.contains(cwd)) _groupExpanded.remove(cwd);
+    }
+    for (final cwd in keys) {
+      _groupShowAll.putIfAbsent(cwd, () => false);
+    }
+    for (final cwd in _groupShowAll.keys.toList()) {
+      if (!keys.contains(cwd)) _groupShowAll.remove(cwd);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Drawer(
       child: SafeArea(
@@ -45,7 +87,7 @@ class SessionDrawer extends StatelessWidget {
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  if (loading)
+                  if (widget.loading)
                     const SizedBox(
                       width: 16,
                       height: 16,
@@ -55,7 +97,7 @@ class SessionDrawer extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.refresh, size: 20),
                       tooltip: '刷新',
-                      onPressed: onRefresh,
+                      onPressed: widget.onRefresh,
                     ),
                 ],
               ),
@@ -63,16 +105,14 @@ class SessionDrawer extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.add),
               title: const Text('新建会话'),
-              onTap: onCreateUngrouped,
+              onTap: widget.onCreateUngrouped,
             ),
             const Divider(height: 1),
             Expanded(
-              child: sessions.isEmpty
+              child: widget.sessions.isEmpty
                   ? const Center(child: Text('暂无会话'))
-                  : Consumer<SettingsService>(
-                      builder: (context, settings, _) => ListView(
-                        children: _buildGroups(context, settings),
-                      ),
+                  : ListView(
+                      children: _buildGroups(),
                     ),
             ),
           ],
@@ -81,21 +121,28 @@ class SessionDrawer extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildGroups(BuildContext context, SettingsService settings) {
-    // 计算当前会话所在目录（用于默认展开）
-    String? currentCwd;
-    if (activeId != null) {
-      for (final s in sessions) {
-        if (s['sessionId'] == activeId) {
-          currentCwd = s['cwd'] as String? ?? '';
-          break;
-        }
+  Iterable<String> _allGroupKeys() sync* {
+    final seen = <String>{};
+    for (final s in widget.sessions) {
+      final key = (s['cwd'] as String?) ?? '';
+      if (seen.add(key)) yield key;
+    }
+  }
+
+  String? _currentCwd() {
+    if (widget.activeId == null) return null;
+    for (final s in widget.sessions) {
+      if (s['sessionId'] == widget.activeId) {
+        return s['cwd'] as String? ?? '';
       }
     }
+    return null;
+  }
 
+  List<Widget> _buildGroups() {
     final order = <String>[];
     final byCwd = <String, List<Map<String, dynamic>>>{};
-    for (final s in sessions) {
+    for (final s in widget.sessions) {
       final key = (s['cwd'] as String?) ?? '';
       byCwd.putIfAbsent(key, () => []).add(s);
       if (!order.contains(key)) order.add(key);
@@ -111,45 +158,34 @@ class SessionDrawer extends StatelessWidget {
     for (final cwd in groups) {
       final items = byCwd[cwd]!
         ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
-      // collapsedWs 为空 = 默认状态：只展开当前会话所在目录
-      final isExpanded = settings.collapsedWs.isEmpty
-          ? cwd == (currentCwd ?? '')
-          : !settings.collapsedWs.contains(cwd);
+      final expanded = _groupExpanded[cwd] ?? false;
+      final showAll = _groupShowAll[cwd] ?? false;
+
       widgets.add(_GroupHeader(
         cwd: cwd,
-        isExpanded: isExpanded,
-        onCreate: cwd.isEmpty ? null : () => onCreateInWorkspace(cwd),
-        onToggle: () => settings.setCollapsedWs(cwd, !isExpanded),
+        isExpanded: expanded,
+        onCreate: cwd.isEmpty ? null : () => widget.onCreateInWorkspace(cwd),
+        onToggle: () => _toggleGroup(cwd),
       ));
-      if (isExpanded) {
-        final visible = items.take(5).toList();
-        for (final s in visible) {
+
+      if (expanded) {
+        final visibleCount = showAll ? items.length : _min(5, items.length);
+        for (var i = 0; i < visibleCount; i++) {
           widgets.add(_SessionTile(
-            session: s,
-            serverId: serverId,
-            activeId: activeId,
+            session: items[i],
+            serverId: widget.serverId,
+            activeId: widget.activeId,
             indented: cwd.isNotEmpty,
-            onSelect: onSelectSession,
+            onSelect: widget.onSelectSession,
           ));
         }
         if (items.length > 5) {
-          widgets.add(StatefulBuilder(
-            builder: (context, setLocal) {
-              bool showAll = false;
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.only(
-                  left: cwd.isEmpty ? 16 : 32,
-                  right: 16,
-                ),
-                title: Text(
-                  _groupLabel(items.length, showAll),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                trailing: const Icon(Icons.expand_more, size: 18),
-                onTap: () => setLocal(() => showAll = !showAll),
-              );
-            },
+          widgets.add(_MoreTile(
+            cwd: cwd,
+            showAll: showAll,
+            total: items.length,
+            indented: cwd.isNotEmpty,
+            onToggleShowAll: () => _toggleShowAll(cwd),
           ));
         }
       }
@@ -159,18 +195,29 @@ class SessionDrawer extends StatelessWidget {
     return widgets;
   }
 
-  String _groupLabel(int total, bool expanded) =>
-      expanded ? '收起' : '显示全部 $total 条';
+  void _toggleGroup(String cwd) {
+    final newValue = !(_groupExpanded[cwd] ?? false);
+    setState(() {
+      _groupExpanded[cwd] = newValue;
+    });
+    final currentCwd = _currentCwd();
+    final isAutoExpanded =
+        !context.read<SettingsService>().expandedWs.contains(cwd) &&
+            cwd == (currentCwd ?? '');
+    if (!isAutoExpanded || newValue == false) {
+      context.read<SettingsService>().setWsExpanded(cwd, newValue);
+    }
+  }
+
+  void _toggleShowAll(String cwd) {
+    setState(() {
+      _groupShowAll[cwd] = !(_groupShowAll[cwd] ?? false);
+    });
+  }
 
   int _latestOf(List<Map<String, dynamic>> items) => items.isEmpty
       ? 0
       : items.map(activityOf).reduce((a, b) => a > b ? a : b);
-
-  static String _dirLabel(String cwd) {
-    final parts =
-        cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
-    return parts.isEmpty ? cwd : parts.last;
-  }
 }
 
 class _GroupHeader extends StatelessWidget {
@@ -195,7 +242,7 @@ class _GroupHeader extends StatelessWidget {
         size: 20,
       ),
       title: Text(
-        cwd.isEmpty ? '未分组' : SessionDrawer._dirLabel(cwd),
+        cwd.isEmpty ? '未分组' : _dirLabel(cwd),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -217,6 +264,42 @@ class _GroupHeader extends StatelessWidget {
         ],
       ),
       onTap: onToggle,
+    );
+  }
+}
+
+class _MoreTile extends StatelessWidget {
+  final String cwd;
+  final bool showAll;
+  final int total;
+  final bool indented;
+  final VoidCallback onToggleShowAll;
+
+  const _MoreTile({
+    required this.cwd,
+    required this.showAll,
+    required this.total,
+    required this.indented,
+    required this.onToggleShowAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.only(
+        left: indented ? 32 : 16,
+        right: 16,
+      ),
+      title: Text(
+        showAll ? '收起' : '显示全部 $total 条',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      trailing: Icon(
+        showAll ? Icons.expand_less : Icons.expand_more,
+        size: 18,
+      ),
+      onTap: onToggleShowAll,
     );
   }
 }

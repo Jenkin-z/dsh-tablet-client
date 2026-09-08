@@ -106,7 +106,16 @@ class _PairScreenState extends State<PairScreen> {
     try {
       String? deviceId;
       if (target.token != null && target.token!.isNotEmpty) {
-        deviceId = await PairingClient.accept(target);
+        try {
+          deviceId = await PairingClient.accept(target);
+        } on DshAuthException catch (e) {
+          if (e.status == 404) {
+            // 这台 DSH 没装配对插件，直接直连
+            deviceId = null;
+          } else {
+            rethrow;
+          }
+        }
       } else {
         final hasPlugin =
             await PairingClient.pluginPresent(target.host, target.port);

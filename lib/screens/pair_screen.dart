@@ -17,12 +17,13 @@ class PairScreen extends StatefulWidget {
 }
 
 class _PairScreenState extends State<PairScreen> {
-  final _paste = TextEditingController();
+  final _paste = TextEditingController(text: 'http://192.168.10.171:3080/pair-accept?pair=56ca421f980403f414d5df3e32e57fe1');
   late final MobileScannerController _scanner;
   bool _busy = false;
   String? _error;
   bool _handled = false;
   CameraFacing _facing = CameraFacing.back;
+  int _startAttempts = 0;
 
   @override
   void initState() {
@@ -39,19 +40,20 @@ class _PairScreenState extends State<PairScreen> {
     final s = _scanner.value;
     if (!s.isInitialized && s.error != null && mounted) {
       final code = s.error!.errorCode;
+      final details = s.error?.errorDetails;
+      final message = details?.message ?? '';
+      final platformCode = details?.code ?? '';
       final cam = s.availableCameras ?? -1;
       String hint = '请用下面输入框粘贴配对链接。';
       if (code.toString().contains('permissionDenied')) {
         hint = '请在系统设置里允许相机权限，或直接粘贴链接。';
       } else if (code.toString().contains('unsupported')) {
         hint = '当前设备不支持扫码，请直接粘贴配对链接。';
-      } else if (cam == 1) {
-        hint = '检测到 1 个摄像头，请把屏幕朝向 PC 二维码；如果还是打不开请直接粘贴链接。';
-      } else if (cam >= 2) {
-        hint = '可用摄像头：$cam 个，可点右上角切换。';
+      } else if (code.toString().contains('genericError')) {
+        hint = '摄像头初始化失败（常见于低端板）。请直接粘贴配对链接。';
       }
       setState(() {
-        _error = '摄像头打不开（$code；cameras=$cam）。\n$hint';
+        _error = '摄像头打不开（$code；cameras=$cam；$platformCode）。\n$hint\n$message';
       });
     } else if (s.isInitialized && s.isRunning && mounted) {
       setState(() {});
@@ -59,6 +61,8 @@ class _PairScreenState extends State<PairScreen> {
   }
 
   Future<void> _startCam(CameraFacing facing) async {
+    if (_startAttempts >= 2) return;
+    _startAttempts += 1;
     try {
       await _scanner.stop();
     } catch (_) {}
@@ -73,6 +77,7 @@ class _PairScreenState extends State<PairScreen> {
   }
 
   Future<void> _flipCam() async {
+    if (_startAttempts >= 2) return;
     final next = _facing == CameraFacing.front
         ? CameraFacing.back
         : CameraFacing.front;

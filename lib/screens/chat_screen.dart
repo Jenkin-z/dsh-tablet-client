@@ -302,11 +302,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _maybeShowQuestionDialog();
   }
 
-  Future<void> _createNewSession() async {
+  Future<void> _createNewSession({String? cwd}) async {
     Navigator.of(context).maybePop();
     if (_api == null || !_connected) return;
     try {
-      final id = await _api!.createSession();
+      final id = await _api!.createSession(cwd: cwd);
       await _refreshSessions();
       await _switchSession(id);
     } catch (e) {
@@ -811,6 +811,7 @@ class _ChatScreenState extends State<ChatScreen> {
         loading: _loadingSessions,
         onRefresh: _refreshSessions,
         onCreateUngrouped: () => _createNewSession(),
+        onCreateInWorkspace: (cwd) => _createNewSession(cwd: cwd),
         onSelectSession: _switchSession,
       ),
       endDrawer: ChangesDrawer(tracker: _changes),

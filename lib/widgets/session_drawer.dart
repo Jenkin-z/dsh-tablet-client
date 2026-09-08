@@ -3,16 +3,17 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../utils/session_format.dart';
 
-/// 对话页左侧会话抽屉：按 cwd 目录分组，平铺显示全部会话。
+/// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开，平铺显示全部会话。
 class SessionDrawer extends StatelessWidget {
   final List<Map<String, dynamic>> sessions;
 
-  /// 当前活动服务器 ID（未读标记的 seenKey 前缀）
+  /// 当前活动服务器 ID（未读标记 seenKey 前缀）
   final String serverId;
   final String? activeId;
   final bool loading;
   final VoidCallback onRefresh;
   final VoidCallback onCreateUngrouped;
+  final void Function(String? cwd) onCreateInWorkspace;
   final void Function(String sessionId) onSelectSession;
 
   const SessionDrawer({
@@ -23,6 +24,7 @@ class SessionDrawer extends StatelessWidget {
     required this.loading,
     required this.onRefresh,
     required this.onCreateUngrouped,
+    required this.onCreateInWorkspace,
     required this.onSelectSession,
   });
 
@@ -81,7 +83,6 @@ class SessionDrawer extends StatelessWidget {
   }
 
   List<Widget> _buildGroups(BuildContext context, SettingsService settings) {
-    // cwd → 组（保持插入序），无 cwd 的进"未分组"
     final order = <String>[];
     final byCwd = <String, List<Map<String, dynamic>>>{};
     for (final s in sessions) {
@@ -91,7 +92,6 @@ class SessionDrawer extends StatelessWidget {
     }
     final groups = order.toList()
       ..sort((a, b) {
-        // 组间按组内最新活跃倒序；无目录组排最后
         if (a.isEmpty) return 1;
         if (b.isEmpty) return -1;
         return _latestOf(byCwd[b]!).compareTo(_latestOf(byCwd[a]!));
@@ -101,6 +101,7 @@ class SessionDrawer extends StatelessWidget {
     for (final cwd in groups) {
       final items = byCwd[cwd]!
         ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
+      final expanded = !settings.collapsedWs.contains(cwd);
       widgets.add(ListTile(
         dense: true,
         leading: Icon(
@@ -114,17 +115,33 @@ class SessionDrawer extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: cwd.isEmpty ? null : Text(cwd, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: Text('${items.length}',
-            style: Theme.of(context).textTheme.bodySmall),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (cwd.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.add, size: 18),
+                tooltip: '在此目录新建会话',
+                onPressed: () => onCreateInWorkspace(cwd),
+              ),
+            Icon(
+              expanded ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+            ),
+          ],
+        ),
+        onTap: () => settings.setCollapsedWs(cwd, !expanded),
       ));
-      for (final s in items) {
-        widgets.add(_SessionTile(
-          session: s,
-          serverId: serverId,
-          activeId: activeId,
-          indented: cwd.isNotEmpty,
-          onSelect: onSelectSession,
-        ));
+      if (expanded) {
+        for (final s in items) {
+          widgets.add(_SessionTile(
+            session: s,
+            serverId: serverId,
+            activeId: activeId,
+            indented: cwd.isNotEmpty,
+            onSelect: onSelectSession,
+          ));
+        }
       }
       widgets.add(const Divider(height: 1));
     }
@@ -136,7 +153,6 @@ class SessionDrawer extends StatelessWidget {
       ? 0
       : items.map(activityOf).reduce((a, b) => a > b ? a : b);
 
-  /// 目录名：取路径末段（兼容 Windows / POSIX 分隔符）
   static String _dirLabel(String cwd) {
     final parts =
         cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();

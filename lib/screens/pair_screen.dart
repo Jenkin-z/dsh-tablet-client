@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../models/dsh_server.dart';
 import '../services/dsh_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 
-/// 扫码或粘贴 /pair-accept?pair= 链接。RK3288 只有单摄，默认前摄。
+/// 扫码或粘贴 /pair-accept?pair= 链接。RK3288 只有单摄，默认后摄。
 class PairScreen extends StatefulWidget {
   final String? existingServerId;
   const PairScreen({super.key, this.existingServerId});
@@ -17,7 +18,7 @@ class PairScreen extends StatefulWidget {
 }
 
 class _PairScreenState extends State<PairScreen> {
-  final _paste = TextEditingController(text: 'http://192.168.10.171:3080/pair-accept?pair=56ca421f980403f414d5df3e32e57fe1');
+  final _paste = TextEditingController(text: '192.168.10.171:3080');
   late final MobileScannerController _scanner;
   bool _busy = false;
   String? _error;
@@ -55,8 +56,6 @@ class _PairScreenState extends State<PairScreen> {
       setState(() {
         _error = '摄像头打不开（$code；cameras=$cam；$platformCode）。\n$hint\n$message';
       });
-    } else if (s.isInitialized && s.isRunning && mounted) {
-      setState(() {});
     }
   }
 
@@ -84,19 +83,22 @@ class _PairScreenState extends State<PairScreen> {
     await _startCam(next);
   }
 
-  @override
-  void dispose() {
-    _scanner.removeListener(_onScannerState);
-    _paste.dispose();
-    _scanner.dispose();
-    super.dispose();
+  Future<void> _openPairPage() async {
+    final target = PairingClient.parse(_paste.text);
+    final host = target?.host ?? '192.168.10.171';
+    final port = target?.port ?? 3080;
+    final uri = Uri.parse('http://$host:$port/pair-accept');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      setState(() => _error = '无法打开浏览器，请手动访问 http://$host:$port/pair-accept');
+    }
   }
 
-  Future<void> _submit(String raw) async {
+  Future<void> _submit(String raw, {bool skipPair = false}) async {
     if (_busy) return;
     final target = PairingClient.parse(raw);
     if (target == null) {
-      setState(() => _error = '无法识别，请扫描 PC 上的配对二维码或粘贴完整链接');
+      setState(() => _error = '无法识别，请输入 IP 或完整链接');
       return;
     }
     setState(() {
@@ -105,26 +107,15 @@ class _PairScreenState extends State<PairScreen> {
     });
     try {
       String? deviceId;
-      if (target.token != null && target.token!.isNotEmpty) {
+      if (!skipPair && target.token != null && target.token!.isNotEmpty) {
         try {
           deviceId = await PairingClient.accept(target);
         } on DshAuthException catch (e) {
           if (e.status == 404) {
-            // 这台 DSH 没装配对插件，直接直连
             deviceId = null;
           } else {
             rethrow;
           }
-        }
-      } else {
-        final hasPlugin =
-            await PairingClient.pluginPresent(target.host, target.port);
-        if (hasPlugin) {
-          throw const DshAuthException(
-            status: 401,
-            unpaired: true,
-            message: '这台 DSH 需要扫码配对，请扫描 PC 上的二维码',
-          );
         }
       }
       if (!mounted) return;
@@ -157,6 +148,14 @@ class _PairScreenState extends State<PairScreen> {
         _error = '$e';
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _scanner.removeListener(_onScannerState);
+    _paste.dispose();
+    _scanner.dispose();
+    super.dispose();
   }
 
   @override
@@ -228,14 +227,33 @@ class _PairScreenState extends State<PairScreen> {
                 TextField(
                   controller: _paste,
                   decoration: const InputDecoration(
-                    labelText: '或粘贴配对链接 / IP',
-                    hintText: 'http://192.168.10.171:3080/pair-accept?pair=…',
+                    labelText: 'PC 地址',
+                    hintText: '192.168.10.171:3080 或完整链接',
                   ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: _busy ? null : () => _submit(_paste.text),
-                  child: const Text('配对'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _busy ? null : () => _submit(_paste.text),
+                        child: const Text('粘贴链接配对'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.tonal(
+                        onPressed: _busy ? null : () => _submit(_paste.text, skipPair: true),
+                        child: const Text('直接连接'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: '在浏览器中打开配对页',
+                      onPressed: _busy ? null : _openPairPage,
+                      icon: const Icon(Icons.public_outlined),
+                    ),
+                  ],
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 8),

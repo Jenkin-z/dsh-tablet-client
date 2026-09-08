@@ -260,6 +260,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void _onMuxSnapshot(List<Map<String, dynamic>> records) {
     if (!mounted) return;
     final parsed = parseHistory(records);
+    // snapshot 会清空 _seenUserSeq，重建时把 user 消息的 seq 加回，防止后续 event 重复插入
+    for (final m in parsed) {
+      if (m.role == 'user' && m.id.startsWith('u')) {
+        _seenUserSeq.add(m.id);
+      }
+    }
     setState(() {
       _messages.clear();
       _seenUserSeq.clear();
@@ -519,8 +525,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final key = 'u$seq';
     if (seq.isNotEmpty && !_seenUserSeq.add(key)) return;
     if (rpcId != null && _pendingEchoRpc.remove(rpcId)) return;
-    if (rpcId == null &&
-        _lastSentText == text &&
+    if (_lastSentText == text &&
         _lastSentAt != null &&
         DateTime.now().difference(_lastSentAt!) < const Duration(seconds: 60)) {
       _lastSentText = null;

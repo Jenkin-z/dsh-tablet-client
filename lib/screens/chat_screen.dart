@@ -153,7 +153,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _connecting = false;
         _connected = false;
-        _error = '还没有 PC，去设置里扫码添加。';
+        _error = '还没有 PC，去设置里添加。';
       });
       return;
     }
@@ -161,11 +161,11 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _connecting = false;
         _connected = false;
-        _error = '「${srv.name}」需要重新扫码配对。';
+        _error = '「${srv.name}」授权已过期，去设置里重新授权。';
       });
       return;
     }
-    _api = DshApi(baseUrl: srv.httpUrl, deviceId: srv.deviceId);
+    _api = DshApi(baseUrl: srv.httpUrl, cookie: srv.cookie);
 
     try {
       final ok = await _api!.testConnection();
@@ -181,7 +181,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } on DshAuthException catch (e) {
       if (!mounted) return;
-      if (e.unpaired || (e.status == 401 && srv.deviceId == null)) {
+      if (e.unpaired) {
         await _settings.patchServer(
           srv.id,
           (s) => s.copyWith(unpaired: true, lastError: e.message),
@@ -205,7 +205,6 @@ class _ChatScreenState extends State<ChatScreen> {
       await _settings.setSessionId(sessionId);
       await _settings.markSeen(_settings.seenKey(srv.id, sessionId));
       await _refreshSessions();
-      await _loadHistory(sessionId);
       _connectMux(sessionId);
       setState(() {
         _connecting = false;
@@ -239,21 +238,9 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _loadingSessions = true);
     try {
       final items = await _api!.listSessions();
-      Map<String, dynamic>? ws;
-      try {
-        ws = await _api!.listWorkspaces();
-      } catch (_) {
-        ws = null;
-      }
       if (!mounted) return;
       setState(() {
         _sessions = items;
-        if (ws != null) {
-          final rawItems = ws['items'] as List<dynamic>? ?? [];
-          _workspaces = rawItems.whereType<Map<String, dynamic>>().toList();
-          final rawArchived = ws['archivedSessionIds'] as List<dynamic>? ?? [];
-          _archivedIds = rawArchived.whereType<String>().toSet();
-        }
         _currentTitle = _titleFor(_settings.sessionId);
       });
       _expandGroupOf(_settings.sessionId);
@@ -288,11 +275,10 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _loadHistory(String sessionId) async {
-    final result = await _api!.getHistory(sessionId, maxMessages: 50);
-    final entries = result['events'] as List<dynamic>? ?? [];
-    final parsed = parseHistory(entries);
+  /// mux follow 开窗快照 → 重建消息列表（历史）
+  void _onMuxSnapshot(List<Map<String, dynamic>> records) {
     if (!mounted) return;
+    final parsed = parseHistory(records);
     setState(() {
       _messages.clear();
       _seenUserSeq.clear();
@@ -301,7 +287,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _seenUserSeq.add(p.id);
       }
       _changes.clear();
-      for (final v in parseHistoryViews(entries)) {
+      for (final v in parseHistoryViews(records)) {
         _changes.applyView(
             diffs: v.diffs, title: v.title, done: v.done, turn: v.turn);
       }
@@ -332,15 +318,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _changes.clear();
     });
     _expandGroupOf(sessionId);
-    try {
-      await _loadHistory(sessionId);
-      _connectMux(sessionId);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('切换会话失败: $e')),
-      );
-    }
+    _connectMux(sessionId);
     _maybeShowQuestionDialog();
   }
 
@@ -363,13 +341,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _mux?.dispose();
     final mux = MuxStream(
       wsBaseUrl: _settings.wsUrl,
-      deviceId: _settings.active?.deviceId,
+      cookie: _settings.active?.cookie,
     );
     mux.sessionId = sessionId;
     mux.onTextDelta = _onDelta;
     mux.onAssistantMessage = _onAssistantFinal;
     mux.onUserMessage = _onUserMessage;
     mux.onToolView = _onToolView;
+    mux.onSnapshot = _onMuxSnapshot;
     mux.onApproval = _onApproval;
     mux.onApprovalResolved = _onApprovalResolved;
     mux.onQuestion = _onQuestion;
@@ -457,7 +436,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final sid = _settings.sessionId;
     if (sid == null) return;
     if (_approvals.isEmpty && _question == null) return;
-    _api!.getHistory(sid, maxMessages: 10).then((result) {
+    final cursor = _mux?.lastCursor;
+    if (cursor == null) return;
+    _api!.getHistory(sid, throughSeq: cursor, maxMessages: 10).then((result) {
       if (!mounted) return;
       final events = result['events'] as List<dynamic>? ?? [];
       for (final e in events) {
@@ -602,20 +583,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onApprovalResolved(String approvalId) {
     if (!mounted) return;
+    // approvalId=callId；$events cancel 帧携带的是 waterfall eventId(=rpcId)
     setState(() {
-      _approvals.removeWhere((a) => a.approvalId == approvalId);
+      _approvals.removeWhere(
+          (a) => a.approvalId == approvalId || a.rpcId == approvalId);
     });
   }
 
   Future<void> _answerApproval(PendingApproval a, bool allow) async {
     setState(() => a.answering = true);
     try {
-      final ok = await _api!.answerApproval(
-        rpcId: a.rpcId,
-        sessionId: a.sessionId,
-        approvalId: a.approvalId,
-        allow: allow,
-      );
+      final ok = await (_mux?.respondApproval(a.rpcId, allow) ??
+          Future.value(false));
       if (!mounted) return;
       if (ok) {
         setState(() {
@@ -695,11 +674,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _submitQuestion(List<Map<String, dynamic>> answers) async {
     final q = _question;
     if (q == null) return;
-    final ok = await _api!.answerQuestion(
-      rpcId: q.rpcId,
-      sessionId: q.sessionId,
-      answers: answers,
-    );
+    final ok = await (_mux?.respondQuestion(q.rpcId, answers) ??
+        Future.value(false));
     if (!mounted) return;
     if (ok) {
       setState(() => _question = null);

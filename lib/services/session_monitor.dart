@@ -22,25 +22,14 @@ class SessionMonitor {
   DateTime? lastRefresh;
   final Map<String, bool> _prevRunning = {};
 
-  DshApi get _api =>
-      DshApi(baseUrl: server.httpUrl, deviceId: server.deviceId);
+  DshApi get _api => DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
 
   String _key(String sessionId) => settings.seenKey(server.id, sessionId);
 
   Future<void> refresh() async {
     loading = sessions.isEmpty;
     try {
-      if (server.deviceId != null && server.deviceId!.isNotEmpty) {
-        await PairingClient.heartbeat(
-            server.host, server.port, server.deviceId!);
-      }
       final items = await _api.listSessions();
-      Map<String, dynamic>? ws;
-      try {
-        ws = await _api.listWorkspaces();
-      } catch (_) {
-        ws = null;
-      }
       final current = server.lastSessionId;
       for (final s in items) {
         final id = s['sessionId'] as String? ?? '';
@@ -64,12 +53,6 @@ class SessionMonitor {
         _prevRunning[id] = running;
       }
       sessions = items;
-      if (ws != null) {
-        final rawItems = ws['items'] as List<dynamic>? ?? [];
-        workspaces = rawItems.whereType<Map<String, dynamic>>().toList();
-        final rawArchived = ws['archivedSessionIds'] as List<dynamic>? ?? [];
-        archivedIds = rawArchived.whereType<String>().toSet();
-      }
       error = null;
       online = true;
       lastRefresh = DateTime.now();
@@ -82,7 +65,7 @@ class SessionMonitor {
     } on DshAuthException catch (e) {
       online = false;
       error = e.message;
-      if (e.unpaired || (e.status == 401 && server.deviceId == null)) {
+      if (e.unpaired) {
         await settings.patchServer(
           server.id,
           (s) => s.copyWith(unpaired: true, lastError: e.message),

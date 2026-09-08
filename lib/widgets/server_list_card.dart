@@ -5,7 +5,7 @@ import '../screens/pair_screen.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 
-/// 设置页：已配对 PC 列表 + 扫码添加
+/// 设置页：PC 列表 + 添加/授权入口
 class ServerListCard extends StatelessWidget {
   const ServerListCard({super.key});
 
@@ -19,9 +19,9 @@ class ServerListCard extends StatelessWidget {
               for (final s in settings.servers)
                 _tile(context, settings, manager, s),
               ListTile(
-                leading: const Icon(Icons.qr_code_scanner),
-                title: const Text('扫码添加 PC'),
-                subtitle: const Text('扫描 DSH 网页上的配对二维码'),
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('添加 / 授权 PC'),
+                subtitle: const Text('用 DSH 启动令牌换取 30 天授权'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const PairScreen()),
                 ),
@@ -42,7 +42,7 @@ class ServerListCard extends StatelessWidget {
     final mon = manager.monitorOf(s.id);
     final active = settings.activeServerId == s.id;
     final status = s.unpaired
-        ? '需重新配对'
+        ? '需重新授权'
         : (mon?.online == true ? '在线' : (mon?.error ?? '离线'));
     return ListTile(
       leading: Icon(
@@ -57,10 +57,10 @@ class ServerListCard extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (s.unpaired || s.deviceId == null)
+          if (s.unpaired || s.cookie == null)
             IconButton(
-              icon: const Icon(Icons.qr_code_scanner),
-              tooltip: '配对',
+              icon: const Icon(Icons.key_outlined),
+              tooltip: '重新授权',
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PairScreen(existingServerId: s.id),

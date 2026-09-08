@@ -4,9 +4,13 @@ class DshServer {
   final String name;
   final String host;
   final int port;
-  final String? deviceId;
+
+  /// 原生 browser-session cookie（"dsh-auth-xxx=value"），约 30 天有效
+  final String? cookie;
   final String? lastSessionId;
   final String? lastError;
+
+  /// true = 授权失效，需要重新用启动令牌换取
   final bool unpaired;
 
   const DshServer({
@@ -14,7 +18,7 @@ class DshServer {
     required this.name,
     required this.host,
     this.port = 3080,
-    this.deviceId,
+    this.cookie,
     this.lastSessionId,
     this.lastError,
     this.unpaired = false,
@@ -22,17 +26,17 @@ class DshServer {
 
   String get httpUrl => 'http://$host:$port';
   String get wsUrl => 'ws://$host:$port';
-  bool get isPaired => deviceId != null && deviceId!.isNotEmpty && !unpaired;
+  bool get isPaired => cookie != null && cookie!.isNotEmpty && !unpaired;
 
   DshServer copyWith({
     String? name,
     String? host,
     int? port,
-    String? deviceId,
+    String? cookie,
     String? lastSessionId,
     String? lastError,
     bool? unpaired,
-    bool clearDeviceId = false,
+    bool clearCookie = false,
     bool clearSessionId = false,
     bool clearError = false,
   }) {
@@ -41,7 +45,7 @@ class DshServer {
       name: name ?? this.name,
       host: host ?? this.host,
       port: port ?? this.port,
-      deviceId: clearDeviceId ? null : (deviceId ?? this.deviceId),
+      cookie: clearCookie ? null : (cookie ?? this.cookie),
       lastSessionId:
           clearSessionId ? null : (lastSessionId ?? this.lastSessionId),
       lastError: clearError ? null : (lastError ?? this.lastError),
@@ -54,7 +58,7 @@ class DshServer {
         'name': name,
         'host': host,
         'port': port,
-        if (deviceId != null) 'deviceId': deviceId,
+        if (cookie != null) 'cookie': cookie,
         if (lastSessionId != null) 'lastSessionId': lastSessionId,
       };
 
@@ -64,7 +68,7 @@ class DshServer {
       name: json['name'] as String? ?? json['host'] as String? ?? 'PC',
       host: json['host'] as String? ?? '',
       port: (json['port'] as num?)?.toInt() ?? 3080,
-      deviceId: json['deviceId'] as String?,
+      cookie: json['cookie'] as String?,
       lastSessionId: json['lastSessionId'] as String?,
     );
   }

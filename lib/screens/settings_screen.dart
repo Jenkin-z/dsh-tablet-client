@@ -31,7 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl, deviceId: s.active?.deviceId);
+      final api = DshApi(baseUrl: s.serverUrl, cookie: s.active?.cookie);
       final ok = await api.testConnection();
       if (!mounted) return;
       setState(() => _testResult = ok ? '连接正常 ✓' : '连接失败 ✗');
@@ -88,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _newSession() async {    try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl, deviceId: s.active?.deviceId);
+      final api = DshApi(baseUrl: s.serverUrl, cookie: s.active?.cookie);
       final id = await api.createSession();
       await s.setSessionId(id);
       if (!mounted) return;

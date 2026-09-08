@@ -38,8 +38,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   final List<DshMessage> _messages = [];
   List<Map<String, dynamic>> _sessions = [];
-  List<Map<String, dynamic>> _workspaces = [];
-  Set<String> _archivedIds = {};
   String _currentTitle = 'DSH Agent';
   bool _connecting = true;
   bool _connected = false;
@@ -243,7 +241,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _sessions = items;
         _currentTitle = _titleFor(_settings.sessionId);
       });
-      _expandGroupOf(_settings.sessionId);
     } catch (_) {
     } finally {
       if (mounted) setState(() => _loadingSessions = false);
@@ -258,22 +255,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return 'DSH Agent';
   }
 
-  void _expandGroupOf(String? sessionId) {
-    if (sessionId == null) return;
-    var group = ungroupedWorkspaceKey;
-    for (final w in _workspaces) {
-      final ids =
-          (w['sessionIds'] as List<dynamic>? ?? []).whereType<String>();
-      if (ids.contains(sessionId)) {
-        group = w['workspaceId'] as String? ?? ungroupedWorkspaceKey;
-        break;
-      }
-    }
-    if (!_settings.expandedWs.contains(group)) {
-      _settings.setWsExpanded(group, true);
-      if (mounted) setState(() {});
-    }
-  }
 
   /// mux follow 开窗快照 → 重建消息列表（历史）
   void _onMuxSnapshot(List<Map<String, dynamic>> records) {
@@ -317,16 +298,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _lastSentAt = null;
       _changes.clear();
     });
-    _expandGroupOf(sessionId);
     _connectMux(sessionId);
     _maybeShowQuestionDialog();
   }
 
-  Future<void> _createNewSession({String? workspaceId}) async {
+  Future<void> _createNewSession() async {
     Navigator.of(context).maybePop();
     if (_api == null || !_connected) return;
     try {
-      final id = await _api!.createSession(workspaceId: workspaceId);
+      final id = await _api!.createSession();
       await _refreshSessions();
       await _switchSession(id);
     } catch (e) {
@@ -826,13 +806,11 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       drawer: SessionDrawer(
         sessions: _sessions,
-        workspaces: _workspaces,
-        archivedIds: _archivedIds,
+        serverId: _settings.active?.id ?? '',
         activeId: sessionId,
         loading: _loadingSessions,
         onRefresh: _refreshSessions,
         onCreateUngrouped: () => _createNewSession(),
-        onCreateInWorkspace: (wsId) => _createNewSession(workspaceId: wsId),
         onSelectSession: _switchSession,
       ),
       endDrawer: ChangesDrawer(tracker: _changes),

@@ -3,30 +3,26 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../utils/session_format.dart';
 
-const ungroupedWorkspaceKey = '_ungrouped';
-
-/// 对话页左侧会话抽屉：按工作区分组，组内按活跃时间倒序。
+/// 对话页左侧会话抽屉：按 cwd 目录分组，平铺显示全部会话。
 class SessionDrawer extends StatelessWidget {
   final List<Map<String, dynamic>> sessions;
-  final List<Map<String, dynamic>> workspaces;
-  final Set<String> archivedIds;
+
+  /// 当前活动服务器 ID（未读标记的 seenKey 前缀）
+  final String serverId;
   final String? activeId;
   final bool loading;
   final VoidCallback onRefresh;
   final VoidCallback onCreateUngrouped;
-  final void Function(String workspaceId) onCreateInWorkspace;
   final void Function(String sessionId) onSelectSession;
 
   const SessionDrawer({
     super.key,
     required this.sessions,
-    required this.workspaces,
-    required this.archivedIds,
+    required this.serverId,
     required this.activeId,
     required this.loading,
     required this.onRefresh,
     required this.onCreateUngrouped,
-    required this.onCreateInWorkspace,
     required this.onSelectSession,
   });
 
@@ -85,121 +81,79 @@ class SessionDrawer extends StatelessWidget {
   }
 
   List<Widget> _buildGroups(BuildContext context, SettingsService settings) {
-    final byId = <String, Map<String, dynamic>>{
-      for (final s in sessions) (s['sessionId'] as String? ?? ''): s,
-    };
-    final widgets = <Widget>[];
-    final grouped = <String>{};
+    // cwd → 组（保持插入序），无 cwd 的进"未分组"
+    final order = <String>[];
+    final byCwd = <String, List<Map<String, dynamic>>>{};
+    for (final s in sessions) {
+      final key = (s['cwd'] as String?) ?? '';
+      byCwd.putIfAbsent(key, () => []).add(s);
+      if (!order.contains(key)) order.add(key);
+    }
+    final groups = order.toList()
+      ..sort((a, b) {
+        // 组间按组内最新活跃倒序；无目录组排最后
+        if (a.isEmpty) return 1;
+        if (b.isEmpty) return -1;
+        return _latestOf(byCwd[b]!).compareTo(_latestOf(byCwd[a]!));
+      });
 
-    for (final w in workspaces) {
-      final wsId = w['workspaceId'] as String? ?? '';
-      final title = (w['title'] as String?)?.trim();
-      final path = w['path'] as String? ?? '';
-      final ids = (w['sessionIds'] as List<dynamic>? ?? []).whereType<String>();
-      final visible = ids
-          .where((id) => byId.containsKey(id) && !archivedIds.contains(id))
-          .toList()
-        ..sort((a, b) =>
-            activityOf(byId[b]!).compareTo(activityOf(byId[a]!)));
-      if (visible.isEmpty) continue;
-      grouped.addAll(visible);
-      final expanded = settings.expandedWs.contains(wsId);
-      widgets.add(
-        ListTile(
-          dense: true,
-          leading: Icon(
-            expanded ? Icons.folder_open_outlined : Icons.folder_outlined,
-            size: 20,
-          ),
-          title: Text(
-            (title == null || title.isEmpty) ? path : title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: (title != null && title.isNotEmpty)
-              ? Text(path, maxLines: 1, overflow: TextOverflow.ellipsis)
-              : null,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.add, size: 20),
-                tooltip: '在此工作区新建会话',
-                onPressed: () => onCreateInWorkspace(wsId),
-              ),
-              Icon(
-                expanded ? Icons.expand_less : Icons.expand_more,
-                size: 20,
-              ),
-            ],
-          ),
-          onTap: () => settings.setWsExpanded(wsId, !expanded),
+    final widgets = <Widget>[];
+    for (final cwd in groups) {
+      final items = byCwd[cwd]!
+        ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
+      widgets.add(ListTile(
+        dense: true,
+        leading: Icon(
+          cwd.isEmpty ? Icons.inbox_outlined : Icons.folder_outlined,
+          size: 20,
         ),
-      );
-      if (!expanded) continue;
-      for (final id in visible) {
+        title: Text(
+          cwd.isEmpty ? '未分组' : _dirLabel(cwd),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: cwd.isEmpty ? null : Text(cwd, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: Text('${items.length}',
+            style: Theme.of(context).textTheme.bodySmall),
+      ));
+      for (final s in items) {
         widgets.add(_SessionTile(
-          session: byId[id]!,
+          session: s,
+          serverId: serverId,
           activeId: activeId,
-          indented: true,
+          indented: cwd.isNotEmpty,
           onSelect: onSelectSession,
         ));
       }
+      widgets.add(const Divider(height: 1));
     }
-
-    final ungrouped = byId.keys
-        .where((id) =>
-            id.isNotEmpty &&
-            !grouped.contains(id) &&
-            !archivedIds.contains(id))
-        .toList()
-      ..sort((a, b) =>
-          activityOf(byId[b]!).compareTo(activityOf(byId[a]!)));
-    if (ungrouped.isNotEmpty) {
-      if (widgets.isNotEmpty) {
-        widgets.add(const Divider(height: 1, indent: 16, endIndent: 16));
-      }
-      final expanded = settings.expandedWs.contains(ungroupedWorkspaceKey);
-      widgets.add(
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.inbox_outlined, size: 20),
-          title: const Text(
-            '未分组',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          trailing: Icon(
-            expanded ? Icons.expand_less : Icons.expand_more,
-            size: 20,
-          ),
-          onTap: () =>
-              settings.setWsExpanded(ungroupedWorkspaceKey, !expanded),
-        ),
-      );
-      if (expanded) {
-        for (final id in ungrouped) {
-          widgets.add(_SessionTile(
-            session: byId[id]!,
-            activeId: activeId,
-            indented: true,
-            onSelect: onSelectSession,
-          ));
-        }
-      }
-    }
+    if (widgets.isNotEmpty) widgets.removeLast();
     return widgets;
+  }
+
+  int _latestOf(List<Map<String, dynamic>> items) => items.isEmpty
+      ? 0
+      : items.map(activityOf).reduce((a, b) => a > b ? a : b);
+
+  /// 目录名：取路径末段（兼容 Windows / POSIX 分隔符）
+  static String _dirLabel(String cwd) {
+    final parts =
+        cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
+    return parts.isEmpty ? cwd : parts.last;
   }
 }
 
 class _SessionTile extends StatelessWidget {
   final Map<String, dynamic> session;
+  final String serverId;
   final String? activeId;
   final bool indented;
   final void Function(String sessionId) onSelect;
 
   const _SessionTile({
     required this.session,
+    required this.serverId,
     required this.activeId,
     required this.indented,
     required this.onSelect,
@@ -239,7 +193,8 @@ class _SessionTile extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       trailing: Consumer<SettingsService>(
-        builder: (_, settings, __) => settings.unviewedIds.contains(id)
+        builder: (_, settings, __) => settings.unviewedIds
+                .contains(settings.seenKey(serverId, id))
             ? Container(
                 width: 8,
                 height: 8,

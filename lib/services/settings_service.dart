@@ -19,7 +19,6 @@ class SettingsService extends ChangeNotifier {
   bool _approvalSound = true;
   bool _completionSound = true;
   Map<String, String> _customSounds = {};
-  Set<String> _expandedWs = {};
   bool _updateAutoCheck = true;
   String _themeModeKey = 'system';
 
@@ -44,7 +43,6 @@ class SettingsService extends ChangeNotifier {
   bool get approvalSound => _approvalSound;
   bool get completionSound => _completionSound;
   Map<String, String> get customSounds => Map.unmodifiable(_customSounds);
-  Set<String> get expandedWs => Set.unmodifiable(_expandedWs);
   bool get updateAutoCheck => _updateAutoCheck;
   String get themeModeKey => _themeModeKey;
   Set<String> get unviewedIds => Set.unmodifiable(_seen.unviewed);
@@ -61,7 +59,6 @@ class SettingsService extends ChangeNotifier {
     _approvalSound = _prefs.getBool('approvalSound') ?? true;
     _completionSound = _prefs.getBool('completionSound') ?? true;
     _loadCustomSounds();
-    _expandedWs = (_prefs.getStringList('expandedWs') ?? []).toSet();
     _updateAutoCheck = _prefs.getBool('updateAutoCheck') ?? true;
     _themeModeKey = _prefs.getString('themeMode') ?? 'system';
     _seen.load(_prefs);
@@ -224,16 +221,6 @@ class SettingsService extends ChangeNotifier {
       final p = _prefs.getString('customSound.$name');
       if (p != null && p.isNotEmpty) _customSounds[name] = p;
     }
-  }
-
-  Future<void> setWsExpanded(String id, bool expanded) async {
-    if (expanded) {
-      _expandedWs.add(id);
-    } else {
-      _expandedWs.remove(id);
-    }
-    await _prefs.setStringList('expandedWs', _expandedWs.toList());
-    notifyListeners();
   }
 
   Future<void> setUpdateAutoCheck(bool value) async {

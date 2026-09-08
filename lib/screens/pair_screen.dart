@@ -94,6 +94,30 @@ class _PairScreenState extends State<PairScreen> {
     }
   }
 
+  Future<void> _autoReadTokenAndPair() async {
+    if (_busy) return;
+    final target = PairingClient.parse(_paste.text);
+    final host = target?.host ?? '192.168.10.171';
+    final port = target?.port ?? 3080;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final token = await PairingClient.fetchTokenFromPairPage(host, port);
+      if (token == null || !mounted) {
+        setState(() => _error = '未在配对页读到令牌，请手动复制令牌粘贴后点“粘贴链接配对”');
+        return;
+      }
+      await _submit('http://$host:$port/pair-accept?pair=$token');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '自动读取失败: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _submit(String raw, {bool skipPair = false}) async {
     if (_busy) return;
     final target = PairingClient.parse(raw);
@@ -245,6 +269,18 @@ class _PairScreenState extends State<PairScreen> {
                       child: FilledButton.tonal(
                         onPressed: _busy ? null : () => _submit(_paste.text, skipPair: true),
                         child: const Text('直接连接'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _autoReadTokenAndPair,
+                        icon: const Icon(Icons.download_for_offline_outlined),
+                        label: const Text('自动读取令牌并配对'),
                       ),
                     ),
                     const SizedBox(width: 8),

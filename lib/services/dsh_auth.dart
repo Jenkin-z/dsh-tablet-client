@@ -148,4 +148,20 @@ class PairingClient {
       return false;
     }
   }
+
+  /// 从 DSH 的 /pair-accept 页面里自动抓当前有效令牌
+  static Future<String?> fetchTokenFromPairPage(String host, int port) async {
+    try {
+      final resp = await http
+          .get(Uri.parse('http://$host:$port/pair-accept'))
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode != 200) return null;
+      final m1 = RegExp(r'pair=([0-9a-fA-F]{32})').firstMatch(resp.body);
+      if (m1 != null) return m1.group(1);
+      final m2 = RegExp(r'([0-9a-fA-F]{32})').firstMatch(resp.body);
+      return m2?.group(1);
+    } catch (_) {
+      return null;
+    }
+  }
 }

@@ -7,7 +7,7 @@ import '../services/dsh_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 
-/// 扫码或粘贴 /pair-accept?pair= 链接。RK3288 只有前摄，默认开前置。
+/// 扫码或粘贴 /pair-accept?pair= 链接。RK3288 只有单摄，默认前摄。
 class PairScreen extends StatefulWidget {
   final String? existingServerId;
   const PairScreen({super.key, this.existingServerId});
@@ -22,16 +22,40 @@ class _PairScreenState extends State<PairScreen> {
   bool _busy = false;
   String? _error;
   bool _handled = false;
-  CameraFacing _facing = CameraFacing.front;
+  CameraFacing _facing = CameraFacing.back;
 
   @override
   void initState() {
     super.initState();
     _scanner = MobileScannerController(
-      facing: CameraFacing.front,
+      facing: CameraFacing.back,
       autoStart: false,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startCam(CameraFacing.front));
+    _scanner.addListener(_onScannerState);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startCam(CameraFacing.back));
+  }
+
+  void _onScannerState() {
+    final s = _scanner.value;
+    if (!s.isInitialized && s.error != null && mounted) {
+      final code = s.error!.errorCode;
+      final cam = s.availableCameras ?? -1;
+      String hint = '请用下面输入框粘贴配对链接。';
+      if (code.toString().contains('permissionDenied')) {
+        hint = '请在系统设置里允许相机权限，或直接粘贴链接。';
+      } else if (code.toString().contains('unsupported')) {
+        hint = '当前设备不支持扫码，请直接粘贴配对链接。';
+      } else if (cam == 1) {
+        hint = '检测到 1 个摄像头，请把屏幕朝向 PC 二维码；如果还是打不开请直接粘贴链接。';
+      } else if (cam >= 2) {
+        hint = '可用摄像头：$cam 个，可点右上角切换。';
+      }
+      setState(() {
+        _error = '摄像头打不开（$code；cameras=$cam）。\n$hint';
+      });
+    } else if (s.isInitialized && s.isRunning && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _startCam(CameraFacing facing) async {
@@ -42,8 +66,8 @@ class _PairScreenState extends State<PairScreen> {
       await _scanner.start(cameraDirection: facing);
       if (mounted) setState(() => _facing = facing);
     } catch (_) {
-      if (facing == CameraFacing.front) {
-        await _startCam(CameraFacing.back);
+      if (facing == CameraFacing.back) {
+        await _startCam(CameraFacing.front);
       }
     }
   }
@@ -57,6 +81,7 @@ class _PairScreenState extends State<PairScreen> {
 
   @override
   void dispose() {
+    _scanner.removeListener(_onScannerState);
     _paste.dispose();
     _scanner.dispose();
     super.dispose();
@@ -160,18 +185,19 @@ class _PairScreenState extends State<PairScreen> {
                     _submit(v);
                   },
                 ),
-                const Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Text(
-                    '这块平板只有前置摄像头，请把屏幕朝向 PC 上的二维码',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, shadows: [
-                      Shadow(blurRadius: 6, color: Colors.black),
-                    ]),
+                if (_scanner.value.isRunning && _scanner.value.availableCameras == 1)
+                  const Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Text(
+                      '检测到单个摄像头，请把屏幕朝向 PC 上的二维码；也可直接粘贴链接',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, shadows: [
+                        Shadow(blurRadius: 6, color: Colors.black),
+                      ]),
+                    ),
                   ),
-                ),
                 if (_busy)
                   const ColoredBox(
                     color: Color(0x88000000),

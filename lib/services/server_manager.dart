@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/dsh_server.dart';
+import '../utils/constants.dart';
 import 'session_monitor.dart';
 import 'settings_service.dart';
 
@@ -27,14 +28,22 @@ class ServerManager extends ChangeNotifier {
   Timer? _timer;
   bool _started = false;
   DateTime? lastRefresh;
+  List<ServerGroup>? _cachedGroups;
 
-  ServerManager(this.settings);
+  ServerManager(this.settings) {
+    settings.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    _cachedGroups = null;
+    super.notifyListeners();
+  }
 
   void start() {
     if (_started) return;
     _started = true;
     refreshAll();
-    _timer = Timer.periodic(SessionMonitor.pollInterval, (_) => refreshAll());
+    _timer = Timer.periodic(pollInterval, (_) => refreshAll());
   }
 
   void stop() {
@@ -43,7 +52,20 @@ class ServerManager extends ChangeNotifier {
     _started = false;
   }
 
+  @override
+  void dispose() {
+    settings.removeListener(_onSettingsChanged);
+    _timer?.cancel();
+    super.dispose();
+  }
+
   SessionMonitor? monitorOf(String serverId) => _monitors[serverId];
+
+  @override
+  void notifyListeners() {
+    _cachedGroups = null; // 数据变更时清除缓存
+    super.notifyListeners();
+  }
 
   Future<void> refreshAll() async {
     if (!_started) return;
@@ -60,13 +82,22 @@ class ServerManager extends ChangeNotifier {
       final existing = _monitors[s.id];
       if (existing == null) {
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
+      } else if (existing.server.host != s.host ||
+          existing.server.port != s.port ||
+          existing.server.cookie != s.cookie) {
+        // 连接信息变更 → 重建 Monitor（DshApi 是 final 的）
+        _monitors[s.id] = SessionMonitor(settings: settings, server: s);
       } else {
-        existing.server = s;
+        existing.updateServer(s);
       }
     }
   }
 
   List<ServerGroup> get groups {
+    return _cachedGroups ??= _buildGroups();
+  }
+
+  List<ServerGroup> _buildGroups() {
     final out = <ServerGroup>[];
     for (final s in settings.servers) {
       final m = _monitors[s.id];

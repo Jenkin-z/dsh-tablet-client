@@ -1,6 +1,8 @@
 /// 行级 unified diff（LCS），为 RK3288 做了上限保护
 library;
 
+import '../utils/constants.dart';
+
 enum DiffOp { same, add, del }
 
 class DiffLine {
@@ -12,7 +14,7 @@ class DiffLine {
 /// oldText == null 表示新建文件：全部标绿
 /// 超限时降级为「全删+全加」，并在末尾注记
 List<DiffLine> unifiedDiff(String? oldText, String newText,
-    {int maxLines = 400}) {
+    {int maxLines = diffMaxLines}) {
   List<String> newLines = newText.split('\n');
   if (oldText == null) {
     final out = newLines.take(maxLines).map((l) => DiffLine(DiffOp.add, l)).toList();
@@ -24,7 +26,7 @@ List<DiffLine> unifiedDiff(String? oldText, String newText,
   List<String> oldLines = oldText.split('\n');
 
   // 规模保护：DP 表上限约 400 万格
-  if (oldLines.length * newLines.length > 4000000) {
+  if (oldLines.length * newLines.length > diffDpCellLimit) {
     final out = <DiffLine>[];
     for (final l in oldLines.take(maxLines ~/ 2)) {
       out.add(DiffLine(DiffOp.del, l));

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../theme/ios_theme.dart';
 import '../utils/session_format.dart';
 import 'console_animations.dart';
 
-/// 顶部设备状态卡：一台 PC 一张
+/// 顶部设备状态卡：一台 PC 一张 —— iOS 风格
 class ConsoleDeviceCard extends StatelessWidget {
   final String name;
   final String hostLabel;
@@ -29,89 +30,160 @@ class ConsoleDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final statusColor =
-        needsAuth ? Colors.orange : (online ? Colors.green : Colors.grey);
-    final stateText = needsAuth
-        ? '需要重新授权'
-        : (online ? hostLabel : '离线');
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: active
-            ? BorderSide(color: theme.colorScheme.primary, width: 1.4)
-            : BorderSide(color: theme.dividerColor, width: 0.6),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusColor = needsAuth
+        ? IosTheme.iosOrange
+        : (online ? IosTheme.iosGreen : IosTheme.iosGray);
+    final stateText =
+        needsAuth ? '需要重新授权' : (online ? hostLabel : '离线');
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+        border: active
+            ? Border.all(color: IosTheme.iosBlue, width: 1.5)
+            : null,
+        boxShadow: active
+            ? [
+                BoxShadow(
+                  color: IosTheme.iosBlue.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : IosTheme.shadowS,
       ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.computer, size: 16, color: statusColor),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ),
-                  if (active)
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text('当前', style: TextStyle(fontSize: 10)),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                stateText,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: statusColor),
-              ),
-              const SizedBox(height: 4),
-              if (online)
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(IosTheme.spaceM),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Row(
                   children: [
-                    Text(
-                      '运行 $running',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.green),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '未读 $unviewed',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: unviewed > 0 ? Colors.orange : null,
-                        fontWeight:
-                            unviewed > 0 ? FontWeight.bold : null,
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius:
+                            BorderRadius.circular(IosTheme.radiusXS),
+                      ),
+                      child: Icon(
+                        Icons.computer,
+                        size: 18,
+                        color: statusColor,
                       ),
                     ),
+                    const SizedBox(width: IosTheme.spaceS),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    if (active)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: IosTheme.spaceS,
+                          vertical: IosTheme.spaceXXS,
+                        ),
+                        decoration: BoxDecoration(
+                          color: IosTheme.iosBlue.withValues(alpha: 0.12),
+                          borderRadius:
+                              BorderRadius.circular(IosTheme.radiusXS),
+                        ),
+                        child: const Text(
+                          '当前',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: IosTheme.iosBlue,
+                          ),
+                        ),
+                      ),
                   ],
-                )
-              else
+                ),
+                const SizedBox(height: IosTheme.spaceS),
                 Text(
-                  error ?? ' ',
+                  stateText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: statusColor,
+                  ),
                 ),
-            ],
+                const SizedBox(height: IosTheme.spaceXS),
+                if (online)
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: IosTheme.spaceS,
+                          vertical: IosTheme.spaceXXS,
+                        ),
+                        decoration: BoxDecoration(
+                          color: IosTheme.iosGreen.withValues(alpha: 0.12),
+                          borderRadius:
+                              BorderRadius.circular(IosTheme.radiusXS),
+                        ),
+                        child: Text(
+                          '运行 $running',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: IosTheme.iosGreen,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (unviewed > 0) ...[
+                        const SizedBox(width: IosTheme.spaceS),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: IosTheme.spaceS,
+                            vertical: IosTheme.spaceXXS,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                IosTheme.iosOrange.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(IosTheme.radiusXS),
+                          ),
+                          child: Text(
+                            '未读 $unviewed',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: IosTheme.iosOrange,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                else
+                  Text(
+                    error ?? ' ',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: IosTheme.iosGray,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -119,7 +191,7 @@ class ConsoleDeviceCard extends StatelessWidget {
   }
 }
 
-/// 会话条目上的设备归属徽章
+/// 会话条目上的设备归属徽章 —— iOS 风格
 class ConsoleDeviceChip extends StatelessWidget {
   final String name;
   final bool online;
@@ -129,92 +201,33 @@ class ConsoleDeviceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: IosTheme.spaceS,
+        vertical: IosTheme.spaceXXS,
+      ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(8),
+        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+        borderRadius: BorderRadius.circular(IosTheme.radiusXS),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: online ? Colors.green : Colors.grey,
-            ),
+          IosStatusDot(
+            color: online ? IosTheme.iosGreen : IosTheme.iosGray,
+            size: 6,
           ),
-          const SizedBox(width: 4),
-          Text(name, style: const TextStyle(fontSize: 11)),
-        ],
-      ),
-    );
-  }
-}
-
-/// 合并会话列表条目：跨设备 + 3 小时窗口
-class ConsoleMergedTile extends StatelessWidget {
-  final Map<String, dynamic> session;
-  final String deviceName;
-  final bool deviceOnline;
-  final bool isCurrent;
-  final bool isUnviewed;
-  final VoidCallback onTap;
-
-  const ConsoleMergedTile({
-    super.key,
-    required this.session,
-    required this.deviceName,
-    required this.deviceOnline,
-    required this.isCurrent,
-    required this.isUnviewed,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final running = session['running'] == true;
-    final subtitle =
-        '${timeAgoOf(session['updatedAt'] as int?)}${isCurrent ? ' · 当前' : ''}';
-    return ListTile(
-      dense: true,
-      leading: running
-          ? const ConsolePulseDot()
-          : Icon(
-              isUnviewed
-                  ? Icons.mark_as_unread_outlined
-                  : Icons.chat_bubble_outline,
-              size: 20,
-              color: isUnviewed ? Colors.orange : null,
-            ),
-      title: Text(
-        sessionTitleOf(session),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontWeight: isUnviewed || running ? FontWeight.bold : null,
-        ),
-      ),
-      subtitle: Row(
-        children: [
-          ConsoleDeviceChip(name: deviceName, online: deviceOnline),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+          const SizedBox(width: IosTheme.spaceXS),
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
             ),
           ),
         ],
       ),
-      trailing: Icon(running ? Icons.chevron_right : Icons.chevron_right,
-          size: 20),
-      onTap: onTap,
     );
   }
 }

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/changes_tracker.dart';
 import '../services/diff_util.dart';
+import '../theme/ios_theme.dart';
 
-/// 右侧变更栏：本会话的文件变更列表 + 行级 diff
+/// 右侧变更栏 —— iOS 风格
+///
+/// 本会话的文件变更列表 + 行级 diff。
 class ChangesDrawer extends StatefulWidget {
   final ChangesTracker tracker;
 
@@ -18,31 +21,85 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
   @override
   Widget build(BuildContext context) {
     final items = widget.tracker.items;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Drawer(
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text('变更',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
+            // 标题
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                IosTheme.spaceXL,
+                IosTheme.spaceL,
+                IosTheme.spaceL,
+                IosTheme.spaceXS,
+              ),
+              child: const Text(
+                '变更',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            // 统计信息
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                IosTheme.spaceXL,
+                0,
+                IosTheme.spaceL,
+                IosTheme.spaceM,
+              ),
               child: Text(
                 items.isEmpty
                     ? '本会话暂无文件变更'
                     : '${items.length} 个文件${widget.tracker.pendingCount > 0 ? '（${widget.tracker.pendingCount} 待执行）' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: IosTheme.iosGray,
+                ),
               ),
             ),
-            const Divider(height: 1),
+            // 分隔线
+            Container(
+              height: 0.5,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            // 变更列表
             Expanded(
-              child: ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, i) => _fileRow(items[i]),
-              ),
+              child: items.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 48,
+                            color: IosTheme.iosGreen.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: IosTheme.spaceM),
+                          Text(
+                            '没有变更',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: IosTheme.iosGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: IosTheme.spaceS,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, i) => _fileRow(items[i]),
+                    ),
             ),
           ],
         ),
@@ -53,34 +110,82 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
   Widget _fileRow(FileChange e) {
     final key = '${e.turn ?? 0}:${e.path}';
     final open = _open.contains(key);
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ListTile(
-          dense: true,
-          leading: Icon(
-            e.oldText == null ? Icons.note_add_outlined : Icons.edit_outlined,
-            size: 20,
-            color: e.done ? theme.colorScheme.primary : Colors.orange,
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() {
+              if (open) {
+                _open.remove(key);
+              } else {
+                _open.add(key);
+              }
+            }),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: IosTheme.spaceL,
+                vertical: IosTheme.spaceM,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: e.done
+                          ? IosTheme.iosGreen.withValues(alpha: 0.12)
+                          : IosTheme.iosOrange.withValues(alpha: 0.12),
+                      borderRadius:
+                          BorderRadius.circular(IosTheme.radiusXS),
+                    ),
+                    child: Icon(
+                      e.oldText == null
+                          ? Icons.note_add_outlined
+                          : Icons.edit_outlined,
+                      size: 16,
+                      color: e.done ? IosTheme.iosGreen : IosTheme.iosOrange,
+                    ),
+                  ),
+                  const SizedBox(width: IosTheme.spaceM),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.path,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${e.done ? '已应用' : '待执行'} · ${e.title}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: IosTheme.iosGray,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    open ? Icons.expand_less : Icons.expand_more,
+                    size: 20,
+                    color: IosTheme.iosGray3,
+                  ),
+                ],
+              ),
+            ),
           ),
-          title: Text(e.path,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
-          subtitle: Text(
-            '${e.done ? '已应用' : '待执行'} · ${e.title}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Icon(open ? Icons.expand_less : Icons.expand_more, size: 20),
-          onTap: () => setState(() {
-            if (open) {
-              _open.remove(key);
-            } else {
-              _open.add(key);
-            }
-          }),
         ),
         if (open) _diffBlock(e),
       ],
@@ -88,46 +193,68 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
   }
 
   Widget _diffBlock(FileChange e) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final lines = unifiedDiff(e.oldText, e.newText);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      margin: const EdgeInsets.fromLTRB(
+        IosTheme.spaceL,
+        0,
+        IosTheme.spaceL,
+        IosTheme.spaceM,
+      ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor),
+        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF8F8FA),
+        borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final l in lines) _diffLine(l, theme),
+          for (final l in lines) _diffLine(l, isDark),
         ],
       ),
     );
   }
 
-  Widget _diffLine(DiffLine l, ThemeData theme) {
+  Widget _diffLine(DiffLine l, bool isDark) {
     Color? bg;
+    Color? textColor;
     String prefix = '  ';
     switch (l.op) {
       case DiffOp.add:
-        bg = Colors.green.withValues(alpha: 0.15);
+        bg = IosTheme.iosGreen.withValues(alpha: 0.1);
+        textColor = IosTheme.iosGreen;
         prefix = '+ ';
         break;
       case DiffOp.del:
-        bg = Colors.red.withValues(alpha: 0.15);
+        bg = IosTheme.iosRed.withValues(alpha: 0.1);
+        textColor = IosTheme.iosRed;
         prefix = '- ';
         break;
       case DiffOp.same:
+        textColor = isDark ? Colors.white70 : Colors.black54;
         prefix = '  ';
         break;
     }
     return Container(
       color: bg,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: IosTheme.spaceM,
+        vertical: IosTheme.spaceXXS,
+      ),
       child: SelectableText(
         '$prefix${l.text}',
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.4),
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12,
+          height: 1.4,
+          color: textColor,
+        ),
       ),
     );
   }

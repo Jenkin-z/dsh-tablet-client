@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/ios_theme.dart';
 
 /// 待回答的问题请求（一 ask 多问一批答）
 class PendingQuestion {
@@ -13,7 +14,10 @@ class PendingQuestion {
   });
 }
 
-/// 问题表单弹窗：单选 chips / 多选 chips / 自定义文本；plan-review 意图给通过/否决按钮
+/// 问题表单弹窗 —— iOS 风格
+///
+/// 单选 chips / 多选 chips / 自定义文本；
+/// plan-review 意图给通过/否决按钮。
 class QuestionSheet extends StatefulWidget {
   final PendingQuestion question;
   final Future<void> Function(List<Map<String, dynamic>> answers) onSubmit;
@@ -44,8 +48,19 @@ class _QuestionSheetState extends State<QuestionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      title: const Text('需要回答'),
+      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(IosTheme.radiusM),
+      ),
+      title: const Text(
+        '需要回答',
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -61,15 +76,31 @@ class _QuestionSheetState extends State<QuestionSheet> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('稍后'),
+          child: Text(
+            '稍后',
+            style: TextStyle(
+              color: IosTheme.iosBlue,
+              fontSize: 17,
+            ),
+          ),
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: IosTheme.iosBlue,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(IosTheme.radiusButton),
+            ),
+          ),
           child: _submitting
               ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('提交'),
         ),
@@ -88,30 +119,62 @@ class _QuestionSheetState extends State<QuestionSheet> {
     final multi = q['multiSelect'] == true;
     final intent = q['intent'] as Map<String, dynamic>?;
     final selected = _selected.putIfAbsent(qid, () => <String>{});
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: IosTheme.spaceL),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (header != null && header.isNotEmpty)
-            Text(header,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(question, style: const TextStyle(fontSize: 15)),
+            Text(
+              header,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: IosTheme.iosGray,
+              ),
+            ),
+          const SizedBox(height: IosTheme.spaceXS),
+          Text(
+            question,
+            style: TextStyle(
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+            ),
+          ),
           if (detail != null && detail.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(detail, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: IosTheme.spaceXS),
+            Text(
+              detail,
+              style: TextStyle(
+                fontSize: 13,
+                color: IosTheme.iosGray,
+              ),
+            ),
           ],
           if (intent != null && intent['kind'] == 'plan-review') ...[
-            const SizedBox(height: 8),
-            Text('计划评审：${intent['approve'] ?? ''}',
-                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: IosTheme.spaceS),
+            Container(
+              padding: const EdgeInsets.all(IosTheme.spaceM),
+              decoration: BoxDecoration(
+                color: IosTheme.iosBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+              ),
+              child: Text(
+                '计划评审：${intent['approve'] ?? ''}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: IosTheme.iosBlue,
+                ),
+              ),
+            ),
           ],
           if (options.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: IosTheme.spaceM),
             Wrap(
-              spacing: 8,
+              spacing: IosTheme.spaceS,
+              runSpacing: IosTheme.spaceS,
               children: [
                 for (final o in options)
                   Builder(builder: (context) {
@@ -130,6 +193,13 @@ class _QuestionSheetState extends State<QuestionSheet> {
                               }
                             }),
                             tooltip: desc,
+                            selectedColor:
+                                IosTheme.iosBlue.withValues(alpha: 0.15),
+                            checkmarkColor: IosTheme.iosBlue,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(IosTheme.radiusChip),
+                            ),
                           )
                         : ChoiceChip(
                             label: Text(label),
@@ -140,18 +210,36 @@ class _QuestionSheetState extends State<QuestionSheet> {
                                 ..add(label);
                             }),
                             tooltip: desc,
+                            selectedColor:
+                                IosTheme.iosBlue.withValues(alpha: 0.15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(IosTheme.radiusChip),
+                            ),
                           );
                   }),
               ],
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: IosTheme.spaceM),
           TextField(
             controller: _controllerFor(qid),
-            decoration: const InputDecoration(
+            style: const TextStyle(fontSize: 15),
+            decoration: InputDecoration(
               hintText: '补充说明（可选）',
-              border: OutlineInputBorder(),
-              isDense: true,
+              hintStyle: TextStyle(color: IosTheme.iosGray),
+              filled: true,
+              fillColor: isDark
+                  ? const Color(0xFF3A3A3C)
+                  : const Color(0xFFF2F2F7),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(IosTheme.radiusInput),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: IosTheme.spaceL,
+                vertical: IosTheme.spaceM,
+              ),
             ),
             maxLines: 2,
           ),

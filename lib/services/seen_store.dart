@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/constants.dart';
 
 /// 控制台已读水位（sessionKey = serverId::sessionId）
+/// 使用防抖写入：高频操作（markSeen/addUnviewed）延迟 500ms 批量持久化
 class SeenStore {
   Map<String, int> seenAt = {};
   Set<String> unviewed = {};
+  Timer? _debounce;
+  bool _dirty = false;
 
   void load(SharedPreferences prefs) {
     try {
@@ -22,14 +27,38 @@ class SeenStore {
     unviewed = (prefs.getStringList('unviewedIds') ?? []).toSet();
   }
 
+  /// 立即持久化（用于关键路径，如页面销毁）
   Future<void> save(SharedPreferences prefs) async {
-    if (seenAt.length > 300) {
+    _debounce?.cancel();
+    _debounce = null;
+    _dirty = false;
+    await _doSave(prefs);
+  }
+
+  /// 防抖写入：500ms 内多次调用只写最后一次
+  void _scheduleSave(SharedPreferences prefs) {
+    _dirty = true;
+    _debounce?.cancel();
+    _debounce = Timer(seenStoreDebounce, () {
+      _debounce = null;
+      _dirty = false;
+      _doSave(prefs);
+    });
+  }
+
+  Future<void> _doSave(SharedPreferences prefs) async {
+    if (seenAt.length > seenStoreMaxEntries) {
       final sorted = seenAt.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-      seenAt = {for (final e in sorted.take(300)) e.key: e.value};
+      seenAt = {for (final e in sorted.take(seenStoreMaxEntries)) e.key: e.value};
     }
     await prefs.setString('seenAtMap', jsonEncode(seenAt));
     await prefs.setStringList('unviewedIds', unviewed.toList());
+  }
+
+  /// 销毁前调用，确保数据落盘
+  Future<void> flush(SharedPreferences prefs) async {
+    if (_dirty) await save(prefs);
   }
 
   int lastSeen(String id) => seenAt[id] ?? 0;
@@ -38,13 +67,13 @@ class SeenStore {
       SharedPreferences prefs, String id, int at) async {
     if (seenAt.containsKey(id)) return;
     seenAt[id] = at;
-    await save(prefs);
+    _scheduleSave(prefs);
   }
 
   Future<bool> markSeen(SharedPreferences prefs, String id) async {
     seenAt[id] = DateTime.now().millisecondsSinceEpoch;
     final changed = unviewed.remove(id);
-    await save(prefs);
+    _scheduleSave(prefs);
     return changed;
   }
 
@@ -56,13 +85,13 @@ class SeenStore {
       seenAt[id] = now;
       if (unviewed.remove(id)) changed = true;
     }
-    await save(prefs);
+    _scheduleSave(prefs);
     return changed;
   }
 
   Future<bool> addUnviewed(SharedPreferences prefs, String id) async {
     if (!unviewed.add(id)) return false;
-    await prefs.setStringList('unviewedIds', unviewed.toList());
+    _scheduleSave(prefs);
     return true;
   }
 

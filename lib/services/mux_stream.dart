@@ -4,9 +4,12 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../utils/constants.dart';
 import 'mux_history.dart';
 
 export 'mux_history.dart';
+
+part 'mux_session_handler.dart';
 
 /// DSH 原生 mux 订阅：ws://host:port/api/remote.mux（upgrade 带 Cookie）
 ///
@@ -59,6 +62,7 @@ class MuxStream {
   void Function()? onToolResult;
   void Function()? onTurnEnd;
   void Function(List<Map<String, dynamic>> queueItems)? onQueueUpdate;
+  void Function(List<String> archivedSessionIds)? onWorkspaceBaseline;
   void Function()? onDisconnected;
   void Function(String message)? onError;
 
@@ -106,6 +110,13 @@ class MuxStream {
           },
         });
       }
+      // 订阅 workspace/follow 获取归档会话列表
+      _send({
+        'type': 'open',
+        'streamId': 'wfo',
+        'endpoint': 'workspace/follow',
+        'payload': {'args': {}},
+      });
       _sub = _channel!.stream.listen(
         _onData,
         onError: (_) => _handleDisconnect(),
@@ -157,7 +168,11 @@ class MuxStream {
       final value = frame['value'];
       if (value is Map<String, dynamic>) _onItem(value);
     } else if (type == 'error' || type == 'end') {
-      _handleDisconnect();
+      // 只有主事件流断开才触发重连；workspace/follow 等辅助流断开不处理
+      final streamId = frame['streamId'] as String?;
+      if (streamId == null || streamId == 'evt' || streamId == 'fol') {
+        _handleDisconnect();
+      }
     }
   }
 
@@ -165,6 +180,14 @@ class MuxStream {
     switch (value['type'] as String? ?? '') {
       case 'ready':
         _clientId = value['clientId'] as String?;
+        break;
+      case 'baseline':
+        // workspace/follow baseline: { type:'baseline', value:{ items, archivedSessionIds } }
+        _onWorkspaceFrame(value);
+        break;
+      case 'archived':
+        // workspace/follow archive update: { type:'archived', archivedSessionIds }
+        _onWorkspaceFrame(value);
         break;
       case 'waterfall':
         _onWaterfall(value);
@@ -220,6 +243,25 @@ class MuxStream {
     }
   }
 
+  /// 处理 workspace/follow 帧：baseline 或 archived 更新
+  void _onWorkspaceFrame(Map<String, dynamic> value) {
+    List<String>? ids;
+    if (value['type'] == 'baseline') {
+      // baseline: value.value.archivedSessionIds
+      final inner = value['value'];
+      if (inner is Map<String, dynamic>) {
+        ids = (inner['archivedSessionIds'] as List?)
+            ?.whereType<String>()
+            .toList();
+      }
+    } else if (value['type'] == 'archived') {
+      ids = (value['archivedSessionIds'] as List?)
+          ?.whereType<String>()
+          .toList();
+    }
+    if (ids != null) onWorkspaceBaseline?.call(ids);
+  }
+
   void _onJournalEvent(dynamic eventDyn) {
     if (eventDyn is! Map<String, dynamic>) return;
     final type = eventDyn['type'] as String? ?? '';
@@ -235,7 +277,7 @@ class MuxStream {
       if (type == 'turn/end') onTurnEnd?.call();
       return;
     }
-    _handleSessionEvent(type, eventDyn, data);
+    _handleSessionEvent(this, type, eventDyn, data);
   }
 
   void _onAssistantFrame(dynamic frameDyn) {
@@ -269,7 +311,7 @@ class MuxStream {
               },
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(eventResultTimeout);
       if (resp.statusCode != 200) return false;
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final result = data['result'];
@@ -288,39 +330,4 @@ class MuxStream {
           String eventId, List<Map<String, dynamic>> answers) =>
       _postEventResult(eventId, {'answers': answers});
 
-  void _handleSessionEvent(
-      String type, Map<String, dynamic> event, Map<String, dynamic> data) {
-    switch (type) {
-      case 'user/message':
-        final text = extractContentBlocks(data['content']);
-        String? rpcId;
-        final source = data['source'];
-        if (source is Map<String, dynamic>) {
-          rpcId = source['rpcId'] as String?;
-        }
-        final seq = '${event['seq'] ?? ''}';
-        if (text.isNotEmpty) onUserMessage?.call(text, rpcId, seq);
-        break;
-      case 'assistant/chunk':
-        final chunk = data['chunk'];
-        if (chunk is Map<String, dynamic> && chunk['type'] == 'text-delta') {
-          final text = chunk['text'] as String? ?? '';
-          if (text.isNotEmpty) onTextDelta?.call(text);
-        }
-        break;
-      case 'assistant/message':
-        final text = extractAssistantText(data['message']);
-        if (text.isNotEmpty) onAssistantMessage?.call(text);
-        break;
-      case 'tool/call':
-        onToolCall?.call(data['name'] as String? ?? 'tool');
-        break;
-      case 'tool/result':
-        onToolResult?.call();
-        break;
-      case 'turn/end':
-        onTurnEnd?.call();
-        break;
-    }
-  }
 }

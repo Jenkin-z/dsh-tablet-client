@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import '../models/dsh_server.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
+import '../theme/ios_theme.dart';
+import '../utils/constants.dart';
 import '../widgets/console_devices.dart';
+import '../widgets/console_merged_tile.dart';
 import '../widgets/console_widgets.dart';
 import 'pair_screen.dart';
 
@@ -13,29 +16,40 @@ class ConsoleScreen extends StatelessWidget {
 
   const ConsoleScreen({super.key, required this.onOpenSession});
 
-  static const _window = Duration(hours: 3);
+  static final _window = consoleRecentWindow;
 
   @override
   Widget build(BuildContext context) {
     return Consumer2<ServerManager, SettingsService>(
       builder: (context, manager, settings, _) {
         final groups = manager.groups;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
           appBar: AppBar(
-            title: const Text('控制台'),
+            title: const Text(
+              '控制台',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             actions: [
               if (manager.lastRefresh != null)
                 Center(
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.only(right: IosTheme.spaceS),
                     child: Text(
                       '更新于 ${_clock(manager.lastRefresh!)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: IosTheme.iosGray,
+                      ),
                     ),
                   ),
                 ),
               IconButton(
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh, size: 22),
                 tooltip: '刷新',
                 onPressed: manager.refreshAll,
               ),
@@ -57,12 +71,36 @@ class ConsoleScreen extends StatelessWidget {
     List<ServerGroup> groups,
   ) {
     if (groups.isEmpty) {
-      return const Center(child: Text('还没有 PC，去设置里添加'));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.computer_outlined,
+              size: 56,
+              color: IosTheme.iosGray3,
+            ),
+            const SizedBox(height: IosTheme.spaceM),
+            Text(
+              '还没有 PC，去设置里添加',
+              style: TextStyle(
+                fontSize: 16,
+                color: IosTheme.iosGray,
+              ),
+            ),
+          ],
+        ),
+      );
     }
     final loading = groups.every((g) => g.monitor.loading) &&
         groups.every((g) => g.monitor.sessions.isEmpty);
     if (loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: IosTheme.iosBlue,
+        ),
+      );
     }
     final merged = _mergedRecent(groups);
     final currentKey = settings.active == null
@@ -78,8 +116,14 @@ class ConsoleScreen extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: manager.refreshAll,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        padding: const EdgeInsets.fromLTRB(
+          IosTheme.spaceL,
+          IosTheme.spaceM,
+          IosTheme.spaceL,
+          IosTheme.spaceXXXL,
+        ),
         children: [
+          // 设备卡片区
           _DeviceCards(
             groups: groups,
             activeId: settings.activeServerId,
@@ -93,10 +137,11 @@ class ConsoleScreen extends StatelessWidget {
               await settings.setActiveServer(server.id);
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: IosTheme.spaceL),
+          // 最近活跃会话区
           ConsoleSectionHeader(
             icon: Icons.forum_outlined,
-            iconColor: Colors.blueGrey,
+            iconColor: IosTheme.iosBlue,
             title: '最近 3 小时',
             count: merged.length,
             badge: unviewedKeys.isNotEmpty,
@@ -109,20 +154,45 @@ class ConsoleScreen extends StatelessWidget {
                   ),
           ),
           if (merged.isEmpty)
-            const Card(
-              child: ListTile(
-                dense: true,
-                title: Text('最近 3 小时没有活跃会话',
-                    textAlign: TextAlign.center),
+            Container(
+              padding: const EdgeInsets.all(IosTheme.spaceXL),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1C1C1E)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+              ),
+              child: const Center(
+                child: Text(
+                  '最近 3 小时没有活跃会话',
+                  style: TextStyle(
+                    color: IosTheme.iosGray,
+                    fontSize: 15,
+                  ),
+                ),
               ),
             )
           else
-            Card(
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1C1C1E)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+                boxShadow: IosTheme.shadowS,
+              ),
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
                   for (var i = 0; i < merged.length; i++) ...[
-                    if (i > 0) const Divider(height: 1),
+                    if (i > 0)
+                      Container(
+                        height: 0.5,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                        margin: const EdgeInsets.only(left: 56),
+                      ),
                     ConsoleMergedTile(
                       key: ValueKey(
                           '${merged[i].group.server.id}::${merged[i].sessionIdAsString}'),
@@ -177,7 +247,7 @@ class _MergedSession {
   const _MergedSession({required this.group, required this.session});
 }
 
-/// 顶部设备卡区：按宽度自适应列数
+/// 顶部设备卡区：按宽度自适应列数 —— iOS 风格
 class _DeviceCards extends StatelessWidget {
   final List<ServerGroup> groups;
   final String? activeId;
@@ -194,10 +264,10 @@ class _DeviceCards extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, cons) {
         final cols = (cons.maxWidth / 240).floor().clamp(1, 4);
-        final cardW = (cons.maxWidth - (cols - 1) * 8) / cols;
+        final cardW = (cons.maxWidth - (cols - 1) * IosTheme.spaceS) / cols;
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: IosTheme.spaceS,
+          runSpacing: IosTheme.spaceS,
           children: [
             for (final g in groups)
               SizedBox(

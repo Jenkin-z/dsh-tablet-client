@@ -5,6 +5,8 @@ import '../models/dsh_server.dart';
 import '../services/dsh_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
+import '../theme/ios_theme.dart';
+import 'qr_scan_screen.dart';
 
 /// 用 DSH 启动令牌换取 browser-session cookie（约 30 天，DSH 重启仍有效）
 ///
@@ -93,6 +95,15 @@ class _PairScreenState extends State<PairScreen> {
     }
   }
 
+  Future<void> _scanAuthorize() async {
+    if (_busy) return;
+    final result = await Navigator.of(context).push<PairResult>(
+      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+    );
+    if (result == null || !mounted) return;
+    await _finish(result.host, result.port, result.cookie);
+  }
+
   Future<void> _finish(String host, int port, String cookie) async {
     final settings = context.read<SettingsService>();
     final existingId = widget.existingServerId;
@@ -118,49 +129,195 @@ class _PairScreenState extends State<PairScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      appBar: AppBar(title: const Text('添加 / 授权 PC')),
+      backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
+      appBar: AppBar(
+        title: const Text(
+          '添加 / 授权 PC',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(IosTheme.spaceL),
         children: [
-          TextField(
-            controller: _paste,
-            decoration: const InputDecoration(
-              labelText: 'PC 地址或启动令牌链接',
-              hintText: '192.168.10.171:3080 或 http://IP:3080/?token=r_...',
+          // 输入区域
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+              boxShadow: IosTheme.shadowS,
+            ),
+            padding: const EdgeInsets.all(IosTheme.spaceL),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'PC 地址',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: IosTheme.spaceS),
+                TextField(
+                  controller: _paste,
+                  style: const TextStyle(fontSize: 16),
+                  decoration: InputDecoration(
+                    hintText: '192.168.10.171:3080',
+                    hintStyle: TextStyle(color: IosTheme.iosGray),
+                    filled: true,
+                    fillColor: isDark
+                        ? const Color(0xFF2C2C2E)
+                        : const Color(0xFFF2F2F7),
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(IosTheme.radiusInput),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: IosTheme.spaceL,
+                      vertical: IosTheme.spaceM,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: IosTheme.spaceL),
+                // 按钮区域
+                Row(
+                  children: [
+                    Expanded(
+                      child: IosButton(
+                        label: '自动授权',
+                        icon: Icons.touch_app,
+                        onPressed: _busy ? null : _autoAuthorize,
+                      ),
+                    ),
+                    const SizedBox(width: IosTheme.spaceM),
+                    Expanded(
+                      child: IosButton(
+                        label: '令牌授权',
+                        icon: Icons.vpn_key,
+                        filled: false,
+                        onPressed: _busy ? null : _authorizeWithToken,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: IosTheme.spaceM),
+                // 扫码按钮
+                SizedBox(
+                  width: double.infinity,
+                  child: IosButton(
+                    label: '扫码授权',
+                    icon: Icons.qr_code_scanner,
+                    filled: false,
+                    onPressed: _busy ? null : _scanAuthorize,
+                  ),
+                ),
+                if (_busy) ...[
+                  const SizedBox(height: IosTheme.spaceL),
+                  const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: IosTheme.iosBlue,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _busy ? null : _autoAuthorize,
-            child: const Text('自动授权（推荐）'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: _busy ? null : _authorizeWithToken,
-            child: const Text('粘贴启动令牌授权'),
-          ),
-          if (_busy) ...[
-            const SizedBox(height: 16),
-            const Center(child: CircularProgressIndicator()),
-          ],
-          const SizedBox(height: 24),
-          Text(
-            '说明\n'
-            '· 启动令牌在 PC 上 dsh web 启动输出的网址里（?token=r_...），'
-            '每个 DSH 进程一份，重启后会变\n'
-            '· 换到的授权默认 30 天有效，DSH 重启不用重新授权\n'
-            '· 自动方式：在 PC 上运行 tool\\publish_launch_token.ps1，'
-            '令牌会发到 8099 下载服务，平板一键拉取',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          // 错误信息
           if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            const SizedBox(height: IosTheme.spaceM),
+            Container(
+              padding: const EdgeInsets.all(IosTheme.spaceM),
+              decoration: BoxDecoration(
+                color: IosTheme.iosRed.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(IosTheme.radiusS),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: IosTheme.iosRed,
+                    size: 20,
+                  ),
+                  const SizedBox(width: IosTheme.spaceS),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: IosTheme.iosRed,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
+          // 说明区域
+          const SizedBox(height: IosTheme.spaceXXL),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+              boxShadow: IosTheme.shadowS,
+            ),
+            padding: const EdgeInsets.all(IosTheme.spaceL),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '说明',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: IosTheme.spaceM),
+                _infoRow(
+                  icon: Icons.link,
+                  text: '启动令牌在 PC 上 dsh web 启动输出的网址里（?token=r_...），每个 DSH 进程一份，重启后会变',
+                ),
+                const SizedBox(height: IosTheme.spaceS),
+                _infoRow(
+                  icon: Icons.schedule,
+                  text: '换到的授权默认 30 天有效，DSH 重启不用重新授权',
+                ),
+                const SizedBox(height: IosTheme.spaceS),
+                _infoRow(
+                  icon: Icons.auto_fix_high,
+                  text: '自动方式：在 PC 上运行 tool\\publish_launch_token.ps1，令牌会发到 8099 下载服务，平板一键拉取',
+                ),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _infoRow({required IconData icon, required String text}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: IosTheme.iosGray),
+        const SizedBox(width: IosTheme.spaceS),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: IosTheme.iosGray,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

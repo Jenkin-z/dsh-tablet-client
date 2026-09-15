@@ -1,18 +1,18 @@
-import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/dsh_api.dart';
 import '../services/settings_service.dart';
-import '../services/sound_service.dart';
 import '../services/update_service.dart';
+import '../theme/ios_theme.dart';
 import '../widgets/server_list_card.dart';
+import '../widgets/sound_settings.dart';
 import '../widgets/update_dialog.dart';
 
-/// 设置界面：服务器地址、常亮、前台保活、会话管理
+/// 设置界面 —— iOS 风格分组列表
+///
+/// 使用单层 ListView，每个分节用 IosCard 包裹，避免嵌套滚动冲突。
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -43,50 +43,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _previewSound(String name) async {
-    final s = Provider.of<SettingsService>(context, listen: false);
-    await SoundService.play(name, customPath: s.customSoundPath(name));
-  }
-
-  /// 选择自定义铃声：拷入应用私有目录后生效，并试播
-  Future<void> _pickCustomSound(String name) async {
+  Future<void> _newSession() async {
     try {
-      final picked =
-          await FilePicker.pickFile(type: FileType.audio);
-      if (picked == null) return;
-      final appDir = await getApplicationDocumentsDirectory();
-      final soundsDir = Directory('${appDir.path}/sounds');
-      await soundsDir.create(recursive: true);
-      final origName = picked.name;
-      final ext = origName.contains('.')
-          ? origName.substring(origName.lastIndexOf('.'))
-          : '.mp3';
-      final dest = File('${soundsDir.path}/custom_$name$ext');
-      final srcPath = picked.path;
-      if (srcPath != null) {
-        await File(srcPath).copy(dest.path);
-      } else {
-        // SAF 等无路径情况：读字节流写入
-        await dest.writeAsBytes(await picked.readAsBytes());
-      }
-      if (!mounted) return;
-      final s = Provider.of<SettingsService>(context, listen: false);
-      await s.setCustomSound(name, dest.path);
-      await SoundService.play(name, customPath: dest.path);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择铃声失败: $e')),
-      );
-    }
-  }
-
-  Future<void> _resetCustomSound(String name) async {
-    final s = Provider.of<SettingsService>(context, listen: false);
-    await s.setCustomSound(name, null);
-  }
-
-  Future<void> _newSession() async {    try {
       final s = Provider.of<SettingsService>(context, listen: false);
       final api = DshApi(baseUrl: s.serverUrl, cookie: s.active?.cookie);
       final id = await api.createSession();
@@ -107,270 +65,253 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Consumer<SettingsService>(
       builder: (context, s, _) => Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(title: const Text('设置')),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: IosTheme.spaceL,
+            vertical: IosTheme.spaceM,
+          ),
           children: [
-            _sectionTitle('PC'),
-            const ServerListCard(),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '当前: ${s.serverUrl}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: _testing ? null : _testConnection,
-                      child: _testing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('测试当前连接'),
-                    ),
-                    if (_testResult != null) ...[
-                      const SizedBox(height: 8),
-                      Text(_testResult!,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('平板常驻'),
-            Card(
+            // ── PC ──
+            const IosSectionHeader(title: 'PC'),
+            IosCard(
               child: Column(
                 children: [
-                  SwitchListTile(
-                    title: const Text('屏幕常亮'),
-                    subtitle: const Text('防止平板自动锁屏熄屏'),
-                    secondary: const Icon(Icons.lightbulb_outline),
+                  const ServerListCard(),
+                  _testConnectionTile(),
+                ],
+              ),
+            ),
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 平板常驻 ──
+            const IosSectionHeader(title: '平板常驻'),
+            IosCard(
+              child: Column(
+                children: [
+                  _switchTile(
+                    icon: Icons.lightbulb_outline,
+                    iconColor: IosTheme.iosOrange,
+                    title: '屏幕常亮',
+                    subtitle: '防止平板自动锁屏熄屏',
                     value: s.keepScreenOn,
                     onChanged: (v) async {
                       await s.setKeepScreenOn(v);
                       await WakelockPlus.toggle(enable: v);
                     },
                   ),
-                  const Divider(height: 1),
+                  _divider(),
                   const _ForegroundServiceTile(),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: const Text('断线自动重连'),
-                    subtitle: const Text('网络恢复后自动连回 DSH'),
-                    secondary: const Icon(Icons.autorenew),
+                  _divider(),
+                  _switchTile(
+                    icon: Icons.autorenew,
+                    iconColor: IosTheme.iosGreen,
+                    title: '断线自动重连',
+                    subtitle: '网络恢复后自动连回 DSH',
                     value: s.autoReconnect,
                     onChanged: (v) => s.setAutoReconnect(v),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _sectionTitle('外观'),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('主题'),
-                    const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: 'system',
-                          label: Text('跟随系统'),
-                          icon: Icon(Icons.settings_suggest_outlined, size: 18),
-                        ),
-                        ButtonSegment(
-                          value: 'light',
-                          label: Text('浅色'),
-                          icon: Icon(Icons.light_mode_outlined, size: 18),
-                        ),
-                        ButtonSegment(
-                          value: 'dark',
-                          label: Text('深色'),
-                          icon: Icon(Icons.dark_mode_outlined, size: 18),
-                        ),
-                      ],
-                      selected: {s.themeModeKey},
-                      onSelectionChanged: (v) =>
-                          s.setThemeMode(v.first),
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 外观 ──
+            const IosSectionHeader(title: '外观'),
+            IosCard(
+              child: _themeSegmentTile(s),
             ),
-            const SizedBox(height: 16),
-            _sectionTitle('提示音'),
-            Card(
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 提示音 + 自定义铃声 ──
+            SoundSettingsSection(settings: s),
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 应用更新 ──
+            const IosSectionHeader(title: '应用更新'),
+            IosCard(
               child: Column(
                 children: [
-                  SwitchListTile(
-                    title: const Text('提示音'),
-                    subtitle: const Text('需确认与完成时播放（后期可换自定义铃声）'),
-                    secondary: const Icon(Icons.volume_up_outlined),
-                    value: s.soundEnabled,
-                    onChanged: (v) => s.setSoundEnabled(v),
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: const Text('需确认提示音'),
-                    subtitle: const Text('审批 / 问题请求到达时'),
-                    secondary: const Icon(Icons.notification_important_outlined),
-                    value: s.approvalSound,
-                    onChanged:
-                        s.soundEnabled ? (v) => s.setApprovalSound(v) : null,
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: const Text('完成提示音'),
-                    subtitle: const Text('Agent 一轮回答结束时'),
-                    secondary: const Icon(Icons.task_alt_outlined),
-                    value: s.completionSound,
-                    onChanged: s.soundEnabled
-                        ? (v) => s.setCompletionSound(v)
-                        : null,
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.play_circle_outline),
-                    title: const Text('试听'),
-                    subtitle: const Text('逐个播放，确认平板有声（走媒体音量）'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton(
-                          onPressed: () => _previewSound('approval'),
-                          child: const Text('确认'),
-                        ),
-                        TextButton(
-                          onPressed: () => _previewSound('question'),
-                          child: const Text('提问'),
-                        ),
-                        TextButton(
-                          onPressed: () => _previewSound('done'),
-                          child: const Text('完成'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('自定义铃声'),
-            Card(
-              child: Column(
-                children: [
-                  _customSoundTile(s, 'approval', '确认音', '审批 / 问题请求到达'),
-                  const Divider(height: 1),
-                  _customSoundTile(s, 'question', '提问音', 'Agent 提问到达'),
-                  const Divider(height: 1),
-                  _customSoundTile(s, 'done', '完成音', 'Agent 一轮回答结束'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('应用更新'),
-            Card(
-              child: Column(
-                children: [
-                  FutureBuilder<String>(
-                    future: UpdateService.currentVersion(),
-                    builder: (context, snap) => ListTile(
-                      leading: const Icon(Icons.smartphone_outlined),
-                      title: const Text('当前版本'),
-                      subtitle:
-                          Text(snap.data ?? '…', style: const TextStyle(fontSize: 12)),
-                      trailing: OutlinedButton(
-                        onPressed: () => UpdateFlow.checkAndPrompt(
-                          context,
-                          s.servers.map((e) => e.host).followedBy([s.serverHost]),
-                        ),
-                        child: const Text('检查更新'),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: const Text('启动时自动检查'),
-                    subtitle: const Text('局域网小文件请求，无更新不打扰'),
-                    secondary: const Icon(Icons.system_update_outlined),
+                  _updateVersionTile(s),
+                  _divider(),
+                  _switchTile(
+                    icon: Icons.system_update_outlined,
+                    iconColor: IosTheme.iosBlue,
+                    title: '启动时自动检查',
+                    subtitle: '局域网小文件请求，无更新不打扰',
                     value: s.updateAutoCheck,
                     onChanged: (v) => s.setUpdateAutoCheck(v),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _sectionTitle('会话'),
-            Card(
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 会话 ──
+            const IosSectionHeader(title: '会话'),
+            IosCard(
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.tag),
+                    leading: Icon(
+                      Icons.tag,
+                      color: IosTheme.iosPurple,
+                      size: 22,
+                    ),
                     title: const Text('当前会话'),
                     subtitle: Text(
                       s.sessionId ?? '无',
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                  const Divider(height: 1),
+                  _divider(),
                   ListTile(
-                    leading: const Icon(Icons.add),
+                    leading: Icon(
+                      Icons.add_circle_outline,
+                      color: IosTheme.iosGreen,
+                      size: 22,
+                    ),
                     title: const Text('新建会话'),
                     subtitle: const Text('另起一段对话，旧记录保留在 PC 端'),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: IosTheme.iosGray3,
+                    ),
                     onTap: _newSession,
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: IosTheme.spaceXXXL),
           ],
         ),
       ),
     );
   }
 
-  Widget _customSoundTile(
-      SettingsService s, String name, String label, String desc) {
-    final custom = s.customSoundPath(name);
-    final fileName =
-        custom == null ? null : custom.split('/').last.split('\\').last;
+  /// iOS 风格分隔线
+  Widget _divider() {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.only(left: 56),
+      color: Theme.of(context).brightness == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.06),
+    );
+  }
+
+  Widget _testConnectionTile() {
     return ListTile(
-      leading: const Icon(Icons.music_note_outlined),
-      title: Text(label),
-      subtitle: Text(custom == null ? '$desc · 内置默认' : '$desc · 自定义：$fileName'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextButton(
-            onPressed: () => _pickCustomSound(name),
-            child: const Text('选择文件'),
-          ),
-          if (custom != null)
-            IconButton(
-              icon: const Icon(Icons.restore, size: 20),
-              tooltip: '恢复内置',
-              onPressed: () => _resetCustomSound(name),
+      leading: Icon(
+        Icons.wifi,
+        color: IosTheme.iosBlue,
+        size: 22,
+      ),
+      title: Text('当前: ${Provider.of<SettingsService>(context).serverUrl}'),
+      subtitle: _testResult != null
+          ? Text(
+              _testResult!,
+              style: TextStyle(
+                color: _testResult!.contains('✓')
+                    ? IosTheme.iosGreen
+                    : IosTheme.iosRed,
+              ),
+            )
+          : null,
+      trailing: _testing
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: IosTheme.iosBlue,
+              ),
+            )
+          : IosButton(
+              label: '测试',
+              filled: false,
+              onPressed: _testConnection,
             ),
+    );
+  }
+
+  Widget _switchTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      secondary: Icon(icon, color: iconColor, size: 22),
+      title: Text(title),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 13)),
+      value: value,
+      onChanged: onChanged,
+      activeColor: IosTheme.iosGreen,
+    );
+  }
+
+  Widget _themeSegmentTile(SettingsService s) {
+    return Padding(
+      padding: const EdgeInsets.all(IosTheme.spaceL),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('主题', style: TextStyle(fontSize: 16)),
+          const SizedBox(height: IosTheme.spaceM),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'system',
+                label: Text('跟随系统'),
+                icon: Icon(Icons.settings_suggest_outlined, size: 18),
+              ),
+              ButtonSegment(
+                value: 'light',
+                label: Text('浅色'),
+                icon: Icon(Icons.light_mode_outlined, size: 18),
+              ),
+              ButtonSegment(
+                value: 'dark',
+                label: Text('深色'),
+                icon: Icon(Icons.dark_mode_outlined, size: 18),
+              ),
+            ],
+            selected: {s.themeModeKey},
+            onSelectionChanged: (v) => s.setThemeMode(v.first),
+          ),
         ],
       ),
     );
   }
 
-  Widget _sectionTitle(String text) {    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  Widget _updateVersionTile(SettingsService s) {
+    return FutureBuilder<String>(
+      future: UpdateService.currentVersion(),
+      builder: (context, snap) => ListTile(
+        leading: Icon(
+          Icons.info_outline,
+          color: IosTheme.iosGray,
+          size: 22,
+        ),
+        title: const Text('当前版本'),
+        subtitle: Text(snap.data ?? '…', style: const TextStyle(fontSize: 13)),
+        trailing: IosButton(
+          label: '检查更新',
+          filled: false,
+          onPressed: () => UpdateFlow.checkAndPrompt(
+            context,
+            s.servers.map((e) => e.host).followedBy([s.serverHost]),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -380,7 +321,8 @@ class _ForegroundServiceTile extends StatefulWidget {
   const _ForegroundServiceTile();
 
   @override
-  State<_ForegroundServiceTile> createState() => _ForegroundServiceTileState();
+  State<_ForegroundServiceTile> createState() =>
+      _ForegroundServiceTileState();
 }
 
 class _ForegroundServiceTileState extends State<_ForegroundServiceTile> {
@@ -410,11 +352,17 @@ class _ForegroundServiceTileState extends State<_ForegroundServiceTile> {
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
+      secondary: Icon(
+        Icons.shield_outlined,
+        color: IosTheme.iosGreen,
+        size: 22,
+      ),
       title: const Text('前台保活服务'),
-      subtitle: const Text('通知栏常驻，防止系统杀掉应用'),
-      secondary: const Icon(Icons.shield_outlined),
+      subtitle: const Text('通知栏常驻，防止系统杀掉应用',
+          style: TextStyle(fontSize: 13)),
       value: _running,
       onChanged: _toggle,
+      activeColor: IosTheme.iosGreen,
     );
   }
 }
@@ -431,7 +379,6 @@ class _DshTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) {
-    // 心跳：更新通知时间，证明存活
     FlutterForegroundTask.updateService(
       notificationText: '与 PC 端保持连接',
     );

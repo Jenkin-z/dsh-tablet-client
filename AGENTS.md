@@ -1,117 +1,102 @@
-# AGENTS.md — DSH Tablet Client 代码规范
+# AGENTS.md — DSH Tablet Client
 
-## 项目概览
+Flutter 原生 Android 应用，将旧 Android 平板变为 DSH 监控台。直连 DSH HTTP API + WebSocket mux。
 
-Flutter 原生 Android 应用，将旧 Android 平板变为 DeepSeek Harness (DSH) 的监控台。
-直连 DSH HTTP API + WebSocket mux，零插件依赖。
+## 构建
 
-## 文件与结构规范
+```bash
+# 开发环境需要 Flutter SDK（本机路径）
+$env:PATH = "D:\software\flutter_windows_3.44.8\bin;$env:PATH"
 
-### 单文件上限
+# 分析
+flutter analyze
 
-| 类型 | 上限 | 超限处理 |
-|------|------|----------|
-| Screen 文件 | **400 行** | 拆分：业务逻辑 → service/controller，子组件 → widgets/ |
-| Widget 文件 | **200 行** | 拆分子组件到独立文件 |
-| Service 文件 | **250 行** | 按职责拆分（如 API 封装 vs 业务逻辑） |
-| 通用/工具 | **100 行** | 保持精简，复杂度高时拆模块 |
+# 构建 Release APK
+flutter build apk --release
+# 输出：build/app/outputs/flutter-apk/app-release.apk
 
-### 单类/单方法上限
+# 本地 HTTP 分发（Python）
+cd build/app/outputs/flutter-apk
+python -m http.server 8099 --bind 0.0.0.0
+# 平板访问 http://<PC-IP>:8099/app-release.apk
 
-| 类型 | 上限 | 超限处理 |
-|------|------|----------|
-| State 类方法数 | **15 个** | 提取到独立 controller 或 mixin |
-| 单个方法行数 | **60 行** | 提取子方法或子组件 |
-| build 方法 | **80 行** | 提取子组件 `_buildXxx()` 放 widgets/ |
-| 回调注册块 | **30 行** | 提取为独立方法或用 Map 批量注册 |
+# 更新检查机制
+# 8099 同目录下需要 version.json：
+# { "versionCode": 29, "versionName": "1.5.2", "size": 52500000, "changelog": "..." }
+# App 启动时 GET http://<host>:8099/version.json，remoteCode > localCode 则提示更新
+```
 
-### 文件组织
+## 文件结构
 
 ```
 lib/
-├── main.dart              # 入口 + 路由（≤150 行）
-├── models/                # 数据模型（纯 Dart 类，无 UI 依赖）
-├── screens/               # 页面级组件（每个文件一个 StatefulWidget/StatelessWidget）
-├── services/              # 业务逻辑 + API 封装（无 Flutter UI 依赖）
-├── utils/                 # 纯函数工具（格式化、算法等）
-└── widgets/               # 可复用 UI 组件（每个文件一个组件）
+├── main.dart              # 入口 + 主题 + Provider
+├── models/                # 数据模型（纯 Dart，无 UI）
+├── screens/               # 页面（一个文件一个 StatefulWidget）
+├── services/              # 业务逻辑 + API（不 import package:flutter）
+├── theme/                 # ios_theme.dart 设计系统
+├── utils/                 # 纯函数工具
+└── widgets/               # 可复用组件（一个文件一个组件）
 ```
 
-- **一个文件一个公开类**（私有辅助类可在同一文件，但不超过 3 个）
-- 文件名使用 `snake_case`，与类名对应
-- `screens/` 只放页面，动画/卡片等子组件放 `widgets/`
+## 代码规范
 
-## 代码风格
+### 行数限制
 
-### 基础
-
-- 遵循 `dart format` 默认规则
-- 使用 `flutter analyze` 零警告
-- 字符串使用单引号 `'`
-- 末尾逗号保留（利于格式化）
+| 类型 | 上限 | 超限处理 |
+|------|------|----------|
+| Screen 文件 | 400 行 | 拆到 service/controller + widgets/ |
+| Widget 文件 | 200 行 | 拆子组件 |
+| Service 文件 | 250 行 | 按职责拆分 |
+| 单个方法 | 60 行 | 提取子方法 |
+| build 方法 | 80 行 | 提取 `_buildXxx()` |
 
 ### 命名
 
 | 类型 | 规则 | 示例 |
 |------|------|------|
-| 类 | UpperCamelCase | `ChatScreen`, `DshApi` |
-| 私有类/方法 | `_` 前缀 + lowerCamelCase | `_ChatScreenState`, `_onDelta` |
-| 变量/参数 | lowerCamelCase | `sessionId`, `isStreaming` |
-| 常量 | lowerCamelCase（非 SCREAMING） | `const _ungroupedKey = '_ungrouped'` |
-| 文件 | snake_case | `chat_screen.dart`, `session_format.dart` |
+| 类 | UpperCamelCase | `ChatScreen` |
+| 私有 | `_` 前缀 | `_onDelta` |
+| 变量 | lowerCamelCase | `sessionId` |
+| 常量 | lowerCamelCase | `const _key = 'x'` |
+| 文件 | snake_case | `chat_screen.dart` |
 
-### Widget 构建
+### Widget
 
-- `build()` 方法内不写业务逻辑，只做布局编排
-- 子组件提取到 `widgets/` 或作为 `_buildXxx()` 私有方法
-- 动画控制器在 `initState` 创建，`dispose` 销毁
-- `Consumer` / `Provider.of` 最小化作用域，避免整树重建
+- `build()` 只做布局，不写业务逻辑
+- 子组件提取到 `widgets/` 或 `_buildXxx()`
+- 动画控制器 `initState` 创建，`dispose` 销毁
+- `Consumer` / `Provider.of` 最小化作用域
 
 ### 服务层
 
-- Service 类无 Flutter UI 依赖（不 import `package:flutter`）
-- API 封装只做 HTTP/RPC，不做 UI 状态管理
-- 状态管理通过 `ChangeNotifier` + `Provider` 传递
-- 异步操作必须处理 `mounted` 检查（避免 setState on unmounted）
+- Service 不 import `package:flutter`
+- API 封装只做 HTTP/RPC
+- 状态通过 `ChangeNotifier` + `Provider`
+- 异步操作检查 `mounted`
 
 ### 错误处理
 
-- 所有网络请求必须 try-catch
-- catch 后记录日志或用户提示，不吞异常
-- 后台操作（轮询、mux）失败不崩溃，静默重试
+- 网络请求必须 try-catch
+- 后台操作（轮询、mux）失败静默重试
 
 ## 提交规范
 
 ```
-<type>(<scope>): <description>
+<type>(<scope>): <中文描述，≤50字>
 
 type: feat | fix | refactor | docs | chore | perf | style
-scope: chat | console | settings | service | widget | build
-description: 简明中文，≤50 字
+scope: chat | console | settings | service | widget | build | theme
 ```
 
-示例：
-- `feat(console): 控制台 tab + 会话监控轮询`
-- `fix(chat): 修复审批卡 PC 端确认后平板不消失`
-- `refactor(chat): 提取会话抽屉为独立组件`
-- `perf(chat): 流式增量 120ms 合并防卡顿`
+## 设计系统
 
-## 质量门禁
+主题定义在 `lib/theme/ios_theme.dart`，低饱和度极简风格：
 
-每次变更前必须通过：
+- 主色：`#7C6FE0`（柔和紫蓝）
+- 成功：`#6BBF8A` / 错误：`#E87070` / 警告：`#E8A95B`
+- 背景：`#F7F8FA` / 卡片：`#FFFFFF`
+- 圆角：卡片 14px / 按钮 10px / 输入 10px
+- 阴影：3% 透明度，极淡
 
-```bash
-flutter analyze          # 零警告
-flutter build apk --release  # 构建成功
-```
-
-## 当前技术债务（v1.2.3）
-
-| 文件 | 状态 |
-|------|------|
-| `chat_screen.dart` | 已抽出会话抽屉 / 输入栏 / 工具条；业务回调仍偏多 |
-| `console_screen.dart` | 已抽出卡片与动画 |
-| `mux_stream.dart` | 解析已抽出 `mux_history.dart` |
-| `settings_screen.dart` | 仍超 400 行，下次拆区块 |
-
-已修：任务中断后「正在调用工具」卡住（`tool/result`、本地取消、session.list running 跃迁三路清条）。
+UI 组件：`IosCard`、`IosButton`、`IosSwitch`、`IosBadge`、`IosGroupedList`、`IosSectionHeader`

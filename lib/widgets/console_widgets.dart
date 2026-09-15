@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import '../theme/ios_theme.dart';
 import 'console_animations.dart';
 
 export 'console_animations.dart';
 
-/// 列表分节标题（带计数与可选强调徽标）
+/// 列表分节标题（带计数与可选强调徽标）—— iOS 风格
 class ConsoleSectionHeader extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -25,39 +26,56 @@ class ConsoleSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 0, 4),
+      padding: const EdgeInsets.fromLTRB(
+        IosTheme.spaceXXS,
+        IosTheme.spaceS,
+        0,
+        IosTheme.spaceXS,
+      ),
       child: Row(
         children: [
           Icon(icon, size: 18, color: iconColor),
-          const SizedBox(width: 6),
+          const SizedBox(width: IosTheme.spaceS),
           Text(
             title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: IosTheme.spaceS),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
+            duration: IosTheme.durationFast,
             child: Container(
               key: ValueKey(count),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                horizontal: IosTheme.spaceS,
+                vertical: IosTheme.spaceXXS,
+              ),
               decoration: BoxDecoration(
                 color: badge
-                    ? Colors.orange
-                    : Theme.of(context).colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(10),
+                    ? IosTheme.iosOrange
+                    : Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF2C2C2E)
+                        : const Color(0xFFF2F2F7),
+                borderRadius: BorderRadius.circular(IosTheme.radiusXS),
               ),
               child: Text(
                 '$count',
                 style: TextStyle(
                   fontSize: 12,
-                  color: badge ? Colors.white : null,
-                  fontWeight: badge ? FontWeight.bold : null,
+                  color: badge
+                      ? Colors.white
+                      : Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white70
+                          : Colors.black54,
+                  fontWeight: badge ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
             ),
           ),
           if (badge) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: IosTheme.spaceS),
             const ConsoleBreathBadge(),
           ],
           const Spacer(),
@@ -68,6 +86,7 @@ class ConsoleSectionHeader extends StatelessWidget {
   }
 }
 
+/// 静默文本行 —— iOS 风格
 class ConsoleQuietLine extends StatelessWidget {
   final String text;
   const ConsoleQuietLine({super.key, required this.text});
@@ -75,13 +94,14 @@ class ConsoleQuietLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: IosTheme.spaceXXS),
       child: Text(
         text,
-        style: Theme.of(context)
-            .textTheme
-            .bodySmall
-            ?.copyWith(fontStyle: FontStyle.italic),
+        style: TextStyle(
+          fontSize: 13,
+          fontStyle: FontStyle.italic,
+          color: IosTheme.iosGray,
+        ),
       ),
     );
   }

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
+import '../theme/ios_theme.dart';
 import '../utils/session_format.dart';
+import 'session_tile.dart';
 
-String _dirLabel(String cwd) {
-  final parts = cwd.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
-  return parts.isEmpty ? cwd : parts.last;
-}
-
-/// 对话页左侧会话抽屉：按 cwd 目录分组，可折叠/展开。
+/// 对话页左侧会话抽屉 —— iOS 风格
+///
+/// 按 cwd 目录分组，可折叠/展开。
 /// 默认全部收起；当前会话所在目录自动展开；展开后最多显示 5 条。
 class SessionDrawer extends StatefulWidget {
   final List<Map<String, dynamic>> sessions;
@@ -41,48 +40,118 @@ class _SessionDrawerState extends State<SessionDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Drawer(
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // 标题栏
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              padding: const EdgeInsets.fromLTRB(
+                IosTheme.spaceXL,
+                IosTheme.spaceL,
+                IosTheme.spaceL,
+                IosTheme.spaceS,
+              ),
               child: Row(
                 children: [
                   const Expanded(
                     child: Text(
                       '会话',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
                   if (widget.loading)
                     const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: IosTheme.iosBlue,
+                      ),
                     )
                   else
                     IconButton(
-                      icon: const Icon(Icons.refresh, size: 20),
+                      icon: const Icon(
+                        Icons.refresh,
+                        size: 22,
+                        color: IosTheme.iosBlue,
+                      ),
                       tooltip: '刷新',
                       onPressed: widget.onRefresh,
                     ),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('新建会话'),
-              onTap: widget.onCreateUngrouped,
+            // 新建会话按钮
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: IosTheme.spaceL,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: IosTheme.iosBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(IosTheme.radiusS),
+                ),
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.add_circle_outline,
+                    color: IosTheme.iosBlue,
+                    size: 22,
+                  ),
+                  title: const Text(
+                    '新建会话',
+                    style: TextStyle(
+                      color: IosTheme.iosBlue,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  onTap: widget.onCreateUngrouped,
+                ),
+              ),
             ),
-            const Divider(height: 1),
+            const SizedBox(height: IosTheme.spaceM),
+            // 分隔线
+            Container(
+              height: 0.5,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            // 会话列表
             Expanded(
               child: widget.sessions.isEmpty
-                  ? const Center(child: Text('暂无会话'))
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 48,
+                            color: IosTheme.iosGray3,
+                          ),
+                          const SizedBox(height: IosTheme.spaceM),
+                          Text(
+                            '暂无会话',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: IosTheme.iosGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
                   : Consumer<SettingsService>(
                       builder: (context, settings, _) => ListView(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: IosTheme.spaceS,
+                        ),
                         children: _buildGroups(settings),
                       ),
                     ),
@@ -115,7 +184,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
         ..sort((a, b) => activityOf(b).compareTo(activityOf(a)));
       final expanded = settings.expandedWs.contains(cwd) ||
           (settings.expandedWs.isEmpty && cwd == (currentCwd ?? ''));
-      widgets.add(_GroupHeader(
+      widgets.add(SessionGroupHeader(
         cwd: cwd,
         isExpanded: expanded,
         onCreate: cwd.isEmpty ? null : () => widget.onCreateInWorkspace(cwd),
@@ -126,7 +195,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
         final visibleCount =
             showAll ? items.length : (items.length > 5 ? 5 : items.length);
         for (var i = 0; i < visibleCount; i++) {
-          widgets.add(_SessionTile(
+          widgets.add(SessionListTile(
             session: items[i],
             serverId: widget.serverId,
             activeId: widget.activeId,
@@ -135,8 +204,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
           ));
         }
         if (items.length > 5) {
-          widgets.add(_MoreTile(
-            cwd: cwd,
+          widgets.add(SessionMoreTile(
             showAll: showAll,
             total: items.length,
             indented: cwd.isNotEmpty,
@@ -149,7 +217,15 @@ class _SessionDrawerState extends State<SessionDrawer> {
           ));
         }
       }
-      widgets.add(const Divider(height: 1));
+      widgets.add(
+        Container(
+          height: 0.5,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          margin: const EdgeInsets.only(left: IosTheme.spaceL),
+        ),
+      );
     }
     if (widgets.isNotEmpty) widgets.removeLast();
     return widgets;
@@ -168,154 +244,4 @@ class _SessionDrawerState extends State<SessionDrawer> {
   int _latestOf(List<Map<String, dynamic>> items) => items.isEmpty
       ? 0
       : items.map(activityOf).reduce((a, b) => a > b ? a : b);
-}
-
-class _GroupHeader extends StatelessWidget {
-  final String cwd;
-  final bool isExpanded;
-  final VoidCallback? onCreate;
-  final VoidCallback onToggle;
-
-  const _GroupHeader({
-    required this.cwd,
-    required this.isExpanded,
-    required this.onCreate,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      leading: Icon(
-        cwd.isEmpty ? Icons.inbox_outlined : Icons.folder_outlined,
-        size: 20,
-      ),
-      title: Text(
-        cwd.isEmpty ? '未分组' : _dirLabel(cwd),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-      subtitle: cwd.isEmpty ? null : Text(cwd, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (onCreate != null)
-            IconButton(
-              icon: const Icon(Icons.add, size: 18),
-              tooltip: '在此目录新建会话',
-              onPressed: onCreate,
-            ),
-          Icon(
-            isExpanded ? Icons.expand_less : Icons.expand_more,
-            size: 20,
-          ),
-        ],
-      ),
-      onTap: onToggle,
-    );
-  }
-}
-
-class _MoreTile extends StatelessWidget {
-  final String cwd;
-  final bool showAll;
-  final int total;
-  final bool indented;
-  final VoidCallback onToggleShowAll;
-
-  const _MoreTile({
-    required this.cwd,
-    required this.showAll,
-    required this.total,
-    required this.indented,
-    required this.onToggleShowAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.only(
-        left: indented ? 32 : 16,
-        right: 16,
-      ),
-      title: Text(
-        showAll ? '收起' : '显示全部 $total 条',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      trailing: Icon(
-        showAll ? Icons.expand_less : Icons.expand_more,
-        size: 18,
-      ),
-      onTap: onToggleShowAll,
-    );
-  }
-}
-
-class _SessionTile extends StatelessWidget {
-  final Map<String, dynamic> session;
-  final String serverId;
-  final String? activeId;
-  final bool indented;
-  final void Function(String sessionId) onSelect;
-
-  const _SessionTile({
-    required this.session,
-    required this.serverId,
-    required this.activeId,
-    required this.indented,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final id = session['sessionId'] as String? ?? '';
-    final selected = id == activeId;
-    final running = session['running'] == true;
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.only(
-        left: indented ? 32 : 16,
-        right: 16,
-      ),
-      selected: selected,
-      selectedTileColor: Theme.of(context)
-          .colorScheme
-          .primaryContainer
-          .withValues(alpha: 0.4),
-      leading: Icon(
-        running
-            ? Icons.sync
-            : (session['blank'] == true
-                ? Icons.chat_bubble_outline
-                : Icons.chat_bubble),
-        size: 20,
-      ),
-      title: Text(
-        sessionTitleOf(session),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        timeAgoOf(session['updatedAt'] as int?),
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      trailing: Consumer<SettingsService>(
-        builder: (_, settings, __) => settings.unviewedIds
-                .contains(settings.seenKey(serverId, id))
-            ? Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Colors.orange,
-                  shape: BoxShape.circle,
-                ),
-              )
-            : const SizedBox.shrink(),
-      ),
-      onTap: () => onSelect(id),
-    );
-  }
 }

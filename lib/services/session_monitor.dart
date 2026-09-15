@@ -1,4 +1,6 @@
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../models/dsh_server.dart';
+import '../utils/constants.dart';
 import 'dsh_api.dart';
 import 'dsh_auth.dart';
 import 'settings_service.dart';
@@ -9,9 +11,8 @@ class SessionMonitor {
   final SettingsService settings;
   DshServer server;
 
-  SessionMonitor({required this.settings, required this.server});
-
-  static const pollInterval = Duration(seconds: 8);
+  SessionMonitor({required this.settings, required this.server})
+      : _api = DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
 
   List<Map<String, dynamic>> sessions = [];
   List<Map<String, dynamic>> workspaces = [];
@@ -22,7 +23,7 @@ class SessionMonitor {
   DateTime? lastRefresh;
   final Map<String, bool> _prevRunning = {};
 
-  DshApi get _api => DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
+  final DshApi _api;
 
   String _key(String sessionId) => settings.seenKey(server.id, sessionId);
 
@@ -41,6 +42,12 @@ class SessionMonitor {
         if (was == true && !running && id != current) {
           s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
           await settings.addUnviewed(key);
+          // 系统通知：会话完成
+          try {
+            FlutterForegroundTask.updateService(
+              notificationText: '会话已完成',
+            );
+          } catch (_) {}
           if (settings.soundEnabled && settings.completionSound) {
             SoundService.done(customPath: settings.customSoundPath('done'));
           }
@@ -76,6 +83,19 @@ class SessionMonitor {
       error = '$e';
     } finally {
       loading = false;
+    }
+  }
+
+  /// 当 server 信息变更时，刷新内部 DshApi
+  void updateServer(DshServer newServer) {
+    if (newServer.host != server.host ||
+        newServer.port != server.port ||
+        newServer.cookie != server.cookie) {
+      server = newServer;
+      // DshApi 是 final 的，需要重建整个 Monitor；
+      // 由 ServerManager._syncMonitors 负责替换
+    } else {
+      server = newServer;
     }
   }
 

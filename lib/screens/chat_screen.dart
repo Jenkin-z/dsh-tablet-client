@@ -1,17 +1,11 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
-import '../models/message.dart';
-import '../services/changes_tracker.dart';
-import '../services/dsh_api.dart';
-import '../services/dsh_auth.dart';
-import '../services/mux_stream.dart';
+import '../services/chat_controller.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
-import '../services/sound_service.dart';
-import '../utils/session_format.dart';
+import '../theme/ios_theme.dart';
+import '../utils/constants.dart';
 import '../widgets/approval_card.dart';
 import '../widgets/changes_drawer.dart';
 import '../widgets/chat_input_bar.dart';
@@ -21,6 +15,8 @@ import '../widgets/session_drawer.dart';
 import '../widgets/tool_status_bar.dart';
 
 /// 聊天主界面：会话侧栏 + Markdown 对话 + 流式展示
+///
+/// 业务逻辑委托给 ChatController，本类仅负责 UI 编排。
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -31,43 +27,32 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-  final _uuid = const Uuid();
-
-  DshApi? _api;
-  MuxStream? _mux;
-
-  final List<DshMessage> _messages = [];
-  List<Map<String, dynamic>> _sessions = [];
-  String _currentTitle = 'DSH Agent';
-  bool _connecting = true;
-  bool _connected = false;
-  bool _sending = false;
-  bool _agentRunning = false;
-  bool _loadingSessions = false;
-  String? _error;
-  String? _activeTool;
-  Timer? _reconnectTimer;
-  int _reconnectAttempts = 0;
-  final Set<String> _pendingEchoRpc = {};
-  final Set<String> _seenUserSeq = {};
-  String? _lastSentText;
-  DateTime? _lastSentAt;
-  final ChangesTracker _changes = ChangesTracker();
-  final List<PendingApproval> _approvals = [];
-  final Set<String> _queuedTexts = {};  // 当前 session/queue 快照中的消息文本
-  PendingQuestion? _question;
-  bool _questionDialogOpen = false;
+  late final ChatController _ctrl;
   SessionRouter? _router;
   ServerManager? _manager;
-  bool _wasCurrentRunning = false;
-  Timer? _approvalPollTimer;
-  String _deltaBuffer = '';
-  Timer? _deltaFlushTimer;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+    _ctrl = ChatController(
+      settings: context.read<SettingsService>(),
+      manager: context.read<ServerManager>(),
+    );
+    _ctrl
+      ..onScrollToBottom = _scrollToBottom
+      ..onJumpToLatest = _jumpToLatest
+      ..onShowQuestionDialog = _maybeShowQuestionDialog
+      ..onPopQuestionDialog = () {
+        if (mounted) Navigator.of(context).maybePop();
+      }
+      ..onShowSnackBar = (msg) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(msg)));
+        }
+      };
+    _ctrl.addListener(_onControllerUpdate);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ctrl.boot());
   }
 
   @override
@@ -83,41 +68,14 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  /// PC 端中断/取消时 mux 可能丢 turn/end；用 session.list 的 running 跃迁清工具条
-  void _onMonitorTick() {
-    if (!mounted) return;
-    final srv = _settings.active;
-    final id = _settings.sessionId;
-    if (srv == null || id == null) return;
-    Map<String, dynamic>? current;
-    for (final s in _manager?.monitorOf(srv.id)?.sessions ?? const []) {
-      if (s['sessionId'] == id) {
-        current = s;
-        break;
-      }
-    }
-    final running = current?['running'] == true;
-    if (_wasCurrentRunning && !running) {
-      setState(() {
-        _agentRunning = false;
-        _activeTool = null;
-        final idx = _messages.indexWhere((m) => m.isStreaming);
-        if (idx >= 0) {
-          _messages[idx] = _messages[idx].copyWith(isStreaming: false);
-        }
-      });
-    }
-    _wasCurrentRunning = running;
-  }
-
   void _onRouteRequest() {
     final router = _router;
     if (router == null || !mounted) return;
     final target = router.sessionId;
     final serverId = router.serverId;
     if (target == null || serverId == null) return;
-    if (serverId != _settings.activeServerId) return;
-    if (target == _settings.sessionId && _connected) {
+    if (serverId != _ctrl.settings.activeServerId) return;
+    if (target == _ctrl.muxSessionId && _ctrl.connected) {
       router.consume(router.token);
       return;
     }
@@ -125,619 +83,28 @@ class _ChatScreenState extends State<ChatScreen> {
     _switchSession(target);
   }
 
+  void _onControllerUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  void _onMonitorTick() => _ctrl.onMonitorTick();
+
   @override
   void dispose() {
     _router?.removeListener(_onRouteRequest);
     _manager?.removeListener(_onMonitorTick);
-    _reconnectTimer?.cancel();
-    _deltaFlushTimer?.cancel();
-    _approvalPollTimer?.cancel();
-    _mux?.dispose();
+    _ctrl.removeListener(_onControllerUpdate);
+    _ctrl.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  SettingsService get _settings =>
-      Provider.of<SettingsService>(context, listen: false);
-
-  Future<void> _boot() async {
-    setState(() {
-      _connecting = true;
-      _error = null;
-    });
-    final srv = _settings.active;
-    if (srv == null) {
-      setState(() {
-        _connecting = false;
-        _connected = false;
-        _error = '还没有 PC，去设置里添加。';
-      });
-      return;
-    }
-    if (srv.unpaired) {
-      setState(() {
-        _connecting = false;
-        _connected = false;
-        _error = '「${srv.name}」授权已过期，去设置里重新授权。';
-      });
-      return;
-    }
-    _api = DshApi(baseUrl: srv.httpUrl, cookie: srv.cookie);
-
-    try {
-      final ok = await _api!.testConnection();
-      if (!mounted) return;
-      if (!ok) {
-        setState(() {
-          _connecting = false;
-          _connected = false;
-          _error = '连接失败: ${srv.httpUrl}\n请检查 PC 端 DSH 是否启动、同一局域网。';
-        });
-        _scheduleReconnect();
-        return;
-      }
-    } on DshAuthException catch (e) {
-      if (!mounted) return;
-      if (e.unpaired) {
-        await _settings.patchServer(
-          srv.id,
-          (s) => s.copyWith(unpaired: true, lastError: e.message),
-        );
-      }
-      setState(() {
-        _connecting = false;
-        _connected = false;
-        _error = e.message;
-      });
-      return;
-    }
-
-    try {
-      String? sessionId = _settings.sessionId;
-      if (sessionId != null) {
-        final valid = await _validateSession(sessionId);
-        if (!valid) sessionId = null;
-      }
-      sessionId ??= await _api!.createSession();
-      await _settings.setSessionId(sessionId);
-      await _settings.markSeen(_settings.seenKey(srv.id, sessionId));
-      await _refreshSessions();
-      _connectMux(sessionId);
-      setState(() {
-        _connecting = false;
-        _connected = true;
-        _error = null;
-      });
-      _reconnectAttempts = 0;
-      _jumpToLatest();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _connecting = false;
-        _connected = false;
-        _error = '初始化失败: $e';
-      });
-      _scheduleReconnect();
-    }
-  }
-
-  Future<bool> _validateSession(String sessionId) async {
-    try {
-      await _api!.getHistory(sessionId, maxMessages: 1);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _refreshSessions() async {
-    if (_api == null) return;
-    setState(() => _loadingSessions = true);
-    try {
-      final items = await _api!.listSessions();
-      if (!mounted) return;
-      setState(() {
-        _sessions = items;
-        _currentTitle = _titleFor(_settings.sessionId);
-      });
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loadingSessions = false);
-    }
-  }
-
-  String _titleFor(String? sessionId) {
-    if (sessionId == null) return 'DSH Agent';
-    for (final s in _sessions) {
-      if (s['sessionId'] == sessionId) return sessionTitleOf(s);
-    }
-    return 'DSH Agent';
-  }
-
-
-  /// mux follow 开窗快照 → 重建消息列表（历史）
-  void _onMuxSnapshot(List<Map<String, dynamic>> records) {
-    if (!mounted) return;
-    final parsed = parseHistory(records);
-    // snapshot 会清空 _seenUserSeq，重建时把 user 消息的 seq 加回，防止后续 event 重复插入
-    for (final m in parsed) {
-      if (m.role == 'user' && m.id.startsWith('u')) {
-        _seenUserSeq.add(m.id);
-      }
-    }
-    setState(() {
-      _messages.clear();
-      _seenUserSeq.clear();
-      for (final p in parsed) {
-        _messages.add(DshMessage(id: p.id, role: p.role, content: p.text));
-        _seenUserSeq.add(p.id);
-      }
-      _changes.clear();
-      for (final v in parseHistoryViews(records)) {
-        _changes.applyView(
-            diffs: v.diffs, title: v.title, done: v.done, turn: v.turn);
-      }
-    });
-    _jumpToLatest();
-  }
-
-  Future<void> _switchSession(String sessionId) async {
-    if (sessionId == _settings.sessionId && _connected) {
-      Navigator.of(context).maybePop();
-      return;
-    }
-    Navigator.of(context).maybePop();
-    await _settings.setSessionId(sessionId);
-    try {
-      final session = _sessions.firstWhere((s) => s['sessionId'] == sessionId);
-      final cwd = session['cwd'] as String? ?? '';
-      if (cwd.isNotEmpty) {
-        await _settings.setWsExpanded(cwd, true);
-      }
-    } on StateError {
-      // session not in local list yet; cwd auto-expand will happen on next refresh
-    }
-    final srv = _settings.active;
-    if (srv != null) {
-      await _settings.markSeen(_settings.seenKey(srv.id, sessionId));
-    }
-    setState(() {
-      _messages.clear();
-      _activeTool = null;
-      _agentRunning = false;
-      _currentTitle = _titleFor(sessionId);
-      _pendingEchoRpc.clear();
-      _queuedTexts.clear();
-      _lastSentText = null;
-      _lastSentAt = null;
-      _changes.clear();
-    });
-    _connectMux(sessionId);
-    _maybeShowQuestionDialog();
-  }
-
-  Future<void> _createNewSession({String? cwd}) async {
-    Navigator.of(context).maybePop();
-    if (_api == null || !_connected) return;
-    try {
-      final id = await _api!.createSession(cwd: cwd);
-      await _refreshSessions();
-      await _switchSession(id);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('新建会话失败: $e')),
-      );
-    }
-  }
-
-  void _connectMux(String sessionId) {
-    _mux?.dispose();
-    final mux = MuxStream(
-      wsBaseUrl: _settings.wsUrl,
-      cookie: _settings.active?.cookie,
-    );
-    mux.sessionId = sessionId;
-    mux.onTextDelta = _onDelta;
-    mux.onAssistantMessage = _onAssistantFinal;
-    mux.onUserMessage = _onUserMessage;
-    mux.onToolView = _onToolView;
-    mux.onSnapshot = _onMuxSnapshot;
-    mux.onApproval = _onApproval;
-    mux.onApprovalResolved = _onApprovalResolved;
-    mux.onQuestion = _onQuestion;
-    mux.onQuestionResolved = _onQuestionResolved;
-    mux.onToolCall = (name) {
-      if (mounted) setState(() => _activeTool = name);
-    };
-    mux.onToolResult = _clearToolStatus;
-    mux.onTurnEnd = _onTurnEnd;
-    mux.onQueueUpdate = _onQueueUpdate;
-    mux.onDisconnected = () {
-      if (!mounted) return;
-      setState(() => _connected = false);
-      _scheduleReconnect();
-    };
-    mux.connect();
-    setState(() => _connected = true);
-    _mux = mux;
-    _approvalPollTimer?.cancel();
-    _approvalPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _checkApprovalsStale();
-    });
-  }
-
-  void _clearToolStatus() {
-    if (!mounted) return;
-    if (_activeTool == null) return;
-    setState(() => _activeTool = null);
-  }
-
-  void _onTurnEnd() {
-    if (!mounted) return;
-    setState(() {
-      _agentRunning = false;
-      _activeTool = null;
-      _approvals.clear();
-      _question = null;
-      if (_questionDialogOpen) {
-        _questionDialogOpen = false;
-        Navigator.of(context).maybePop();
-      }
-    });
-    final idx = _messages.indexWhere((m) => m.isStreaming);
-    if (idx >= 0) {
-      setState(
-          () => _messages[idx] = _messages[idx].copyWith(isStreaming: false));
-    }
-    if (_settings.soundEnabled && _settings.completionSound) {
-      SoundService.done(customPath: _settings.customSoundPath('done'));
-    }
-    _refreshSessions();
-  }
-
-  /// session/queue 快照：对比队列和已显示的气泡，移除被 PC 端删掉的消息
-  void _onQueueUpdate(List<Map<String, dynamic>> items) {
-    if (!mounted) return;
-    // 提取队列中每条消息的文本
-    final currentQueued = <String>{};
-    for (final item in items) {
-      final msg = item['message'] as Map<String, dynamic>?;
-      if (msg == null) continue;
-      final content = msg['content'] as List<dynamic>? ?? [];
-      final buf = StringBuffer();
-      for (final part in content) {
-        if (part is Map<String, dynamic> && part['type'] == 'text') {
-          buf.write(part['text'] as String? ?? '');
-        }
-      }
-      if (buf.isNotEmpty) currentQueued.add(buf.toString());
-    }
-    // 被删掉的：之前在队列里，现在不在了
-    final removed = _queuedTexts.difference(currentQueued);
-    _queuedTexts
-      ..clear()
-      ..addAll(currentQueued);
-    if (removed.isEmpty) return;
-    setState(() {
-      _messages.removeWhere(
-          (m) => m.role == 'user' && removed.contains(m.content));
-    });
-  }
-
-  void _checkApprovalsStale() {
-    if (!mounted || !_connected || _api == null) return;
-    final sid = _settings.sessionId;
-    if (sid == null) return;
-    if (_approvals.isEmpty && _question == null) return;
-    final cursor = _mux?.lastCursor;
-    if (cursor == null) return;
-    _api!.getHistory(sid, throughSeq: cursor, maxMessages: 10).then((result) {
-      if (!mounted) return;
-      final events = result['events'] as List<dynamic>? ?? [];
-      for (final e in events) {
-        final ev = e as Map<String, dynamic>? ?? {};
-        final event = ev['event'] as Map<String, dynamic>?;
-        final type = event?['type'] as String? ?? '';
-        if (type == 'turn/start' || type == 'assistant/message') {
-          if (_approvals.isNotEmpty || _question != null) {
-            setState(() {
-              _approvals.clear();
-              _question = null;
-            });
-          }
-          return;
-        }
-      }
-    }).catchError((_) {});
-  }
-
-  void _scheduleReconnect() {
-    if (!_settings.autoReconnect || !mounted) return;
-    _reconnectTimer?.cancel();
-    _reconnectAttempts++;
-    final delay =
-        Duration(seconds: _reconnectAttempts > 5 ? 30 : _reconnectAttempts * 3);
-    _reconnectTimer = Timer(delay, () {
-      if (mounted) _boot();
-    });
-  }
-
-  void _onDelta(String delta) {
-    if (!mounted) return;
-    _touchActivity();
-    _deltaBuffer += delta;
-    _deltaFlushTimer ??= Timer(const Duration(milliseconds: 120), _flushDelta);
-  }
-
-  void _flushDelta() {
-    _deltaFlushTimer = null;
-    if (!mounted) return;
-    final text = _deltaBuffer;
-    _deltaBuffer = '';
-    if (text.isEmpty) return;
-    final idx = _messages.indexWhere((m) => m.isStreaming);
-    if (idx < 0 && !_agentRunning) return;
-    setState(() {
-      _agentRunning = true;
-      if (idx >= 0) {
-        _messages[idx] = _messages[idx].copyWith(
-          content: _messages[idx].content + text,
-        );
-      } else {
-        _activeTool = null;
-        _messages.add(DshMessage(
-          id: 'stream-${_uuid.v4()}',
-          role: 'assistant',
-          content: text,
-          isStreaming: true,
-        ));
-      }
-    });
-    _scrollToBottom();
-  }
-
-  void _onAssistantFinal(String text) {
-    if (!mounted) return;
-    _touchActivity();
-    _deltaFlushTimer?.cancel();
-    _deltaFlushTimer = null;
-    _deltaBuffer = '';
-    setState(() {
-      _activeTool = null;
-      final idx = _messages.indexWhere((m) => m.isStreaming);
-      if (idx >= 0) {
-        _messages[idx] = _messages[idx].copyWith(content: text);
-      } else {
-        _messages.add(DshMessage(
-          id: 'a-${_uuid.v4()}',
-          role: 'assistant',
-          content: text,
-        ));
-      }
-    });
-    _scrollToBottom();
-  }
-
-  void _onUserMessage(String text, String? rpcId, String seq) {
-    if (!mounted) return;
-    final key = 'u$seq';
-    if (seq.isNotEmpty && !_seenUserSeq.add(key)) return;
-    if (rpcId != null && _pendingEchoRpc.remove(rpcId)) return;
-    if (_lastSentText == text &&
-        _lastSentAt != null &&
-        DateTime.now().difference(_lastSentAt!) < const Duration(seconds: 60)) {
-      _lastSentText = null;
-      return;
-    }
-    _touchActivity();
-    setState(() {
-      _messages.add(DshMessage(
-        id: key.isEmpty ? 'u-${_uuid.v4()}' : key,
-        role: 'user',
-        content: text,
-      ));
-    });
-    _scrollToBottom();
-  }
-
-  void _onToolView(ToolViewRecord v) {
-    if (!mounted) return;
-    _touchActivity();
-    setState(() {
-      _changes.applyView(
-          diffs: v.diffs, title: v.title, done: v.done, turn: v.turn);
-    });
-  }
-
-  void _onApproval(
-      ({
-        String rpcId,
-        String sessionId,
-        String approvalId,
-        String toolName,
-        String? reason,
-      }) rec) {
-    if (!mounted || rec.approvalId.isEmpty) return;
-    if (_approvals.any((a) => a.approvalId == rec.approvalId)) return;
-    setState(() {
-      _approvals.add(PendingApproval(
-        rpcId: rec.rpcId,
-        sessionId: rec.sessionId,
-        approvalId: rec.approvalId,
-        toolName: rec.toolName,
-        reason: rec.reason,
-      ));
-    });
-    if (_settings.soundEnabled && _settings.approvalSound) {
-      SoundService.approval(customPath: _settings.customSoundPath('approval'));
-    }
-  }
-
-  void _onApprovalResolved(String approvalId) {
-    if (!mounted) return;
-    // approvalId=callId；$events cancel 帧携带的是 waterfall eventId(=rpcId)
-    setState(() {
-      _approvals.removeWhere(
-          (a) => a.approvalId == approvalId || a.rpcId == approvalId);
-    });
-  }
-
-  Future<void> _answerApproval(PendingApproval a, bool allow) async {
-    setState(() => a.answering = true);
-    try {
-      final ok = await (_mux?.respondApproval(a.rpcId, allow) ??
-          Future.value(false));
-      if (!mounted) return;
-      if (ok) {
-        setState(() {
-          _approvals.removeWhere((x) => x.approvalId == a.approvalId);
-        });
-      } else {
-        setState(() => a.answering = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('回答未被接受，可能已过期')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => a.answering = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('回答失败: $e')),
-      );
-    }
-  }
-
-  void _onQuestion(
-      ({
-        String rpcId,
-        String sessionId,
-        List<Map<String, dynamic>> questions,
-      }) rec) {
-    if (!mounted || rec.rpcId.isEmpty || rec.questions.isEmpty) return;
-    setState(() {
-      _question = PendingQuestion(
-        rpcId: rec.rpcId,
-        sessionId: rec.sessionId,
-        questions: rec.questions,
-      );
-    });
-    if (_settings.soundEnabled && _settings.approvalSound) {
-      SoundService.question(customPath: _settings.customSoundPath('question'));
-    }
-    _maybeShowQuestionDialog();
-  }
-
-  void _onQuestionResolved(String rpcId) {
-    if (!mounted) return;
-    if (_question?.rpcId == rpcId) {
-      setState(() => _question = null);
-      if (_questionDialogOpen) {
-        _questionDialogOpen = false;
-        Navigator.of(context).maybePop();
-      }
-    }
-  }
-
-  void _maybeShowQuestionDialog() {
-    final q = _question;
-    if (q == null || _questionDialogOpen || !mounted) return;
-    if (q.sessionId != _settings.sessionId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('其他会话有问题待回答'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () => _switchSession(q.sessionId),
-          ),
-        ),
-      );
-      return;
-    }
-    _questionDialogOpen = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => QuestionSheet(question: q, onSubmit: _submitQuestion),
-    ).then((_) {
-      _questionDialogOpen = false;
-    });
-  }
-
-  Future<void> _submitQuestion(List<Map<String, dynamic>> answers) async {
-    final q = _question;
-    if (q == null) return;
-    final ok = await (_mux?.respondQuestion(q.rpcId, answers) ??
-        Future.value(false));
-    if (!mounted) return;
-    if (ok) {
-      setState(() => _question = null);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('回答未被接受，可能已过期')),
-      );
-      throw Exception('not accepted');
-    }
-  }
-
-  Future<void> _send() async {
-    final text = _inputController.text.trim();
-    if (text.isEmpty || _sending || !_connected) return;
-    final sessionId = _settings.sessionId;
-    if (sessionId == null) return;
-
-    _inputController.clear();
-    setState(() {
-      _sending = true;
-      _agentRunning = true;
-      _messages
-          .add(DshMessage(id: 'u-${_uuid.v4()}', role: 'user', content: text));
-    });
-    _scrollToBottom(force: true);
-
-    try {
-      final rpcId = await _api!.sendPrompt(sessionId, text);
-      _pendingEchoRpc.add(rpcId);
-      _lastSentText = text;
-      _lastSentAt = DateTime.now();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发送失败: $e')),
-      );
-      setState(() => _agentRunning = false);
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _cancel() async {
-    final sessionId = _settings.sessionId;
-    if (sessionId == null) return;
-    try {
-      await _api!.cancelSession(sessionId);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取消失败: $e')),
-      );
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _agentRunning = false;
-        _activeTool = null;
-        final idx = _messages.indexWhere((m) => m.isStreaming);
-        if (idx >= 0) {
-          _messages[idx] = _messages[idx].copyWith(isStreaming: false);
-        }
-      });
-    }
-  }
+  // ── 滚动控制 ────────────────────────────────────
 
   /// reverse ListView：pixels == 0 就是最新消息。
   /// 进会话时 ListView 可能还没挂上，Markdown 也会晚一帧撑高，所以连跳几帧。
-  void _jumpToLatest([int left = 8]) {
+  void _jumpToLatest([int left = jumpToLatestFrames]) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || left <= 0) return;
       if (_scrollController.hasClients) {
@@ -751,8 +118,8 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
-      // reverse：离最新超过 200px 视为在看历史，不抢滚
-      if (!force && pos.pixels > 200) return;
+      // reverse：离最新超过阈值视为在看历史，不抢滚
+      if (!force && pos.pixels > scrollIdleThreshold) return;
       _scrollController.animateTo(
         0,
         duration: const Duration(milliseconds: 200),
@@ -761,83 +128,172 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _touchActivity() {
-    final id = _settings.sessionId;
-    if (id == null) return;
-    for (final s in _sessions) {
-      if (s['sessionId'] == id) {
-        s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-        break;
-      }
+  // ── 会话操作 ────────────────────────────────────
+
+  void _switchSession(String sessionId) {
+    Navigator.of(context).maybePop();
+    _ctrl.switchSession(sessionId);
+  }
+
+  void _createNewSession({String? cwd}) {
+    Navigator.of(context).maybePop();
+    _ctrl.createNewSession(cwd: cwd);
+  }
+
+  // ── 审批 / 问题 ─────────────────────────────────
+
+  Future<void> _answerApproval(PendingApproval a, bool allow) async {
+    final ok = await _ctrl.answerApproval(a, allow);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('回答未被接受，可能已过期')),
+      );
     }
   }
 
+  void _maybeShowQuestionDialog() {
+    final q = _ctrl.question;
+    if (q == null || _ctrl.questionDialogOpen || !mounted) return;
+    if (q.sessionId != _ctrl.settings.sessionId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('其他会话有问题待回答'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () => _switchSession(q.sessionId),
+          ),
+        ),
+      );
+      return;
+    }
+    _ctrl.questionDialogOpen = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => QuestionSheet(
+        question: q,
+        onSubmit: _submitQuestion,
+      ),
+    ).then((_) {
+      _ctrl.questionDialogOpen = false;
+    });
+  }
+
+  Future<void> _submitQuestion(List<Map<String, dynamic>> answers) async {
+    final ok = await _ctrl.submitQuestion(answers);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('回答未被接受，可能已过期')),
+      );
+      throw Exception('not accepted');
+    }
+  }
+
+  // ── 发送 / 取消 ─────────────────────────────────
+
+  Future<void> _send() async {
+    final text = _inputController.text.trim();
+    if (text.isEmpty) return;
+    _inputController.clear();
+    _scrollToBottom(force: true);
+    try {
+      await _ctrl.send(text);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发送失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _cancel() async {
+    try {
+      await _ctrl.cancel();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取消失败: $e')),
+      );
+    }
+  }
+
+  // ── 构建 ────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final sessionId = _settings.sessionId;
+    final sessionId = _ctrl.settings.sessionId;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
       appBar: AppBar(
         title: Row(
           children: [
             _buildStatusDot(),
-            const SizedBox(width: 8),
+            const SizedBox(width: IosTheme.spaceS),
             Expanded(
               child: Text(
-                _settings.active == null
-                    ? _currentTitle
-                    : '${_settings.active!.name} · $_currentTitle',
+                _ctrl.settings.active == null
+                    ? _ctrl.currentTitle
+                    : '${_ctrl.settings.active!.name} · ${_ctrl.currentTitle}',
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
         actions: [
-          if (_agentRunning)
+          if (_ctrl.agentRunning)
             IconButton(
-              icon: const Icon(Icons.stop_circle_outlined),
+              icon: const Icon(Icons.stop_circle_outlined, size: 22),
               tooltip: '停止',
               onPressed: _cancel,
             ),
           Builder(
             builder: (drawerContext) => IconButton(
               icon: Badge(
-                label: Text('${_changes.items.length}'),
-                isLabelVisible: _changes.items.isNotEmpty,
-                child: const Icon(Icons.difference_outlined),
+                label: Text('${_ctrl.changes.items.length}'),
+                isLabelVisible: _ctrl.changes.items.isNotEmpty,
+                child: const Icon(Icons.difference_outlined, size: 22),
               ),
               tooltip: '变更',
-              onPressed: !_connected
+              onPressed: !_ctrl.connected
                   ? null
                   : () => Scaffold.of(drawerContext).openEndDrawer(),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 22),
             tooltip: '重连',
-            onPressed: _boot,
+            onPressed: _ctrl.boot,
           ),
         ],
       ),
       drawer: SessionDrawer(
-        sessions: _sessions,
-        serverId: _settings.active?.id ?? '',
+        sessions: _ctrl.visibleSessions,
+        serverId: _ctrl.settings.active?.id ?? '',
         activeId: sessionId,
-        loading: _loadingSessions,
-        onRefresh: _refreshSessions,
+        loading: _ctrl.loadingSessions,
+        onRefresh: _ctrl.refreshSessions,
         onCreateUngrouped: () => _createNewSession(),
         onCreateInWorkspace: (cwd) => _createNewSession(cwd: cwd),
         onSelectSession: _switchSession,
       ),
-      endDrawer: ChangesDrawer(tracker: _changes),
+      endDrawer: ChangesDrawer(tracker: _ctrl.changes),
       body: Column(
         children: [
           Expanded(child: _buildBody()),
-          if (_activeTool != null) ToolStatusBar(toolName: _activeTool!),
+          if (_ctrl.activeTool != null)
+            ToolStatusBar(toolName: _ctrl.activeTool!),
           ..._buildPendingCards(sessionId),
           ChatInputBar(
             controller: _inputController,
-            connected: _connected,
-            sending: _sending,
+            connected: _ctrl.connected,
+            sending: _ctrl.sending,
             onSend: _send,
           ),
         ],
@@ -847,8 +303,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   List<Widget> _buildPendingCards(String? sessionId) {
     final cards = <Widget>[];
-    final mine = _approvals.where((a) => a.sessionId == sessionId).toList();
-    final foreign = _approvals.where((a) => a.sessionId != sessionId).toList();
+    final mine =
+        _ctrl.approvals.where((a) => a.sessionId == sessionId).toList();
+    final foreign =
+        _ctrl.approvals.where((a) => a.sessionId != sessionId).toList();
     for (final a in [...mine, ...foreign]) {
       cards.add(ApprovalCard(
         approval: a,
@@ -857,15 +315,23 @@ class _ChatScreenState extends State<ChatScreen> {
         onViewSession: () => _switchSession(a.sessionId),
       ));
     }
-    final q = _question;
-    if (q != null && q.sessionId == sessionId && !_questionDialogOpen) {
+    final q = _ctrl.question;
+    if (q != null &&
+        q.sessionId == sessionId &&
+        !_ctrl.questionDialogOpen) {
       cards.add(
         Container(
-          margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-          child: OutlinedButton.icon(
+          margin: const EdgeInsets.fromLTRB(
+            IosTheme.spaceL,
+            IosTheme.spaceXS,
+            IosTheme.spaceL,
+            0,
+          ),
+          child: IosButton(
+            label: '有 ${q.questions.length} 个问题待回答',
+            icon: Icons.help_outline,
+            filled: false,
             onPressed: _maybeShowQuestionDialog,
-            icon: const Icon(Icons.help_outline),
-            label: Text('有 ${q.questions.length} 个问题待回答'),
           ),
         ),
       );
@@ -874,66 +340,111 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildStatusDot() {
-    final color = !_connected
-        ? Colors.red
-        : _agentRunning
-            ? Colors.orange
-            : Colors.green;
+    final color = !_ctrl.connected
+        ? IosTheme.iosRed
+        : _ctrl.agentRunning
+            ? IosTheme.iosOrange
+            : IosTheme.iosGreen;
     return Container(
-      width: 12,
-      height: 12,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.4),
+            blurRadius: 4,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildBody() {
-    if (_connecting) {
-      return const Center(
+    if (_ctrl.connecting) {
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('正在连接 DSH…'),
+            const CircularProgressIndicator(
+              strokeWidth: 2,
+              color: IosTheme.iosBlue,
+            ),
+            const SizedBox(height: IosTheme.spaceL),
+            Text(
+              '正在连接 DSH…',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: IosTheme.iosGray,
+              ),
+            ),
           ],
         ),
       );
     }
-    if (_error != null && _messages.isEmpty) {
+    if (_ctrl.error != null && _ctrl.messages.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(IosTheme.spaceXXXL),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cloud_off_outlined, size: 48),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () {
-                  _reconnectAttempts = 0;
-                  _boot();
-                },
-                child: const Text('重试'),
+              Icon(
+                Icons.cloud_off_outlined,
+                size: 56,
+                color: IosTheme.iosGray2,
+              ),
+              const SizedBox(height: IosTheme.spaceL),
+              Text(
+                _ctrl.error!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: IosTheme.iosGray,
+                ),
+              ),
+              const SizedBox(height: IosTheme.spaceXXL),
+              IosButton(
+                label: '重试',
+                onPressed: _ctrl.boot,
               ),
             ],
           ),
         ),
       );
     }
-    if (_messages.isEmpty) {
-      return const Center(
-        child: Text('开始和 Agent 对话吧', style: TextStyle(fontSize: 16)),
+    if (_ctrl.messages.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 48,
+              color: IosTheme.iosGray3,
+            ),
+            const SizedBox(height: IosTheme.spaceM),
+            Text(
+              '开始和 Agent 对话吧',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: IosTheme.iosGray,
+              ),
+            ),
+          ],
+        ),
       );
     }
     return ListView.builder(
       controller: _scrollController,
       reverse: true,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _messages.length,
-      itemBuilder: (context, i) =>
-          MessageBubble(message: _messages[_messages.length - 1 - i]),
+      padding: const EdgeInsets.symmetric(
+        vertical: IosTheme.spaceS,
+        horizontal: IosTheme.spaceS,
+      ),
+      itemCount: _ctrl.messages.length,
+      itemBuilder: (context, i) => MessageBubble(
+        message: _ctrl.messages[_ctrl.messages.length - 1 - i],
+      ),
     );
   }
 }

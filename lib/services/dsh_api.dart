@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import '../utils/constants.dart';
 import 'dsh_auth.dart';
 
 /// DSH 原生 Host API 客户端
@@ -53,7 +54,7 @@ class DshApi {
             'payload': {'args': args},
           }),
         )
-        .timeout(const Duration(seconds: 30));
+        .timeout(httpTimeout);
     _throwIfAuthFailed(resp);
     if (resp.statusCode != 200) {
       throw Exception('HTTP ${resp.statusCode}: ${resp.body}');

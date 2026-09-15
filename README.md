@@ -130,8 +130,8 @@ ifconfig
 
 | 脚本 | 作用 | 何时运行 |
 |------|------|------|
-| `tool/release_apk.ps1` | 构建 release APK → 拷贝到 `flutter-apk/` → 生成 `version.json` | 每次发新版前 |
-| `tool/publish_launch_token.ps1` | 从 `dsh-autostart.log` 提取最新启动令牌 → 生成 `launch-token.json` | DSH 每次重启后 |
+| `tools/release_apk.ps1` | 构建 release APK → 拷贝到 `flutter-apk/` → 生成 `version.json` | 每次发新版前 |
+| `tools/publish_launch_token.ps1` | 从 `dsh-autostart.log` 提取最新启动令牌 → 生成 `launch-token.json` | DSH 每次重启后 |
 
 > 两台 PC 分工：脚本可以都在 DSH 主机上跑；也可以 `release_apk.ps1` 在 DSH 主机，`publish_launch_token.ps1` 在跑 8099 下载服务的机器上——只要日志文件可达、且能写入对方机器上的 `flutter-apk/` 共享目录即可。
 
@@ -139,10 +139,10 @@ ifconfig
 
 ```powershell
 # 发布启动令牌（自动授权用）
-pwsh -File .\tool\publish_launch_token.ps1
+pwsh -File .\tools\publish_launch_token.ps1
 
 # 构建并发布 APK（更新用）
-pwsh -File .\tool\release_apk.ps1 -Changelog "更新说明"
+pwsh -File .\tools\release_apk.ps1 -Changelog "更新说明"
 ```
 
 `release_apk.ps1` 会同时写 `version.json`，平板启动 App 会自动检查 `http://<PC_IP>:8099/version.json` 并提示更新。

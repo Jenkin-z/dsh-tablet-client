@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/constants.dart';
 
 class UpdateInfo {
   final int versionCode;
@@ -59,7 +60,7 @@ class UpdateService {
       try {
         final resp = await http
             .get(Uri.parse('${baseUrl(host)}/version.json'))
-            .timeout(const Duration(seconds: 8));
+            .timeout(updateCheckTimeout);
         if (resp.statusCode != 200) {
           lastError = '$host:8099 HTTP ${resp.statusCode}';
           continue;
@@ -102,10 +103,10 @@ class UpdateService {
     final dir = await _updateDir();
     final dest = File('${dir.path}/$apkName');
     if (await dest.exists()) await dest.delete();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    final client = HttpClient()..connectionTimeout = downloadConnectTimeout;
     try {
       final req = await client.getUrl(Uri.parse(url));
-      final resp = await req.close().timeout(const Duration(seconds: 20));
+      final resp = await req.close().timeout(downloadRequestTimeout);
       if (resp.statusCode != 200) {
         throw Exception('下载失败：HTTP ${resp.statusCode}');
       }
@@ -113,7 +114,7 @@ class UpdateService {
       var got = 0;
       final sink = dest.openWrite();
       try {
-        await for (final chunk in resp.timeout(const Duration(seconds: 30))) {
+        await for (final chunk in resp.timeout(downloadChunkTimeout)) {
           sink.add(chunk);
           got += chunk.length;
           onProgress(total > 0 ? got / total : 0);

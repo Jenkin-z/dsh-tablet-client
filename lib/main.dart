@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'screens/main_shell.dart';
 import 'services/server_manager.dart';
 import 'services/session_router.dart';
 import 'services/settings_service.dart';
-import 'screens/chat_screen.dart';
-import 'screens/console_screen.dart';
-import 'screens/settings_screen.dart';
-import 'widgets/update_dialog.dart';
+import 'theme/ios_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,13 +16,16 @@ void main() async {
 
   await WakelockPlus.toggle(enable: settings.keepScreenOn);
 
+  // Android 13+ 需要运行时请求通知权限
+  await ForegroundStarter.requestPermissions();
+
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'dsh_tablet_client',
-      channelName: 'DSH Agent 保活',
-      channelDescription: '保持 DSH Agent 在前台运行',
-      channelImportance: NotificationChannelImportance.LOW,
-      priority: NotificationPriority.LOW,
+      channelName: 'DSH Agent 通知',
+      channelDescription: '审批、提问、完成等重要事件通知',
+      channelImportance: NotificationChannelImportance.DEFAULT,
+      priority: NotificationPriority.DEFAULT,
     ),
     iosNotificationOptions: const IOSNotificationOptions(
       showNotification: false,
@@ -90,109 +91,189 @@ class _DshTabletAppState extends State<DshTabletApp> {
       title: 'DSH Agent',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: Colors.blueGrey,
+        colorSchemeSeed: IosTheme.iosBlue,
         useMaterial3: true,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: IosTheme.iosGroupedBg,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: IosTheme.iosGroupedBg,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: 56,
+          backgroundColor: Colors.white.withValues(alpha: 0.94),
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: IosTheme.iosBlue.withValues(alpha: 0.12),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const TextStyle(
+                color: IosTheme.iosBlue,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              );
+            }
+            return TextStyle(
+              color: IosTheme.iosGray,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+            );
+          }),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: IosTheme.iosBlue, size: 22);
+            }
+            return const IconThemeData(color: IosTheme.iosGray, size: 22);
+          }),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+          ),
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return Colors.white;
+            }
+            return Colors.white;
+          }),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return IosTheme.iosGreen;
+            }
+            return IosTheme.iosGray3;
+          }),
+        ),
+        listTileTheme: const ListTileThemeData(
+          contentPadding: EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+        ),
+        dividerTheme: const DividerThemeData(
+          thickness: 0.5,
+          color: Color(0xFFC6C6C8),
+          space: 0.5,
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF1C1C1E),
+          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusS),
+          ),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: Colors.white,
+          elevation: 20,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusM),
+          ),
+        ),
       ),
       darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.blueGrey,
+        colorSchemeSeed: IosTheme.iosBlue,
         useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: IosTheme.iosDarkGroupedBg,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: IosTheme.iosDarkGroupedBg,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: 56,
+          backgroundColor: const Color(0xFF1C1C1E).withValues(alpha: 0.94),
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: IosTheme.iosBlue.withValues(alpha: 0.24),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const TextStyle(
+                color: IosTheme.iosBlue,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              );
+            }
+            return TextStyle(
+              color: IosTheme.iosGray2,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+            );
+          }),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: IosTheme.iosBlue, size: 22);
+            }
+            return const IconThemeData(color: IosTheme.iosGray2, size: 22);
+          }),
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF1C1C1E),
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+          ),
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return Colors.white;
+            }
+            return Colors.white;
+          }),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return IosTheme.iosGreen;
+            }
+            return IosTheme.iosGray;
+          }),
+        ),
+        listTileTheme: const ListTileThemeData(
+          contentPadding: EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+        ),
+        dividerTheme: const DividerThemeData(
+          thickness: 0.5,
+          color: Color(0xFF38383A),
+          space: 0.5,
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF2C2C2E),
+          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusS),
+          ),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xFF2C2C2E),
+          elevation: 20,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusM),
+          ),
+        ),
       ),
       themeMode: mode,
       home: const MainShell(),
-    );
-  }
-}
-
-class MainShell extends StatefulWidget {
-  const MainShell({super.key});
-
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
-  bool _updateChecked = false;
-  ServerManager? _manager;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_updateChecked || !mounted) return;
-      _updateChecked = true;
-      final s = Provider.of<SettingsService>(context, listen: false);
-      if (s.updateAutoCheck) {
-        UpdateFlow.checkAndPrompt(
-          context,
-          s.servers.map((e) => e.host).followedBy([s.serverHost]),
-          auto: true,
-        );
-      }
-    });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_manager == null) {
-      _manager = Provider.of<ServerManager>(context, listen: false);
-      _manager!.start();
-    }
-  }
-
-  @override
-  void dispose() {
-    _manager?.stop();
-    super.dispose();
-  }
-
-  Future<void> _openSession(String serverId, String sessionId) async {
-    final settings = Provider.of<SettingsService>(context, listen: false);
-    if (settings.activeServerId != serverId) {
-      await settings.setActiveServer(serverId);
-    }
-    await settings.setSessionId(sessionId);
-    if (!mounted) return;
-    Provider.of<SessionRouter>(context, listen: false)
-        .request(serverId, sessionId);
-    setState(() => _currentIndex = 1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsService>(context);
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          ConsoleScreen(onOpenSession: _openSession),
-          ChatScreen(key: ValueKey(settings.activeServerId)),
-          const SettingsScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: '控制台',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: '对话',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: '设置',
-          ),
-        ],
-      ),
     );
   }
 }

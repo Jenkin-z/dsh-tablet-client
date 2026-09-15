@@ -1,6 +1,8 @@
 /// 变更跟踪：本会话的文件变更（来自 mux view 槽 + 历史回填）
 library;
 
+import '../utils/constants.dart';
+
 /// 单个文件的变更记录；result 帧会覆盖同 turn 同 path 的 call 记录
 class FileChange {
   final String path;
@@ -21,10 +23,6 @@ class FileChange {
 }
 
 class ChangesTracker {
-  static const int maxFiles = 100;
-  // 单文件存盘上限（防超大文件吃内存，展示层另有行数上限）
-  static const int maxCharsPerFile = 100000;
-
   final List<FileChange> _items = [];
 
   List<FileChange> get items => List.unmodifiable(_items);
@@ -33,7 +31,9 @@ class ChangesTracker {
   void clear() => _items.clear();
 
   static String _cap(String s) =>
-      s.length > maxCharsPerFile ? s.substring(0, maxCharsPerFile) : s;
+      s.length > changesMaxCharsPerFile
+          ? s.substring(0, changesMaxCharsPerFile)
+          : s;
 
   void applyView({
     required List<Map<String, String?>> diffs,
@@ -53,7 +53,7 @@ class ChangesTracker {
         e.newText = _cap(d['newText'] ?? '');
         e.done = e.done || done;
       } else {
-        if (_items.length >= maxFiles) _items.removeAt(0);
+        if (_items.length >= changesMaxFiles) _items.removeAt(0);
         _items.add(FileChange(
           path: path,
           title: title,

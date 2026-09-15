@@ -1,7 +1,7 @@
 name: dsh_tablet_client
 description: DSH Tablet Client - RK3288平板 AI Agent 前端
 publish_to: 'none'
-version: 1.4.8+26
+version: 1.5.5+32
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -20,6 +20,7 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   audioplayers: ^6.8.1
   file_picker: ^12.2.0
+  mobile_scanner: ^7.0.0
   path_provider: ^2.1.6
   package_info_plus: ^10.2.1
 dev_dependencies:

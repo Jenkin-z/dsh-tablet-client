@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+    width="512"
+    height="512"
+    viewBox="0 0 512 512"
+    xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#607d8b"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#80deea" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#80deea" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="132" fill="url(#bg)"/>
+
+  <circle cx="256" cy="256" r="170" fill="url(#glow)"/>
+  <circle cx="256" cy="256" r="153" fill="#ffffff"/>
+
+  <text x="256" y="256" text-anchor="middle" dominant-baseline="central"
+        font-family="Arial, sans-serif" font-weight="bold" font-size="180"
+        fill="#37474f">
+    DSH
+  </text>
+</svg>

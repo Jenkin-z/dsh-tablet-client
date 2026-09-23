@@ -10,6 +10,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -41,6 +42,8 @@ android {
 dependencies {
     // FileProvider（应用内更新分享 APK 用）
     implementation("androidx.core:core:1.13.1")
+    // flutter_local_notifications 需要 Java 8 desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 kotlin {

@@ -61,6 +61,13 @@ class ServerManager extends ChangeNotifier {
 
   SessionMonitor? monitorOf(String serverId) => _monitors[serverId];
 
+  /// 实时状态推送：立即更新某台 PC 的会话运行标记（无需等下一次轮询）
+  void applySessionStatus(String serverId, String sessionId, bool running) {
+    final m = _monitors[serverId];
+    if (m == null) return;
+    if (m.applyStatus(sessionId, running)) notifyListeners();
+  }
+
   @override
   void notifyListeners() {
     _cachedGroups = null; // 数据变更时清除缓存

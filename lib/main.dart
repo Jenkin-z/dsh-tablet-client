@@ -3,6 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/main_shell.dart';
+import 'services/notification_service.dart';
 import 'services/server_manager.dart';
 import 'services/session_router.dart';
 import 'services/settings_service.dart';
@@ -19,13 +20,17 @@ void main() async {
   // Android 13+ 需要运行时请求通知权限
   await ForegroundStarter.requestPermissions();
 
+  // 初始化本地通知（审批/提问/完成时弹出 heads-up 通知）
+  await NotificationService.init();
+
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'dsh_tablet_client',
-      channelName: 'DSH Agent 通知',
-      channelDescription: '审批、提问、完成等重要事件通知',
-      channelImportance: NotificationChannelImportance.DEFAULT,
-      priority: NotificationPriority.DEFAULT,
+      channelId: 'dshm_foreground',
+      channelName: 'DSHM 后台保活',
+      channelDescription: '保持与 PC 端连接的常驻通知',
+      channelImportance: NotificationChannelImportance.LOW,
+      priority: NotificationPriority.LOW,
+      playSound: false,
     ),
     iosNotificationOptions: const IOSNotificationOptions(
       showNotification: false,

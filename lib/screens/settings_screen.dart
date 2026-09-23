@@ -3,6 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/dsh_api.dart';
+import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../theme/ios_theme.dart';
@@ -126,6 +127,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // ── 提示音 + 自定义铃声 ──
             SoundSettingsSection(settings: s),
+            const SizedBox(height: IosTheme.spaceL),
+
+            // ── 通知测试 ──
+            const IosSectionHeader(title: '通知测试'),
+            IosCard(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.notifications_active_outlined,
+                      color: IosTheme.iosBlue,
+                    ),
+                    title: const Text('发送测试通知'),
+                    subtitle: const Text('验证系统通知是否正常弹出（含声音+震动）'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () async {
+                      await NotificationService.show(
+                        title: 'DSH Agent 测试通知',
+                        body: '如果你听到声音+看到弹窗，说明通知功能正常！',
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('已发送，请检查状态栏')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: IosTheme.spaceL),
 
             // ── 应用更新 ──
@@ -337,16 +368,31 @@ class _ForegroundServiceTileState extends State<_ForegroundServiceTile> {
   }
 
   Future<void> _toggle(bool value) async {
-    if (value) {
-      await FlutterForegroundTask.startService(
-        notificationTitle: 'DSH Agent 运行中',
-        notificationText: '与 PC 端保持连接',
-        callback: _foregroundCallback,
+    try {
+      if (value) {
+        await FlutterForegroundTask.startService(
+          notificationTitle: 'DSH Agent 运行中',
+          notificationText: '与 PC 端保持连接',
+          callback: _foregroundCallback,
+        );
+      } else {
+        await FlutterForegroundTask.stopService();
+      }
+      final running = await FlutterForegroundTask.isRunningService;
+      if (mounted) setState(() => _running = running);
+      if (value && !running && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('前台保活没有启动，请检查通知权限')),
+        );
+      }
+    } catch (e) {
+      final running = await FlutterForegroundTask.isRunningService;
+      if (!mounted) return;
+      setState(() => _running = running);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('前台保活失败: $e')),
       );
-    } else {
-      await FlutterForegroundTask.stopService();
     }
-    if (mounted) setState(() => _running = value);
   }
 
   @override

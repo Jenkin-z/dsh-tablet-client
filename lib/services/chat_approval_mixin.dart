@@ -2,7 +2,9 @@ part of 'chat_controller.dart';
 
 /// 审批 / 问题管理 mixin（由 ChatController 混入）
 ///
-/// 职责：waterfall 事件处理、审批应答、问题应答、过期检测。
+/// 职责：waterfall 事件处理、审批应答、问题应答。
+/// 卡片失效以 Host 的 `cancel` 帧为准；mux 重连时 Host 会重新投递仍 pending
+/// 的 waterfall，因此连接时清空本地卡片即可，无需轮询探测过期。
 mixin _ChatApprovalMixin on ChangeNotifier {
   // ── 子类必须提供的状态 ──────────────────────────
   List<PendingApproval> get approvals;
@@ -10,9 +12,7 @@ mixin _ChatApprovalMixin on ChangeNotifier {
   set question(PendingQuestion? q);
   bool get questionDialogOpen;
   set questionDialogOpen(bool v);
-  bool get connected;
   SettingsService get settings;
-  DshApi? get _api;
   MuxStream? get _mux;
 
   // ── UI 回调 ────────────────────────────────────
@@ -21,10 +21,17 @@ mixin _ChatApprovalMixin on ChangeNotifier {
 
   // ── 通知辅助 ────────────────────────────────────
 
-  /// 更新前台服务通知，让系统状态栏弹出提醒
-  void _updateServiceNotification(String text) {
+  int _notifyId = 0;
+
+  /// 双通道通知：本地弹窗 + 前台服务通知更新（后台也能收到）
+  void _showNotification(String title, String body) {
+    // 1. 本地 heads-up 通知
     try {
-      FlutterForegroundTask.updateService(notificationText: text);
+      NotificationService.show(id: _notifyId++, title: title, body: body);
+    } catch (_) {}
+    // 2. 同时更新前台服务通知文本（后台也能更新，确保通知可见）
+    try {
+      FlutterForegroundTask.updateService(notificationText: '$title: $body');
     } catch (_) {}
   }
 
@@ -48,8 +55,8 @@ mixin _ChatApprovalMixin on ChangeNotifier {
       reason: rec.reason,
     ));
     notifyListeners();
-    // 系统通知
-    _updateServiceNotification('需要确认：${rec.toolName}');
+    // 系统弹出通知
+    _showNotification('需要确认', '${rec.toolName} 等待审批');
     if (settings.soundEnabled && settings.approvalSound) {
       SoundService.approval(customPath: settings.customSoundPath('approval'));
     }
@@ -59,9 +66,6 @@ mixin _ChatApprovalMixin on ChangeNotifier {
     approvals.removeWhere(
         (a) => a.approvalId == approvalId || a.rpcId == approvalId);
     notifyListeners();
-    if (approvals.isEmpty && question == null) {
-      _updateServiceNotification('与 PC 端保持连接');
-    }
   }
 
   Future<bool> answerApproval(PendingApproval a, bool allow) async {
@@ -70,9 +74,6 @@ mixin _ChatApprovalMixin on ChangeNotifier {
     if (ok) {
       approvals.removeWhere((x) => x.approvalId == a.approvalId);
       notifyListeners();
-      if (approvals.isEmpty && question == null) {
-        _updateServiceNotification('与 PC 端保持连接');
-      }
     }
     return ok;
   }
@@ -92,8 +93,8 @@ mixin _ChatApprovalMixin on ChangeNotifier {
       questions: rec.questions,
     );
     notifyListeners();
-    // 系统通知
-    _updateServiceNotification('有 ${rec.questions.length} 个问题待回答');
+    // 系统弹出通知
+    _showNotification('待回答问题', '${rec.questions.length} 个问题需要回答');
     if (settings.soundEnabled && settings.approvalSound) {
       SoundService.question(customPath: settings.customSoundPath('question'));
     }
@@ -108,9 +109,6 @@ mixin _ChatApprovalMixin on ChangeNotifier {
         onPopQuestionDialog?.call();
       }
       notifyListeners();
-      if (approvals.isEmpty) {
-        _updateServiceNotification('与 PC 端保持连接');
-      }
     }
   }
 
@@ -124,30 +122,5 @@ mixin _ChatApprovalMixin on ChangeNotifier {
       notifyListeners();
     }
     return ok;
-  }
-
-  // ── 过期检测 ────────────────────────────────────
-
-  void checkApprovalsStale(String? sessionId, int? cursor) {
-    if (!connected || _api == null) return;
-    if (sessionId == null) return;
-    if (approvals.isEmpty && question == null) return;
-    if (cursor == null) return;
-    _api!.getHistory(sessionId, throughSeq: cursor, maxMessages: 10).then((result) {
-      final events = result['events'] as List<dynamic>? ?? [];
-      for (final e in events) {
-        final ev = e as Map<String, dynamic>? ?? {};
-        final event = ev['event'] as Map<String, dynamic>?;
-        final type = event?['type'] as String? ?? '';
-        if (type == 'turn/start' || type == 'assistant/message') {
-          if (approvals.isNotEmpty || question != null) {
-            approvals.clear();
-            question = null;
-            notifyListeners();
-          }
-          return;
-        }
-      }
-    }).catchError((_) {});
   }
 }

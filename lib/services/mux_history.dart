@@ -7,15 +7,20 @@ String extractAssistantText(dynamic message) {
   return extractContentBlocks(message['content']);
 }
 
-String extractContentBlocks(dynamic content) {
+String extractContentBlocks(dynamic content, {bool lastOnly = false}) {
   if (content is! List) return '';
   final buf = StringBuffer();
+  String? lastText;
   for (final part in content) {
     if (part is Map<String, dynamic> && part['type'] == 'text') {
-      buf.write(part['text'] as String? ?? '');
+      final t = part['text'] as String? ?? '';
+      if (t.isNotEmpty) {
+        lastText = t;
+        if (!lastOnly) buf.write(t);
+      }
     }
   }
-  return buf.toString();
+  return lastOnly ? (lastText ?? '') : buf.toString();
 }
 
 typedef ToolViewRecord = ({
@@ -96,7 +101,7 @@ List<({String role, String text, String id})> parseHistory(
     if (data is! Map<String, dynamic>) continue;
 
     if (type == 'user/message') {
-      final text = extractContentBlocks(data['content']);
+      final text = extractContentBlocks(data['content'], lastOnly: true);
       if (text.isNotEmpty) out.add((role: 'user', text: text, id: 'u$seq'));
     } else if (type == 'assistant/message') {
       final text = extractAssistantText(data['message']);

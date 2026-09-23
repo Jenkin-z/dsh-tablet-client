@@ -1,8 +1,8 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../models/dsh_server.dart';
-import '../utils/constants.dart';
 import 'dsh_api.dart';
 import 'dsh_auth.dart';
+import 'notification_service.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
 
@@ -10,6 +10,7 @@ import 'sound_service.dart';
 class SessionMonitor {
   final SettingsService settings;
   DshServer server;
+  int _notifySeq = 0;
 
   SessionMonitor({required this.settings, required this.server})
       : _api = DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
@@ -41,16 +42,7 @@ class SessionMonitor {
         final was = _prevRunning[id];
         if (was == true && !running && id != current) {
           s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-          await settings.addUnviewed(key);
-          // 系统通知：会话完成
-          try {
-            FlutterForegroundTask.updateService(
-              notificationText: '会话已完成',
-            );
-          } catch (_) {}
-          if (settings.soundEnabled && settings.completionSound) {
-            SoundService.done(customPath: settings.customSoundPath('done'));
-          }
+          await _markFinished(key);
         } else if (!running &&
             s['blank'] != true &&
             id != current &&
@@ -83,6 +75,48 @@ class SessionMonitor {
       error = '$e';
     } finally {
       loading = false;
+    }
+  }
+
+  /// 实时状态推送（api-session/status）：立即更新会话 running 标记
+  ///
+  /// 返回是否有变化，供上层决定是否需要刷新界面。
+  bool applyStatus(String sessionId, bool running) {
+    Map<String, dynamic>? target;
+    for (final s in sessions) {
+      if (s['sessionId'] == sessionId) {
+        target = s;
+        break;
+      }
+    }
+    if (target == null || target['running'] == running) return false;
+    final was = _prevRunning[sessionId];
+    target['running'] = running;
+    _prevRunning[sessionId] = running;
+    if (was == true && !running && sessionId != server.lastSessionId) {
+      target['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+      _markFinished(_key(sessionId));
+    }
+    return true;
+  }
+
+  /// 会话完成：标记未读 + 双通道通知 + 提示音
+  Future<void> _markFinished(String key) async {
+    await settings.addUnviewed(key);
+    try {
+      NotificationService.show(
+        id: 10000 + _notifySeq++,
+        title: '会话已完成',
+        body: '非当前会话有新结果',
+      );
+    } catch (_) {}
+    try {
+      FlutterForegroundTask.updateService(
+        notificationText: '会话已完成: 非当前会话有新结果',
+      );
+    } catch (_) {}
+    if (settings.soundEnabled && settings.completionSound) {
+      SoundService.done(customPath: settings.customSoundPath('done'));
     }
   }
 

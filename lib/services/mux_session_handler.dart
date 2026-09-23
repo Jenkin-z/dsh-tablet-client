@@ -18,7 +18,7 @@ void _handleSessionEvent(
     Map<String, dynamic> data) {
   switch (type) {
     case 'user/message':
-      final text = extractContentBlocks(data['content']);
+      final text = extractContentBlocks(data['content'], lastOnly: true);
       String? rpcId;
       final source = data['source'];
       if (source is Map<String, dynamic>) {

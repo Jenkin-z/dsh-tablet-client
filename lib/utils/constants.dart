@@ -3,6 +3,7 @@ library;
 
 // ── 网络 ──────────────────────────────────────────
 const Duration httpTimeout = Duration(seconds: 30);
+const Duration cancelTimeout = Duration(seconds: 5);
 const Duration eventResultTimeout = Duration(seconds: 15);
 const Duration pollInterval = Duration(seconds: 8);
 const Duration updateCheckTimeout = Duration(seconds: 8);

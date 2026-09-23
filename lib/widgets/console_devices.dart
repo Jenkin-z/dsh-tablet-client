@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/ios_theme.dart';
-import '../utils/session_format.dart';
-import 'console_animations.dart';
 
 /// 顶部设备状态卡：一台 PC 一张 —— iOS 风格
 class ConsoleDeviceCard extends StatelessWidget {

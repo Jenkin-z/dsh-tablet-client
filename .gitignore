@@ -26,3 +26,7 @@ android/key.properties
 *.log
 pubspec.lock
 tool/
+
+# test_shots 脚本运行时产物（.cookie 是真实凭据，绝不入库）
+test_shots/_ui.xml
+test_shots/.cookie

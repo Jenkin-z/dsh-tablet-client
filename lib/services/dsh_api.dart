@@ -42,7 +42,10 @@ class DshApi {
   }
 
   Future<Map<String, dynamic>> _rpc(
-      String method, Map<String, dynamic> args) async {
+    String method,
+    Map<String, dynamic> args, {
+    Duration? timeout,
+  }) async {
     final resp = await http
         .post(
           Uri.parse('$_rpcPrefix/$method'),
@@ -54,7 +57,7 @@ class DshApi {
             'payload': {'args': args},
           }),
         )
-        .timeout(httpTimeout);
+        .timeout(timeout ?? httpTimeout);
     _throwIfAuthFailed(resp);
     if (resp.statusCode != 200) {
       throw Exception('HTTP ${resp.statusCode}: ${resp.body}');
@@ -117,9 +120,59 @@ class DshApi {
   }
 
   Future<bool> cancelSession(String sessionId) async {
-    final value = await _rpc('session/cancel',
-        {'request': {'sessionId': sessionId}});
+    final resp = await http
+        .post(
+          Uri.parse('$_rpcPrefix/session/cancel'),
+          headers: _headers,
+          body: jsonEncode({
+            'type': 'client-request',
+            'rpcId': _uuid.v4(),
+            'method': 'session/cancel',
+            'payload': {
+              'args': {
+                'request': {'sessionId': sessionId}
+              }
+            },
+          }),
+        )
+        .timeout(cancelTimeout);
+    _throwIfAuthFailed(resp);
+    if (resp.statusCode != 200) {
+      throw Exception('HTTP ${resp.statusCode}: ${resp.body}');
+    }
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final result = data['result'] as Map<String, dynamic>;
+    if (result['ok'] != true) {
+      final error = result['error'] as Map<String, dynamic>;
+      throw Exception('RPC Error [${error['code']}]: ${error['message']}');
+    }
+    final value = (result['value'] ?? <String, dynamic>{}) as Map<String, dynamic>;
     return value['accepted'] == true;
+  }
+
+  /// 诊断用：返回 cancel 的原始响应文本（截断）。
+  Future<String> cancelSessionRaw(String sessionId) async {
+    try {
+      final resp = await http
+          .post(
+            Uri.parse('$_rpcPrefix/session/cancel'),
+            headers: _headers,
+            body: jsonEncode({
+              'type': 'client-request',
+              'rpcId': _uuid.v4(),
+              'method': 'session/cancel',
+              'payload': {
+                'args': {
+                  'request': {'sessionId': sessionId}
+                }
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      return 'HTTP ${resp.statusCode} ${resp.body}';
+    } catch (e) {
+      return 'ERR $e';
+    }
   }
 
   Future<bool> testConnection() async {

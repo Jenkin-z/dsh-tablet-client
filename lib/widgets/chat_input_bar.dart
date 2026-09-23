@@ -54,7 +54,6 @@ class ChatInputBar extends StatelessWidget {
                 ),
                 child: TextField(
                   controller: controller,
-                  enabled: connected,
                   minLines: 1,
                   maxLines: 5,
                   textInputAction: TextInputAction.send,
@@ -64,7 +63,7 @@ class ChatInputBar extends StatelessWidget {
                     color: isDark ? Colors.white : const Color(0xFF1C1C1E),
                   ),
                   decoration: InputDecoration(
-                    hintText: '输入消息…',
+                    hintText: connected ? '输入消息…' : '未连接，文字会保留',
                     hintStyle: TextStyle(
                       color: IosTheme.iosGray,
                       fontSize: 16,
@@ -83,9 +82,7 @@ class ChatInputBar extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: (connected && !sending)
-                    ? IosTheme.iosBlue
-                    : IosTheme.iosGray3,
+                color: sending ? IosTheme.iosGray3 : IosTheme.iosBlue,
                 shape: BoxShape.circle,
               ),
               child: IconButton(
@@ -104,7 +101,7 @@ class ChatInputBar extends StatelessWidget {
                         color: Colors.white,
                         size: 20,
                       ),
-                onPressed: (connected && !sending) ? onSend : null,
+                onPressed: sending ? null : onSend,
               ),
             ),
           ],

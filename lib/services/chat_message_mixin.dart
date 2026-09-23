@@ -10,10 +10,6 @@ mixin _ChatMessageMixin on ChangeNotifier {
   Set<String> get queuedTexts;
   Set<String> get _seenUserSeq;
   Set<String> get _pendingEchoRpc;
-  String? get _lastSentText;
-  set _lastSentText(String? v);
-  DateTime? get _lastSentAt;
-  set _lastSentAt(DateTime? v);
   bool get agentRunning;
   set agentRunning(bool v);
   String? get activeTool;
@@ -33,6 +29,12 @@ mixin _ChatMessageMixin on ChangeNotifier {
   // ── 依赖方法（由 ChatController 实现） ──────────
   void _touchActivity();
   Future<void> refreshSessions();
+
+  /// 该文本是否是我们刚发出、还没被回声确认的那条
+  bool matchesLastSentEcho(String text);
+
+  /// 清掉「刚发出」标记（切换会话 / 回声已到）
+  void clearSentEcho();
 
   // ── 快照 ────────────────────────────────────────
 
@@ -101,13 +103,22 @@ mixin _ChatMessageMixin on ChangeNotifier {
     activeTool = null;
     final idx = messages.indexWhere((m) => m.isStreaming);
     if (idx >= 0) {
-      messages[idx] = messages[idx].copyWith(content: text);
+      messages[idx] = messages[idx].copyWith(content: text, isStreaming: false);
     } else {
-      messages.add(DshMessage(
-        id: 'a-${_uuid.v4()}',
-        role: 'assistant',
-        content: text,
-      ));
+      final lastAssistant = messages.lastIndexWhere((m) => m.role == 'assistant');
+      final existing = lastAssistant >= 0 ? messages[lastAssistant].content : '';
+      if (lastAssistant >= 0 &&
+          (existing == text ||
+              (existing.isNotEmpty && text.startsWith(existing)))) {
+        messages[lastAssistant] =
+            messages[lastAssistant].copyWith(content: text, isStreaming: false);
+      } else {
+        messages.add(DshMessage(
+          id: 'a-${_uuid.v4()}',
+          role: 'assistant',
+          content: text,
+        ));
+      }
     }
     notifyListeners();
     onScrollToBottom?.call();
@@ -118,12 +129,25 @@ mixin _ChatMessageMixin on ChangeNotifier {
   void onUserMessage(String text, String? rpcId, String seq) {
     final key = 'u$seq';
     if (seq.isNotEmpty && !_seenUserSeq.add(key)) return;
-    if (rpcId != null && _pendingEchoRpc.remove(rpcId)) return;
-    if (_lastSentText == text &&
-        _lastSentAt != null &&
-        DateTime.now().difference(_lastSentAt!) < const Duration(seconds: 60)) {
-      _lastSentText = null;
+    // 乐观气泡已在列表里：回声只补上服务端 id，不能再跳过导致气泡被队列更新删掉后无法回来。
+    if (rpcId != null && _pendingEchoRpc.remove(rpcId)) {
+      final idx = messages.lastIndexWhere((m) => m.id == 'echo-$rpcId');
+      if (idx >= 0) {
+        messages[idx] = messages[idx].copyWith(id: key.isEmpty ? messages[idx].id : key);
+        notifyListeners();
+      }
       return;
+    }
+    if (matchesLastSentEcho(text)) {
+      clearSentEcho();
+      final idx = messages.lastIndexWhere(
+        (m) => m.role == 'user' && (m.id.startsWith('u-') || m.id.startsWith('echo-')),
+      );
+      if (idx >= 0 && messages[idx].content == text) {
+        messages[idx] = messages[idx].copyWith(id: key.isEmpty ? messages[idx].id : key);
+        notifyListeners();
+        return;
+      }
     }
     // 内容去重：如果最后一条用户消息内容相同，跳过回声
     if (messages.isNotEmpty &&
@@ -159,23 +183,58 @@ mixin _ChatMessageMixin on ChangeNotifier {
   // ── Turn 生命周期 ───────────────────────────────
 
   void onTurnEnd() {
-    agentRunning = false;
-    activeTool = null;
     approvals.clear();
     question = null;
     if (questionDialogOpen) {
       questionDialogOpen = false;
       onPopQuestionDialog?.call();
     }
+    // turn/end 只代表「本轮」结束：Agent 仍在运行时不能标记为已完成，
+    // 否则会出现 PC 还在跑、APP 已显示完成（多轮任务/子任务场景）。
+    if (_wasCurrentRunning) {
+      activeTool = null;
+      final idx = messages.indexWhere((m) => m.isStreaming);
+      if (idx >= 0) {
+        messages[idx] = messages[idx].copyWith(isStreaming: false);
+      }
+      notifyListeners();
+    } else {
+      finishRunning();
+    }
+    refreshSessions();
+  }
+
+  // ── 实时运行状态（api-session/status） ──────────
+
+  /// Host 实时推送的 Agent 运行状态：同时驱动监控台与聊天状态
+  void onSessionStatus(String sessionId, bool running) {
+    final srv = settings.active;
+    if (srv != null) manager?.applySessionStatus(srv.id, sessionId, running);
+    if (sessionId != settings.sessionId) return;
+    _wasCurrentRunning = running;
+    if (running) {
+      if (!agentRunning) {
+        agentRunning = true;
+        notifyListeners();
+      }
+      return;
+    }
+    finishRunning();
+  }
+
+  /// Agent 转为空闲：收尾流式消息与工具状态，并按需提示完成
+  void finishRunning() {
+    final wasRunning = agentRunning;
+    agentRunning = false;
+    activeTool = null;
     final idx = messages.indexWhere((m) => m.isStreaming);
     if (idx >= 0) {
       messages[idx] = messages[idx].copyWith(isStreaming: false);
     }
     notifyListeners();
-    if (settings.soundEnabled && settings.completionSound) {
+    if (wasRunning && settings.soundEnabled && settings.completionSound) {
       SoundService.done(customPath: settings.customSoundPath('done'));
     }
-    refreshSessions();
   }
 
   // ── 队列同步 ────────────────────────────────────
@@ -194,14 +253,10 @@ mixin _ChatMessageMixin on ChangeNotifier {
       }
       if (buf.isNotEmpty) currentQueued.add(buf.toString());
     }
-    final removed = queuedTexts.difference(currentQueued);
+    // 出队只表示 Agent 已取走，不代表用户没说过。删气泡会和回声去重打架，消息会永久消失。
     queuedTexts
       ..clear()
       ..addAll(currentQueued);
-    if (removed.isEmpty) return;
-    messages.removeWhere(
-        (m) => m.role == 'user' && removed.contains(m.content));
-    notifyListeners();
   }
 
   // ── 监控台联动 ──────────────────────────────────
@@ -217,17 +272,19 @@ mixin _ChatMessageMixin on ChangeNotifier {
         break;
       }
     }
-    final running = current?['running'] == true;
-    if (_wasCurrentRunning && !running) {
-      agentRunning = false;
-      activeTool = null;
-      final idx = messages.indexWhere((m) => m.isStreaming);
-      if (idx >= 0) {
-        messages[idx] = messages[idx].copyWith(isStreaming: false);
-      }
-      notifyListeners();
-    }
+    // 会话尚未出现在轮询列表中（如刚新建）时状态未知，不能当作已结束
+    if (current == null) return;
+    final running = current['running'] == true;
     _wasCurrentRunning = running;
+    if (running) {
+      // 轮询兜底：APP 在任务进行中启动时可能已错过实时帧
+      if (!agentRunning) {
+        agentRunning = true;
+        notifyListeners();
+      }
+      return;
+    }
+    if (agentRunning) finishRunning();
   }
 
   // ── 子类必须提供的字段 ──────────────────────────

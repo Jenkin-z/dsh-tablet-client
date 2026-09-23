@@ -110,7 +110,6 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
   Widget _fileRow(FileChange e) {
     final key = '${e.turn ?? 0}:${e.path}';
     final open = _open.contains(key);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

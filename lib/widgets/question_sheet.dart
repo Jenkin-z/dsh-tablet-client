@@ -34,6 +34,7 @@ class _QuestionSheetState extends State<QuestionSheet> {
   final Map<String, Set<String>> _selected = {};
   final Map<String, TextEditingController> _custom = {};
   bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -69,6 +70,14 @@ class _QuestionSheetState extends State<QuestionSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final q in widget.question.questions) _questionBlock(q),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: IosTheme.spaceM),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: IosTheme.iosRed, fontSize: 14),
+                  ),
+                ),
             ],
           ),
         ),
@@ -259,10 +268,17 @@ class _QuestionSheetState extends State<QuestionSheet> {
         if (custom.isNotEmpty) 'custom': custom,
       });
     }
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       await widget.onSubmit(answers);
       if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = '回答未被接受，可能已过期，可再试一次');
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

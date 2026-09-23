@@ -25,6 +25,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   late final ChatController _ctrl;
@@ -182,11 +183,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _submitQuestion(List<Map<String, dynamic>> answers) async {
     final ok = await _ctrl.submitQuestion(answers);
-    if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('回答未被接受，可能已过期')),
-      );
       throw Exception('not accepted');
     }
   }
@@ -196,12 +193,20 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _send() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    if (!_ctrl.connected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未连接，消息已保留')),
+      );
+      return;
+    }
     _inputController.clear();
     _scrollToBottom(force: true);
     try {
       await _ctrl.send(text);
     } catch (e) {
       if (!mounted) return;
+      _inputController.text = text;
+      _inputController.selection = TextSelection.collapsed(offset: text.length);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('发送失败: $e')),
       );
@@ -209,14 +214,18 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _cancel() async {
-    try {
-      await _ctrl.cancel();
-    } catch (e) {
-      if (!mounted) return;
+    await _ctrl.cancel();
+  }
+
+  void _openChanges() {
+    final state = _scaffoldKey.currentState;
+    if (state == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取消失败: $e')),
+        const SnackBar(content: Text('无法打开变更')),
       );
+      return;
     }
+    state.openEndDrawer();
   }
 
   // ── 构建 ────────────────────────────────────────
@@ -225,8 +234,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final sessionId = _ctrl.settings.sessionId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
       appBar: AppBar(
         title: Row(
           children: [
@@ -249,22 +261,24 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           if (_ctrl.agentRunning)
             IconButton(
-              icon: const Icon(Icons.stop_circle_outlined, size: 22),
-              tooltip: '停止',
-              onPressed: _cancel,
+              icon: _ctrl.canceling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.stop_circle_outlined, size: 22),
+              tooltip: _ctrl.canceling ? '正在停止' : '停止',
+              onPressed: _ctrl.canceling ? null : _cancel,
             ),
-          Builder(
-            builder: (drawerContext) => IconButton(
-              icon: Badge(
-                label: Text('${_ctrl.changes.items.length}'),
-                isLabelVisible: _ctrl.changes.items.isNotEmpty,
-                child: const Icon(Icons.difference_outlined, size: 22),
-              ),
-              tooltip: '变更',
-              onPressed: !_ctrl.connected
-                  ? null
-                  : () => Scaffold.of(drawerContext).openEndDrawer(),
+          IconButton(
+            icon: Badge(
+              label: Text('${_ctrl.changes.items.length}'),
+              isLabelVisible: _ctrl.changes.items.isNotEmpty,
+              child: const Icon(Icons.difference_outlined, size: 22),
             ),
+            tooltip: '变更',
+            onPressed: _ctrl.connected ? _openChanges : null,
           ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 22),
@@ -286,6 +300,7 @@ class _ChatScreenState extends State<ChatScreen> {
       endDrawer: ChangesDrawer(tracker: _ctrl.changes),
       body: Column(
         children: [
+          if (!_ctrl.connecting && !_ctrl.connected) _disconnectBanner(),
           Expanded(child: _buildBody()),
           if (_ctrl.activeTool != null)
             ToolStatusBar(toolName: _ctrl.activeTool!),
@@ -297,6 +312,33 @@ class _ChatScreenState extends State<ChatScreen> {
             onSend: _send,
           ),
         ],
+      ),
+      ),
+    );
+  }
+
+  Widget _disconnectBanner() {
+    final retrying = _ctrl.settings.autoReconnect;
+    return Material(
+      color: IosTheme.iosOrange.withValues(alpha: 0.16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: IosTheme.spaceL,
+          vertical: IosTheme.spaceS,
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined,
+                size: 18, color: IosTheme.iosOrange),
+            const SizedBox(width: IosTheme.spaceS),
+            Expanded(
+              child: Text(
+                retrying ? '连接中断，正在重连…' : '已断开，自动重连已关闭',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

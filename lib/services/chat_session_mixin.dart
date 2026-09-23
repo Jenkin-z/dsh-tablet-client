@@ -15,10 +15,8 @@ mixin _ChatSessionMixin on ChangeNotifier {
   List<DshMessage> get messages;
   Set<String> get queuedTexts;
   Set<String> get _pendingEchoRpc;
-  String? get _lastSentText;
-  set _lastSentText(String? v);
-  DateTime? get _lastSentAt;
-  set _lastSentAt(DateTime? v);
+  /// 清掉「刚发出」标记（回声已到 / 切会话）
+  void clearSentEcho();
   bool get agentRunning;
   set agentRunning(bool v);
   String? get activeTool;
@@ -100,8 +98,7 @@ mixin _ChatSessionMixin on ChangeNotifier {
     currentTitle = titleFor(sessionId);
     _pendingEchoRpc.clear();
     queuedTexts.clear();
-    _lastSentText = null;
-    _lastSentAt = null;
+    clearSentEcho();
     changes.clear();
     notifyListeners();
     connectMux(sessionId);

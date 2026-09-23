@@ -28,7 +28,6 @@ class SessionGroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -168,7 +167,6 @@ class SessionListTile extends StatelessWidget {
     final id = session['sessionId'] as String? ?? '';
     final selected = id == activeId;
     final running = session['running'] == true;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: selected
           ? IosTheme.iosBlue.withValues(alpha: 0.1)

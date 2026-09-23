@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:uuid/uuid.dart';
 import '../models/message.dart';
+import '../utils/constants.dart';
 import '../widgets/approval_card.dart';
 import '../widgets/question_sheet.dart';
 import 'changes_tracker.dart';
@@ -12,6 +13,7 @@ import 'mux_stream.dart';
 import 'server_manager.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
+import 'notification_service.dart';
 
 part 'chat_approval_mixin.dart';
 part 'chat_message_mixin.dart';
@@ -57,6 +59,7 @@ class ChatController extends ChangeNotifier
   }
   bool sending = false;
   bool agentRunning = false;
+  bool canceling = false;
   bool loadingSessions = false;
   String? error;
   String? activeTool;
@@ -79,8 +82,26 @@ class ChatController extends ChangeNotifier
   final Set<String> _seenUserSeq = {};
   String? _lastSentText;
   DateTime? _lastSentAt;
+
+  void _rememberSent(String text) {
+    _lastSentText = text;
+    _lastSentAt = DateTime.now();
+  }
+
+  @override
+  bool matchesLastSentEcho(String text) {
+    final at = _lastSentAt;
+    return _lastSentText == text &&
+        at != null &&
+        DateTime.now().difference(at) < echoDedupWindow;
+  }
+
+  @override
+  void clearSentEcho() {
+    _lastSentText = null;
+    _lastSentAt = null;
+  }
   bool _wasCurrentRunning = false;
-  Timer? _approvalPollTimer;
   final _deltaBuffer = StringBuffer();
   Timer? _deltaFlushTimer;
   final _uuid = const Uuid();
@@ -105,7 +126,6 @@ class ChatController extends ChangeNotifier
   void dispose() {
     _reconnectTimer?.cancel();
     _deltaFlushTimer?.cancel();
-    _approvalPollTimer?.cancel();
     _mux?.dispose();
     super.dispose();
   }
@@ -209,6 +229,14 @@ class ChatController extends ChangeNotifier
   void connectMux(String sessionId) {
     _mux?.dispose();
     _muxSessionId = sessionId;
+    // 重连后 Host 会把仍 pending 的 waterfall 重新投递到新的事件流，
+    // 因此先清空本地卡片，避免已应答/已取消的旧卡片残留。
+    approvals.clear();
+    question = null;
+    if (questionDialogOpen) {
+      questionDialogOpen = false;
+      onPopQuestionDialog?.call();
+    }
     final mux = MuxStream(
       wsBaseUrl: settings.wsUrl,
       cookie: settings.active?.cookie,
@@ -230,6 +258,7 @@ class ChatController extends ChangeNotifier
     mux.onToolResult = clearToolStatus;           // _ChatMessageMixin
     mux.onTurnEnd = onTurnEnd;                    // _ChatMessageMixin
     mux.onQueueUpdate = onQueueUpdate;            // _ChatMessageMixin
+    mux.onSessionStatus = onSessionStatus;        // _ChatMessageMixin
     mux.onWorkspaceBaseline = (ids) {
       // 将 workspace/follow 推送的归档 ID 同步到对应 ServerMonitor
       final srv = settings.active;
@@ -250,16 +279,9 @@ class ChatController extends ChangeNotifier
     connected = true;
     notifyListeners();
     _mux = mux;
-    _approvalPollTimer?.cancel();
-    _approvalPollTimer = Timer.periodic(
-        const Duration(seconds: 5), (_) => _checkApprovalsStale());
   }
 
   // ── Mux 事件处理（实现在 chat_message_mixin.dart） ──
-
-  void _checkApprovalsStale() {
-    checkApprovalsStale(settings.sessionId, _mux?.lastCursor);
-  }
 
   // ── 发送 / 取消 ─────────────────────────────────
 
@@ -279,11 +301,19 @@ class ChatController extends ChangeNotifier
 
     try {
       final rpcId = await _api!.sendPrompt(sessionId, text);
+      final idx = messages.lastIndexWhere(
+        (m) => m.role == 'user' && m.id.startsWith('u-'),
+      );
+      if (idx >= 0 && messages[idx].content == text) {
+        messages[idx] = messages[idx].copyWith(id: 'echo-$rpcId');
+      }
       _pendingEchoRpc.add(rpcId);
-      _lastSentText = text;
-      _lastSentAt = DateTime.now();
+      _rememberSent(text);
       return rpcId;
     } catch (e) {
+      messages.removeWhere(
+        (m) => m.role == 'user' && m.id.startsWith('u-') && m.content == text,
+      );
       agentRunning = false;
       notifyListeners();
       rethrow;
@@ -293,20 +323,25 @@ class ChatController extends ChangeNotifier
     }
   }
 
-  Future<void> cancel() async {
+  /// 请求停止当前轮。只有 Host 接受后才进入「正在停止」；
+  /// 按钮是否消失由 session status / turn end 决定，避免请求未生效就假装已停。
+  Future<bool> cancel() async {
     final sessionId = settings.sessionId;
-    if (sessionId == null) return;
+    if (sessionId == null || canceling) return false;
+    canceling = true;
+    notifyListeners();
     try {
-      await _api!.cancelSession(sessionId);
-    } catch (e) {
-      rethrow;
-    } finally {
-      agentRunning = false;
-      activeTool = null;
-      final idx = messages.indexWhere((m) => m.isStreaming);
-      if (idx >= 0) {
-        messages[idx] = messages[idx].copyWith(isStreaming: false);
+      final accepted = await _api!.cancelSession(sessionId);
+      if (!accepted) {
+        onShowSnackBar?.call('停止未被接受，Agent 仍在运行');
+        return false;
       }
+      return true;
+    } catch (e) {
+      onShowSnackBar?.call('停止失败: $e');
+      return false;
+    } finally {
+      canceling = false;
       notifyListeners();
     }
   }

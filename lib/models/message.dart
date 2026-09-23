@@ -15,11 +15,12 @@ class DshMessage {
   }) : timestamp = timestamp ?? DateTime.now();
 
   DshMessage copyWith({
+    String? id,
     String? content,
     bool? isStreaming,
   }) {
     return DshMessage(
-      id: id,
+      id: id ?? this.id,
       role: role,
       content: content ?? this.content,
       timestamp: timestamp,

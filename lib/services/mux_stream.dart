@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
@@ -63,6 +64,10 @@ class MuxStream {
   void Function()? onTurnEnd;
   void Function(List<Map<String, dynamic>> queueItems)? onQueueUpdate;
   void Function(List<String> archivedSessionIds)? onWorkspaceBaseline;
+
+  /// 实时运行状态推送：api-session/status(sessionId, running)
+  void Function(String sessionId, bool running)? onSessionStatus;
+
   void Function()? onDisconnected;
   void Function(String message)? onError;
 
@@ -84,9 +89,12 @@ class MuxStream {
     if (_disposed) return;
     disconnect();
     try {
+      // pingInterval 是唯一的存活探测：没有它，网络硬断时 WebSocket
+      // 不会报错，connected 会一直为 true，断线横幅永远等不到触发。
       _channel = IOWebSocketChannel.connect(
         Uri.parse('$wsBaseUrl/api/remote.mux'),
         headers: _headers,
+        pingInterval: const Duration(seconds: 20),
       );
       _send({
         'type': 'open',
@@ -213,8 +221,11 @@ class MuxStream {
       case 'assistant-stream':
         _onAssistantFrame(value['frame']);
         break;
+      case 'emit':
+        _onEmit(value);
+        break;
       default:
-        break; // emit：api-session/* 忽略
+        break;
     }
   }
 
@@ -290,6 +301,19 @@ class MuxStream {
     }
   }
 
+  /// 广播事件帧：{type:'emit', event, args}
+  ///
+  /// 只消费 `api-session/status(sessionId, running)`：Host 在 Agent 运行状态
+  /// 变化时实时推送，用于纠正轮询（8s）造成的状态滞后。
+  void _onEmit(Map<String, dynamic> value) {
+    if (value['event'] != 'api-session/status') return;
+    final args = value['args'];
+    if (args is! List || args.length < 2) return;
+    final sessionId = args[0];
+    if (sessionId is! String || sessionId.isEmpty) return;
+    onSessionStatus?.call(sessionId, args[1] == true);
+  }
+
   Future<bool> _postEventResult(String eventId, Object value) async {
     final clientId = _clientId;
     if (clientId == null || eventId.isEmpty) return false;
@@ -312,11 +336,19 @@ class MuxStream {
             }),
           )
           .timeout(eventResultTimeout);
-      if (resp.statusCode != 200) return false;
+      if (resp.statusCode != 200) {
+        debugPrint('\$events/result HTTP ${resp.statusCode} event=$eventId');
+        return false;
+      }
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final result = data['result'];
-      return result is Map && result['ok'] == true;
-    } catch (_) {
+      final ok = result is Map && result['ok'] == true;
+      if (!ok) {
+        debugPrint('\$events/result rejected event=$eventId client=$clientId body=${resp.body}');
+      }
+      return ok;
+    } catch (e) {
+      debugPrint('\$events/result failed event=$eventId: $e');
       return false;
     }
   }

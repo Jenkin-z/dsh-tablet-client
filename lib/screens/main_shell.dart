@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
-import '../theme/ios_theme.dart';
 import '../widgets/update_dialog.dart';
 import 'chat_screen.dart';
 import 'console_screen.dart';

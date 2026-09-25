@@ -65,10 +65,18 @@ class DshSessionState extends ChangeNotifier {
   bool get degraded => _connected && _sessionsOk == false;
 
   /// 指示器该显示的健康状态（供 ConnectionStatus 使用）
-  /// connecting → degraded → connected → offline
+  ///
+  /// `_sessionsOk` 是三态：`null` = **还没验证过**，`true` = 验证过且成功，
+  /// `false` = 验证过但失败。
+  ///
+  /// 曾经的写法是 `if (_sessionsOk == false) degraded else healthy`，
+  /// 把 `null` 也算成健康 —— 于是 socket 一连上、第一次列表还没回来
+  /// （以及每次 reset() 之后）就显示绿色，用户看到的就是「一直绿」。
+  /// 「没验证过」只能算「连接中」，不能算「健康」。
   ConnectionHealth get health {
     if (_connecting) return ConnectionHealth.connecting;
     if (!_connected) return ConnectionHealth.offline;
+    if (_sessionsOk == null) return ConnectionHealth.connecting;
     if (_sessionsOk == false) return ConnectionHealth.degraded;
     return ConnectionHealth.healthy;
   }

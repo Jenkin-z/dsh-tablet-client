@@ -43,7 +43,11 @@ void main() {
     test('还没拉过列表时不算降级（不能一上线就报警）', () {
       state.setConnected(true);
       expect(state.sessionsOk, isNull);
-      expect(state.health, ConnectionHealth.healthy);
+      // 「没验证过」= 连接中（橙），不是 degraded（也不是 healthy）。
+      // 这条曾经断言 healthy，那正是「状态点一直绿」这个 bug 的一部分：
+      // socket 一连上、第一次列表还没回来就报绿。
+      expect(state.health, ConnectionHealth.connecting);
+      expect(state.degraded, isFalse, reason: '没验证过 ≠ 降级，不该报警');
     });
 
     test('断线优先于降级 → offline', () {

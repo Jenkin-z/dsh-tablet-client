@@ -192,8 +192,15 @@ class ConsoleScreen extends StatelessWidget {
             action: unviewedKeys.isEmpty
                 ? null
                 : TextButton(
-                    onPressed: () => settings
-                        .markAllSeen(unviewedKeys.toList(growable: false)),
+                    // 清「全部未读」，而不是只清这个 3 小时区块里的。
+                    //
+                    // 顶部的未读计数走 server_manager.unviewedCount →
+                    // _filter(unviewed:)，那里**没有时间窗口**、是全量的。
+                    // 之前这里只传 3 小时窗口内的 key，两者 scope 不一致：
+                    // 超窗的未读永远清不掉，数字只增不减（用户看到 103）。
+                    onPressed: () => settings.markAllSeen(
+                      settings.unviewedIds.toList(growable: false),
+                    ),
                     child: const Text('全部已读'),
                   ),
           ),

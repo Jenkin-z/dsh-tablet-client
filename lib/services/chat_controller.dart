@@ -89,8 +89,20 @@ class ChatController extends ChangeNotifier {
     _models = ModelService(_api!);
     state.setSessionId(settings.sessionId);
 
+    await _markCurrentSeen(srv.id, settings.sessionId);
     await _refreshSessions();
     await _connectMux(settings.sessionId);
+  }
+
+  /// 打开一个会话 = 读过它。
+  ///
+  /// 这是未读功能的**唯一出口**。此前 `settings.markSeen()` 只在
+  /// settings_service 里定义、**从未被任何界面调用**，于是未读只能靠
+  /// 「全部已读」清空；而那个按钮又只清 3 小时窗口内的，超窗的永远清不掉
+  /// —— 这就是用户看到的「一直有未读、数字涨到 103」。
+  Future<void> _markCurrentSeen(String serverId, String? sessionId) async {
+    if (sessionId == null || sessionId.isEmpty) return;
+    await settings.markSeen(settings.seenKey(serverId, sessionId));
   }
 
   Future<void> _refreshSessions() async {
@@ -257,6 +269,8 @@ class ChatController extends ChangeNotifier {
     await settings.setSessionId(sessionId);
     state.setSessionId(sessionId);
     state.setSessionTitle(_titleFor(sessionId));
+    // 打开即已读：切换会话也要清掉它的未读标记
+    await _markCurrentSeen(settings.activeServerId ?? '', sessionId);
     dispatcher.reset();
     await _connectMux(sessionId);
   }

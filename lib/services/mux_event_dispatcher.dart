@@ -230,6 +230,10 @@ class MuxEventDispatcher {
     }
 
     _touchActivity();
+    // 用户发了新消息 = 新一轮的开始。
+    // 必须在这里重新武装运行态：本轮消息可能被客户端去重（同内容、
+    // 同 seq）而跳过下面那行，但用户的心智模型是「我一发，它就又在跑了」。
+    _turnClosed = false;
     _messages.add(DshMessage(
       id: key.isEmpty ? 'u-${DateTime.now().millisecondsSinceEpoch}' : key,
       role: 'user',
@@ -260,10 +264,21 @@ class MuxEventDispatcher {
   ///
   /// 写入权威中枢，并顺带修正当前会话的 agentRunning，
   /// 避免轮询（8s）造成的状态滞后。
+  ///
+  /// **`running: true` 必须受 [_turnClosed] 约束。** 这条通道是
+  /// `$events` 的 emit，重连时 Host 会把当前状态重放一遍；如果本轮的
+  /// `turn/end` 已经处理过（`_turnClosed == true`），此时再来的
+  /// `running: true` 是**上一轮的残留**，不是新一轮 —— 真正的新一轮会先发
+  /// `turn/start`，那时 [_turnClosed] 已被清掉。
+  ///
+  /// 不设这道闸，重连一次就会把已收尾的会话顶成「进行中」，
+  /// 而且之后不会再有 `turn/end` 来收尾，按钮就永久卡住。
   void onSessionStatus(String sessionId, bool running) {
     state.updateSessionStatus(sessionId, running);
     if (sessionId == state.sessionId) {
-      state.setAgentRunning(running);
+      if (!running || !_turnClosed) {
+        state.setAgentRunning(running);
+      }
     }
     onSessionStatusExternal?.call(sessionId, running);
   }

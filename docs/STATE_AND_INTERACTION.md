@@ -109,7 +109,55 @@ App 端用 `utils/session_format.dart` 的 `isUserFacingSession()` 表达前两�
 因此 `SessionMonitor` 和 `ChatController` 两处 `listSessions()` 的返回值
 都必须过这一层。新增任何消费 `session/list` 的地方，同样要过。
 
-## 七、重构不得静默删除功能
+## 七、三态字段不许把「未知」当成「好」
+
+`_sessionsOk` 是 `bool?`，`null` 的含义是**还没验证过**。
+判定健康度时把 `null` 归到 `healthy` 是错的——socket 一连上、第一次
+`session/list` 还没回来（以及每次 `reset()` 之后）就会显示绿色，
+用户看到的就是「状态点一直绿」。
+
+规则：**任何三态（未知/成功/失败）字段，必须为「未知」单独给一个呈现，
+不能并到成功里去。** 未知属于「进行中」，不属于「已完成」。
+
+## 八、未读的 scope 必须与计数一致
+
+控制台顶部的未读数走 `server_manager.unviewedCount` →
+`_filter(unviewed: true)`，那里**没有时间窗口**，是全量统计。
+
+而「全部已读」按钮曾经只清 3 小时窗口内的 key（`if (updatedAt < cutoff) continue`
+拿到的 `activeKeys`）。两者 scope 不一致的后果是：超过 3 小时的未读**永远
+清不掉**，数字只增不减。
+
+规则：**一个计数的清除操作，必须覆盖该计数的全部范围。** 区块标题可以
+说「最近 3 小时」，但按钮清的是全量未读。
+
+配套的一条：`markSeen()` 曾经只被定义、**从未被任何界面调用**，所以未读
+唯一能减少的途径就是那个按钮。现在「打开会话」和「切换会话」两条路径都会
+调用它——打开即已读。
+
+## 九、`running: true` 必须受本轮收尾约束
+
+`api-session/status`（`$events` 的 emit）不是「变化时才推」，而是**快照**：
+重连时 Host 会把当前状态重放一遍。
+
+于是会出现：本轮的 `turn/end` 已经处理过，重连时又收到一个
+`running: true`（那台机器确实在跑，但那不是**本**轮），把已收尾的会话
+顶成「进行中」，而之后不会再有 `turn/end` 来收尾 → 按钮永久卡住。
+
+`_turnClosed` 这道闸必须同时守住**所有**写入运行态的入口，不能只守
+`_flushDelta()`：
+
+```dart
+if (!running || !_turnClosed) state.setAgentRunning(running);
+```
+
+`running: false` 永远接受；`running: true` 只在「本轮还没收尾」时接受。
+
+**配套（否则这道闸会吞掉合法的新一轮）**：`onUserMessage()` 必须把
+`_turnClosed` 清回 `false`。用户发了消息就是新一轮的开始，而那条消息
+可能因内容去重被跳过，不能依赖它顺带重新武装。
+
+## 十、重构不得静默删除功能
 
 这个仓库发生过一次大规模重构，把控制台的「最近 3 小时 / 全部已读 / 未读橙标 /
 设备徽章 / 下拉刷新」、对话页的「停止 / 变更入口 / 重连 / 断线横幅」、

@@ -1,18 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/pending.dart';
 import '../theme/ios_theme.dart';
 
-/// 待回答的问题请求（一 ask 多问一批答）
-class PendingQuestion {
-  final String rpcId;
-  final String sessionId;
-  final List<Map<String, dynamic>> questions;
-
-  PendingQuestion({
-    required this.rpcId,
-    required this.sessionId,
-    required this.questions,
-  });
-}
+export '../models/pending.dart' show PendingQuestion;
 
 /// 问题表单弹窗 —— iOS 风格
 ///
@@ -84,11 +74,11 @@ class _QuestionSheetState extends State<QuestionSheet> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          onPressed: _submitting ? null : _cancel,
           child: Text(
-            '稍后',
+            '放弃回答',
             style: TextStyle(
-              color: IosTheme.iosBlue,
+              color: IosTheme.iosRed,
               fontSize: 17,
             ),
           ),
@@ -217,6 +207,9 @@ class _QuestionSheetState extends State<QuestionSheet> {
                               selected
                                 ..clear()
                                 ..add(label);
+                              // 单选：选选项即清空自定义文本
+                              _custom[qid]?.clear();
+                              _error = null;
                             }),
                             tooltip: desc,
                             selectedColor:
@@ -257,24 +250,58 @@ class _QuestionSheetState extends State<QuestionSheet> {
     );
   }
 
-  Future<void> _submit() async {
+  /// 按 Web 端规则编码答案（QuestionComposer.tsx:205-232）
+  ///
+  /// - 单选 + 自定义文本 → `selected` **强制清空**（自定义即替代选项）
+  /// - 多选 → `selected` 保留，且与 `custom` **共存**
+  /// - `custom` 为空时**整个键省略**（不能是空串）
+  /// - 跳过 → `{id, selected:[]}`
+  List<Map<String, dynamic>> _buildAnswers() {
     final answers = <Map<String, dynamic>>[];
     for (final q in widget.question.questions) {
       final qid = q['id'] as String? ?? '';
+      final multi = q['multiSelect'] == true;
       final custom = _custom[qid]?.text.trim() ?? '';
+      final selected = _selected[qid]?.toList() ?? <String>[];
+
+      // 自定义答案与选项互斥（多选除外）
+      final keepSelected = custom.isEmpty || multi ? selected : <String>[];
       answers.add({
         'id': qid,
-        'selected': _selected[qid]?.toList() ?? <String>[],
+        'selected': keepSelected,
         if (custom.isNotEmpty) 'custom': custom,
       });
     }
+    return answers;
+  }
+
+  /// 该题是否已回答：有选项被选中，或填了自定义文本
+  bool _answered(Map<String, dynamic> q) {
+    final qid = q['id'] as String? ?? '';
+    final custom = _custom[qid]?.text.trim() ?? '';
+    return (_selected[qid]?.isNotEmpty ?? false) || custom.isNotEmpty;
+  }
+
+  Future<void> _cancel() async {
+    // 返回 false 表示「未提交」→ 调用方据此取消 Host 侧的待答请求
+    if (mounted) Navigator.of(context).pop(false);
+  }
+
+  Future<void> _submit() async {
+    // Web 端要求全部作答才可提交，未答则跳到第一处缺失
+    final missing = widget.question.questions.where((q) => !_answered(q)).toList();
+    if (missing.isNotEmpty) {
+      setState(() => _error = '请先完成这道问题：请选择一个选项或填写自定义答案。');
+      return;
+    }
+
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
-      await widget.onSubmit(answers);
-      if (mounted) Navigator.of(context).pop();
+      await widget.onSubmit(_buildAnswers());
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         setState(() => _error = '回答未被接受，可能已过期，可再试一次');

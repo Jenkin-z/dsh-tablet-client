@@ -285,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 13)),
       value: value,
       onChanged: onChanged,
-      activeColor: IosTheme.iosGreen,
+      activeThumbColor: IosTheme.iosGreen,
     );
   }
 
@@ -408,7 +408,7 @@ class _ForegroundServiceTileState extends State<_ForegroundServiceTile> {
           style: TextStyle(fontSize: 13)),
       value: _running,
       onChanged: _toggle,
-      activeColor: IosTheme.iosGreen,
+      activeThumbColor: IosTheme.iosGreen,
     );
   }
 }

@@ -1,59 +1,128 @@
 import 'package:flutter/material.dart';
+import '../theme/ios_theme.dart';
 
-class ConsoleEmptyState extends StatefulWidget {
-  const ConsoleEmptyState({super.key});
+/// 控制台动画组件
+class ConsolePulseDot extends StatefulWidget {
+  const ConsolePulseDot({super.key});
 
   @override
-  State<ConsoleEmptyState> createState() => _ConsoleEmptyStateState();
+  State<ConsolePulseDot> createState() => _ConsolePulseDotState();
 }
 
-class _ConsoleEmptyStateState extends State<ConsoleEmptyState>
+class _ConsolePulseDotState extends State<ConsolePulseDot>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
+  late AnimationController _controller;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
-    _c.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Column(
-        children: [
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, -0.08),
-              end: const Offset(0, 0.08),
-            ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
-            child: const Icon(Icons.radar, size: 56, color: Colors.blueGrey),
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: IosTheme.iosGreen.withValues(alpha: _animation.value),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 12),
-          Text('一切安静', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            '运行中的会话和待查看的完成会话\n会出现在这里',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+          child: child,
+        );
+      },
+      child: const Icon(
+        Icons.play_arrow,
+        size: 12,
+        color: Colors.white,
       ),
     );
   }
 }
 
-/// 入场：淡入 + 上滑（按 key 只播一次）
+/// 控制台统计卡片
+class ConsoleStatsCard extends StatelessWidget {
+  final int runningCount;
+  final int unviewedCount;
+  final int totalCount;
+
+  const ConsoleStatsCard({
+    super.key,
+    required this.runningCount,
+    required this.unviewedCount,
+    required this.totalCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: IosTheme.spaceM,
+        vertical: IosTheme.spaceS,
+      ),
+      padding: const EdgeInsets.all(IosTheme.spaceM),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(IosTheme.radiusM),
+        border: Border.all(
+          color: isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('运行中', runningCount, IosTheme.iosGreen),
+          _buildStatItem('待查看', unviewedCount, IosTheme.iosOrange),
+          _buildStatItem('总会话', totalCount, IosTheme.iosGray),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, int count, Color color) {
+    return Column(
+      children: [
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: IosTheme.iosGray,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 入场动画
 class ConsoleEntrance extends StatefulWidget {
   final int index;
   final Widget child;
@@ -94,116 +163,40 @@ class _ConsoleEntranceState extends State<ConsoleEntrance> {
   }
 }
 
-class ConsolePulseDot extends StatefulWidget {
-  const ConsolePulseDot({super.key});
-
-  @override
-  State<ConsolePulseDot> createState() => _ConsolePulseDotState();
-}
-
-class _ConsolePulseDotState extends State<ConsolePulseDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+/// 空状态
+class ConsoleEmptyState extends StatelessWidget {
+  const ConsoleEmptyState({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: Stack(
-        alignment: Alignment.center,
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          ScaleTransition(
-            scale: Tween(begin: 0.6, end: 1.6)
-                .animate(CurvedAnimation(parent: _c, curve: Curves.easeOut)),
-            child: FadeTransition(
-              opacity: Tween(begin: 0.7, end: 0.0).animate(_c),
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: const BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                ),
-              ),
+          Icon(
+            Icons.computer_outlined,
+            size: 64,
+            color: IosTheme.iosGray,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '暂无会话',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: IosTheme.iosGray,
             ),
           ),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
+          const SizedBox(height: 8),
+          Text(
+            '运行中的会话和待查看的完成会话\n会出现在这里',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: IosTheme.iosGray,
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class ConsoleBreathBadge extends StatefulWidget {
-  final String text;
-  const ConsoleBreathBadge({super.key, this.text = '!'});
-
-  @override
-  State<ConsoleBreathBadge> createState() => _ConsoleBreathBadgeState();
-}
-
-class _ConsoleBreathBadgeState extends State<ConsoleBreathBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween(begin: 1.0, end: 0.35)
-          .animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
-      child: Container(
-        margin: const EdgeInsets.only(right: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.orange,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          widget.text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
       ),
     );
   }

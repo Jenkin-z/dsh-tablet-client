@@ -5,7 +5,8 @@ import '../theme/ios_theme.dart';
 
 /// 单条消息气泡：用户消息纯文本，Agent 消息按 Markdown 渲染
 ///
-/// iOS 风格：用户消息蓝色圆角气泡，Agent 消息白色/深色背景。
+/// iOS 风格：用户消息蓝色圆角气泡，Agent 消息白色/深色背景，
+/// 系统消息（错误等）淡红背景居中显示。
 class MessageBubble extends StatelessWidget {
   final DshMessage message;
 
@@ -14,11 +15,16 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.role == 'user';
+    final isSystem = message.role == 'system';
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser
+          ? Alignment.centerRight
+          : isSystem
+              ? Alignment.center
+              : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
@@ -34,15 +40,20 @@ class MessageBubble extends StatelessWidget {
           horizontal: IosTheme.spaceL,
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? IosTheme.iosBlue
-              : (isDark ? const Color(0xFF1C1C1E) : Colors.white),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(IosTheme.radiusM),
-            topRight: const Radius.circular(IosTheme.radiusM),
-            bottomLeft: Radius.circular(isUser ? IosTheme.radiusM : 4),
-            bottomRight: Radius.circular(isUser ? 4 : IosTheme.radiusM),
-          ),
+          color: isSystem
+              ? (isDark
+                  ? IosTheme.iosRed.withValues(alpha: 0.15)
+                  : IosTheme.iosRed.withValues(alpha: 0.08))
+              : isUser
+                  ? IosTheme.iosBlue
+                  : (isDark ? const Color(0xFF1C1C1E) : Colors.white),
+          borderRadius: BorderRadius.circular(IosTheme.radiusM),
+          border: isSystem
+              ? Border.all(
+                  color: IosTheme.iosRed.withValues(alpha: 0.3),
+                  width: 1,
+                )
+              : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
@@ -54,11 +65,25 @@ class MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isUser)
+            if (isSystem)
+              SelectableText(
+                message.content,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: isDark
+                      ? IosTheme.iosRed.withValues(alpha: 0.9)
+                      : IosTheme.iosRed,
+                  height: 1.5,
+                  fontSize: 14,
+                ),
+              )
+            else if (isUser)
               SelectableText(
                 message.content,
                 style: theme.textTheme.bodyLarge?.copyWith(
-                  color: Colors.white,
+                  // 未确认的乐观气泡先淡化，Host 回执后恢复实心
+                  color: message.pending
+                      ? Colors.white.withValues(alpha: 0.65)
+                      : Colors.white,
                   height: 1.5,
                   fontSize: 16,
                 ),

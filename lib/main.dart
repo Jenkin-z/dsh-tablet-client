@@ -3,6 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/main_shell.dart';
+import 'services/dsh_session_state.dart';
 import 'services/notification_service.dart';
 import 'services/server_manager.dart';
 import 'services/session_router.dart';
@@ -43,12 +44,21 @@ void main() async {
     ),
   );
 
+  // 先把两个实例建出来，好把「活跃 PC 的轮询结果」接进共享状态——
+  // 否则控制台会出现「设备卡全离线、顶部状态点还是绿的」这种自相矛盾。
+  final sessionState = DshSessionState();
+  final serverManager = ServerManager(settings)
+    ..onActiveHealth = (ok, error) =>
+        sessionState.setSessionsHealth(ok: ok, error: error);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider(create: (_) => SessionRouter()),
-        ChangeNotifierProvider(create: (_) => ServerManager(settings)),
+        ChangeNotifierProvider.value(value: serverManager),
+        // 单一权威状态源：全局唯一，ChatScreen 驱动、其余页面只读
+        ChangeNotifierProvider.value(value: sessionState),
       ],
       child: const DshTabletApp(),
     ),

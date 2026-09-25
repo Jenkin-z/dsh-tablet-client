@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/ios_theme.dart';
+import '../services/server_manager.dart';
 
 /// 顶部设备状态卡：一台 PC 一张 —— iOS 风格
 class ConsoleDeviceCard extends StatelessWidget {
@@ -225,6 +226,51 @@ class ConsoleDeviceChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 设备列表区域
+class ConsoleDevices extends StatelessWidget {
+  final List<ServerGroup> groups;
+  final void Function(String serverId) onTapDevice;
+
+  /// 当前正在对话的 PC（来自权威状态源），null 表示未连接
+  final String? activeServerId;
+
+  const ConsoleDevices({
+    super.key,
+    required this.groups,
+    required this.onTapDevice,
+    this.activeServerId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 120,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceM),
+        itemCount: groups.length,
+        itemBuilder: (context, index) {
+          final group = groups[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: IosTheme.spaceS),
+            child: ConsoleDeviceCard(
+              name: group.server.name,
+              hostLabel: '${group.server.host}:${group.server.port}',
+              online: group.monitor.online,
+              needsAuth: group.server.unpaired,
+              running: group.running.length,
+              unviewed: group.unviewed.length,
+              error: group.monitor.error,
+              active: group.server.id == activeServerId,
+              onTap: () => onTapDevice(group.server.id),
+            ),
+          );
+        },
       ),
     );
   }

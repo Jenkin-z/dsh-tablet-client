@@ -1,22 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/pending.dart';
 import '../theme/ios_theme.dart';
 
-/// 待确认的审批请求（immutable）
-class PendingApproval {
-  final String rpcId;
-  final String sessionId;
-  final String approvalId;
-  final String toolName;
-  final String? reason;
-
-  const PendingApproval({
-    required this.rpcId,
-    required this.sessionId,
-    required this.approvalId,
-    required this.toolName,
-    required this.reason,
-  });
-}
+export '../models/pending.dart' show PendingApproval;
 
 /// 审批确认卡 —— iOS 风格
 ///

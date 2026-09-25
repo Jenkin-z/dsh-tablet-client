@@ -19,6 +19,9 @@ class SessionDrawer extends StatefulWidget {
   final void Function(String? cwd) onCreateInWorkspace;
   final void Function(String sessionId) onSelectSession;
 
+  /// 解析某会话的待处理交互类型（由上层注入，避免 widget 直接依赖 service）
+  final String? Function(String sessionId)? pendingKindOf;
+
   const SessionDrawer({
     super.key,
     required this.sessions,
@@ -29,6 +32,7 @@ class SessionDrawer extends StatefulWidget {
     required this.onCreateUngrouped,
     required this.onCreateInWorkspace,
     required this.onSelectSession,
+    this.pendingKindOf,
   });
 
   @override
@@ -201,6 +205,8 @@ class _SessionDrawerState extends State<SessionDrawer> {
             activeId: widget.activeId,
             indented: cwd.isNotEmpty,
             onSelect: widget.onSelectSession,
+            pendingKind:
+                widget.pendingKindOf?.call(items[i]['sessionId'] as String? ?? ''),
           ));
         }
         if (items.length > 5) {

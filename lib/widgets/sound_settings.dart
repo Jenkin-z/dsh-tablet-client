@@ -36,7 +36,7 @@ class SoundSettingsSection extends StatelessWidget {
                 ),
                 value: settings.soundEnabled,
                 onChanged: (v) => settings.setSoundEnabled(v),
-                activeColor: IosTheme.iosGreen,
+                activeThumbColor: IosTheme.iosGreen,
               ),
               Container(
                 height: 0.5,
@@ -60,7 +60,7 @@ class SoundSettingsSection extends StatelessWidget {
                 onChanged: settings.soundEnabled
                     ? (v) => settings.setApprovalSound(v)
                     : null,
-                activeColor: IosTheme.iosGreen,
+                activeThumbColor: IosTheme.iosGreen,
               ),
               Container(
                 height: 0.5,
@@ -84,7 +84,7 @@ class SoundSettingsSection extends StatelessWidget {
                 onChanged: settings.soundEnabled
                     ? (v) => settings.setCompletionSound(v)
                     : null,
-                activeColor: IosTheme.iosGreen,
+                activeThumbColor: IosTheme.iosGreen,
               ),
               Container(
                 height: 0.5,

@@ -65,6 +65,19 @@ class _MainShellState extends State<MainShell> {
     setState(() => _currentIndex = 1);
   }
 
+  /// 只切当前机器，不跳转对话页。
+  ///
+  /// 用于「这台机器没有正在跑的会话」时点设备卡：
+  /// 此时该机器的会话列表和状态点都要跟着换过去。
+  Future<void> _switchServer(String serverId) async {
+    final settings = Provider.of<SettingsService>(context, listen: false);
+    if (settings.activeServerId == serverId) return;
+    await settings.setActiveServer(serverId);
+    if (!mounted) return;
+    // 切机器不带会话：让 ChatScreen 用它自己记的该机器会话
+    Provider.of<SessionRouter>(context, listen: false).request(serverId, null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
@@ -72,7 +85,10 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          ConsoleScreen(onOpenSession: _openSession),
+          ConsoleScreen(
+            onOpenSession: _openSession,
+            onSwitchServer: _switchServer,
+          ),
           ChatScreen(key: ValueKey(settings.activeServerId)),
           const SettingsScreen(),
         ],

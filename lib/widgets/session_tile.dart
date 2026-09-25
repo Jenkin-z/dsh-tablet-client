@@ -153,6 +153,12 @@ class SessionListTile extends StatelessWidget {
   final bool indented;
   final void Function(String sessionId) onSelect;
 
+  /// 待处理交互类型：`approval` / `question` / `plan-review`，无则 null。
+  ///
+  /// 与 Web 端一致（Rows.tsx:246-261）：有待办时状态点显示告警色，
+  /// 且**优先级高于 running** —— 有待办的会话不再显示「运行中」。
+  final String? pendingKind;
+
   const SessionListTile({
     super.key,
     required this.session,
@@ -160,6 +166,7 @@ class SessionListTile extends StatelessWidget {
     required this.activeId,
     required this.indented,
     required this.onSelect,
+    this.pendingKind,
   });
 
   @override
@@ -167,6 +174,13 @@ class SessionListTile extends StatelessWidget {
     final id = session['sessionId'] as String? ?? '';
     final selected = id == activeId;
     final running = session['running'] == true;
+    final hasPending = pendingKind != null;
+    // 待办优先于运行中
+    final iconColor = hasPending
+        ? IosTheme.iosOrange
+        : running
+            ? IosTheme.iosGreen
+            : (selected ? IosTheme.iosBlue : IosTheme.iosGray);
     return Material(
       color: selected
           ? IosTheme.iosBlue.withValues(alpha: 0.1)
@@ -183,15 +197,15 @@ class SessionListTile extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                running
-                    ? Icons.sync
-                    : (session['blank'] == true
-                        ? Icons.chat_bubble_outline
-                        : Icons.chat_bubble),
+                hasPending
+                    ? Icons.error_outline
+                    : running
+                        ? Icons.sync
+                        : (session['blank'] == true
+                            ? Icons.chat_bubble_outline
+                            : Icons.chat_bubble),
                 size: 20,
-                color: running
-                    ? IosTheme.iosGreen
-                    : (selected ? IosTheme.iosBlue : IosTheme.iosGray),
+                color: iconColor,
               ),
               const SizedBox(width: IosTheme.spaceM),
               Expanded(

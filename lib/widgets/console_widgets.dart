@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
 import '../theme/ios_theme.dart';
-import 'console_animations.dart';
 
-export 'console_animations.dart';
+/// 呼吸动画徽标
+class ConsoleBreathBadge extends StatelessWidget {
+  const ConsoleBreathBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: Colors.orange,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
 
 /// 列表分节标题（带计数与可选强调徽标）—— iOS 风格
 class ConsoleSectionHeader extends StatelessWidget {
@@ -76,7 +90,7 @@ class ConsoleSectionHeader extends StatelessWidget {
           ),
           if (badge) ...[
             const SizedBox(width: IosTheme.spaceS),
-            const ConsoleBreathBadge(),
+            ConsoleBreathBadge(),
           ],
           const Spacer(),
           if (action != null) action!,

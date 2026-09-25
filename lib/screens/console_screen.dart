@@ -1,27 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/dsh_server.dart';
+import '../services/dsh_session_state.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../utils/constants.dart';
+import '../widgets/connection_status.dart';
 import '../widgets/console_devices.dart';
 import '../widgets/console_merged_tile.dart';
 import '../widgets/console_widgets.dart';
 import 'pair_screen.dart';
 
-/// 控制台：顶部每设备一张状态卡，下方合并会话列表（最近 3 小时活跃）
+/// 控制台：顶部每设备一张状态卡，下方按设备分组展示会话
+///
+/// 重构后：只做展示，不做权威判断。
+/// 连接/会话状态一律从 DshSessionState 读取，不自己推断。
 class ConsoleScreen extends StatelessWidget {
   final void Function(String serverId, String sessionId) onOpenSession;
 
-  const ConsoleScreen({super.key, required this.onOpenSession});
+  /// 只切机器、不指定会话。点设备卡但没有运行中的会话时走这条。
+  final void Function(String serverId) onSwitchServer;
 
-  static final _window = consoleRecentWindow;
+  const ConsoleScreen({
+    super.key,
+    required this.onOpenSession,
+    required this.onSwitchServer,
+  });
+
+  /// 会话活跃窗口：与重构前的控制台一致（3 小时）
+  static const _window = consoleRecentWindow;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ServerManager, SettingsService>(
-      builder: (context, manager, settings, _) {
+    return Consumer3<ServerManager, SettingsService, DshSessionState>(
+      builder: (context, manager, settings, session, _) {
         final groups = manager.groups;
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
@@ -35,6 +47,8 @@ class ConsoleScreen extends StatelessWidget {
               ),
             ),
             actions: [
+              const Center(child: ConnectionStatus()),
+              const SizedBox(width: IosTheme.spaceM),
               if (manager.lastRefresh != null)
                 Center(
                   child: Padding(
@@ -55,7 +69,7 @@ class ConsoleScreen extends StatelessWidget {
               ),
             ],
           ),
-          body: _body(context, manager, settings, groups),
+          body: _body(context, manager, settings, session, groups),
         );
       },
     );
@@ -68,8 +82,10 @@ class ConsoleScreen extends StatelessWidget {
     BuildContext context,
     ServerManager manager,
     SettingsService settings,
+    DshSessionState session,
     List<ServerGroup> groups,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (groups.isEmpty) {
       return Center(
         child: Column(
@@ -78,136 +94,157 @@ class ConsoleScreen extends StatelessWidget {
             Icon(
               Icons.computer_outlined,
               size: 56,
-              color: IosTheme.iosGray3,
+              color: IosTheme.iosGray,
             ),
             const SizedBox(height: IosTheme.spaceM),
             Text(
-              '还没有 PC，去设置里添加',
+              '还没有 PC',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 color: IosTheme.iosGray,
               ),
+            ),
+            const SizedBox(height: IosTheme.spaceS),
+            Text(
+              '去设置里添加一台运行 DSH 的电脑',
+              style: TextStyle(
+                fontSize: 15,
+                color: IosTheme.iosGray,
+              ),
+            ),
+            const SizedBox(height: IosTheme.spaceXL),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PairScreen()),
+                );
+              },
+              child: const Text('添加 PC'),
             ),
           ],
         ),
       );
     }
-    final loading = groups.every((g) => g.monitor.loading) &&
-        groups.every((g) => g.monitor.sessions.isEmpty);
-    if (loading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: IosTheme.iosBlue,
-        ),
-      );
+
+    // 3 小时窗口内的会话总数，用于区块标题的计数与「全部已读」
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
+    final activeKeys = <String>[];
+    for (final g in groups) {
+      for (final s in [...g.running, ...g.unviewed, ...g.recent]) {
+        final id = s['sessionId'] as String? ?? '';
+        if (id.isEmpty || s['blank'] == true) continue;
+        if (((s['updatedAt'] as num?)?.toInt() ?? 0) < cutoff) continue;
+        activeKeys.add(settings.seenKey(g.server.id, id));
+      }
     }
-    final merged = _mergedRecent(groups);
-    final currentKey = settings.active == null
-        ? null
-        : settings.seenKey(settings.active!.id, settings.sessionId ?? '');
-    final unviewedKeys = merged
-        .where((m) =>
-            settings.unviewedIds.contains(
-                settings.seenKey(m.group.server.id, m.sessionIdAsString)))
-        .map((m) =>
-            settings.seenKey(m.group.server.id, m.sessionIdAsString))
-        .toSet();
+    final unviewedKeys =
+        activeKeys.where(settings.unviewedIds.contains).toSet();
+
+    // 每台机器是否有窗口内的会话，没有就不渲染该分组（避免空标题）
+    final groupsWithRecent = groups.where((g) {
+      final c = DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
+      return [...g.running, ...g.unviewed, ...g.recent].any((s) {
+        final id = s['sessionId'] as String? ?? '';
+        if (id.isEmpty || s['blank'] == true) return false;
+        return ((s['updatedAt'] as num?)?.toInt() ?? 0) >= c;
+      });
+    }).toList();
+
     return RefreshIndicator(
       onRefresh: manager.refreshAll,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          IosTheme.spaceL,
-          IosTheme.spaceM,
-          IosTheme.spaceL,
-          IosTheme.spaceXXXL,
-        ),
+        padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
         children: [
-          // 设备卡片区
-          _DeviceCards(
+          ConsoleDevices(
             groups: groups,
-            activeId: settings.activeServerId,
-            onSelect: (server) async {
-              if (server.unpaired) {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => PairScreen(existingServerId: server.id),
-                ));
+            // 高亮只看「哪台是当前机器」，与连没连上无关。
+            // 之前写成 session.connected ? activeServerId : null，
+            // 一断线就全不亮，看着像切换没生效。
+            activeServerId: settings.activeServerId,
+            onTapDevice: (serverId) {
+              // 点设备 = 切到这台机器（重构前就是直接 setActiveServer）。
+              // 未配对先引导去配对；有运行中的会话就顺带进去。
+              final group =
+                  groups.where((g) => g.server.id == serverId).firstOrNull;
+              if (group == null) return;
+              if (group.server.unpaired) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PairScreen(existingServerId: serverId),
+                  ),
+                );
                 return;
               }
-              await settings.setActiveServer(server.id);
+              if (group.running.isNotEmpty) {
+                onOpenSession(
+                    serverId, group.running.first['sessionId'] as String);
+              } else {
+                onSwitchServer(serverId);
+              }
             },
           ),
           const SizedBox(height: IosTheme.spaceL),
-          // 最近活跃会话区
           ConsoleSectionHeader(
             icon: Icons.forum_outlined,
             iconColor: IosTheme.iosBlue,
             title: '最近 3 小时',
-            count: merged.length,
+            count: activeKeys.length,
             badge: unviewedKeys.isNotEmpty,
             action: unviewedKeys.isEmpty
                 ? null
                 : TextButton(
-                    onPressed: () => settings.markAllSeen(
-                        unviewedKeys.toList(growable: false)),
+                    onPressed: () => settings
+                        .markAllSeen(unviewedKeys.toList(growable: false)),
                     child: const Text('全部已读'),
                   ),
           ),
-          if (merged.isEmpty)
+          if (groupsWithRecent.isEmpty)
             Container(
+              margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
               padding: const EdgeInsets.all(IosTheme.spaceXL),
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1C1C1E)
-                    : Colors.white,
+                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                 borderRadius: BorderRadius.circular(IosTheme.radiusCard),
               ),
               child: const Center(
                 child: Text(
                   '最近 3 小时没有活跃会话',
-                  style: TextStyle(
-                    color: IosTheme.iosGray,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: IosTheme.iosGray, fontSize: 15),
                 ),
               ),
             )
           else
             Container(
+              margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1C1C1E)
-                    : Colors.white,
+                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                 borderRadius: BorderRadius.circular(IosTheme.radiusCard),
                 boxShadow: IosTheme.shadowS,
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
-                  for (var i = 0; i < merged.length; i++) ...[
+                  for (var i = 0; i < groupsWithRecent.length; i++) ...[
                     if (i > 0)
-                      Container(
+                      Divider(
                         height: 0.5,
-                        color: Theme.of(context).brightness == Brightness.dark
+                        thickness: 0.5,
+                        indent: 56,
+                        color: isDark
                             ? Colors.white.withValues(alpha: 0.08)
                             : Colors.black.withValues(alpha: 0.06),
-                        margin: const EdgeInsets.only(left: 56),
                       ),
                     ConsoleMergedTile(
-                      key: ValueKey(
-                          '${merged[i].group.server.id}::${merged[i].sessionIdAsString}'),
-                      session: merged[i].session,
-                      deviceName: merged[i].group.server.name,
-                      deviceOnline:
-                          merged[i].group.monitor.online &&
-                              !merged[i].group.server.unpaired,
-                      isCurrent: currentKey ==
-                          '${merged[i].group.server.id}::${merged[i].sessionIdAsString}',
-                      isUnviewed: unviewedKeys.contains(settings.seenKey(
-                          merged[i].group.server.id,
-                          merged[i].sessionIdAsString)),
-                      onTap: () => onOpenSession(merged[i].group.server.id,
-                          merged[i].sessionIdAsString),
+                      group: groupsWithRecent[i],
+                      window: _window,
+                      currentSessionId: session.sessionId,
+                      pendingKindOf: session.pendingKindOf,
+                      unviewedKeys: settings.unviewedIds,
+                      unviewedKeyBuilder: settings.seenKey,
+                      onOpenSession: (sessionId) =>
+                          onOpenSession(groupsWithRecent[i].server.id, sessionId),
                     ),
                   ],
                 ],
@@ -215,78 +252,6 @@ class ConsoleScreen extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-
-  /// 合并所有设备的会话，仅保留最近 3 小时活跃的，按最近活动排序
-  List<_MergedSession> _mergedRecent(List<ServerGroup> groups) {
-    final cutoff =
-        DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-    final out = <_MergedSession>[];
-    for (final g in groups) {
-      if (g.server.unpaired) continue;
-      for (final s in g.monitor.sessions) {
-        final id = s['sessionId'] as String? ?? '';
-        if (id.isEmpty || s['blank'] == true) continue;
-        if (g.monitor.archivedIds.contains(id)) continue;
-        final updatedAt = (s['updatedAt'] as num?)?.toInt() ?? 0;
-        if (updatedAt < cutoff) continue;
-        out.add(_MergedSession(group: g, session: s));
-      }
-    }
-    out.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return out;
-  }
-}
-
-class _MergedSession {
-  final ServerGroup group;
-  final Map<String, dynamic> session;
-  int get updatedAt => (session['updatedAt'] as num?)?.toInt() ?? 0;
-  String get sessionIdAsString => session['sessionId'] as String? ?? '';
-  const _MergedSession({required this.group, required this.session});
-}
-
-/// 顶部设备卡区：按宽度自适应列数 —— iOS 风格
-class _DeviceCards extends StatelessWidget {
-  final List<ServerGroup> groups;
-  final String? activeId;
-  final void Function(DshServer server) onSelect;
-
-  const _DeviceCards({
-    required this.groups,
-    required this.activeId,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final cols = (cons.maxWidth / 240).floor().clamp(1, 4);
-        final cardW = (cons.maxWidth - (cols - 1) * IosTheme.spaceS) / cols;
-        return Wrap(
-          spacing: IosTheme.spaceS,
-          runSpacing: IosTheme.spaceS,
-          children: [
-            for (final g in groups)
-              SizedBox(
-                width: cardW,
-                child: ConsoleDeviceCard(
-                  name: g.server.name,
-                  hostLabel: '${g.server.host}:${g.server.port}',
-                  online: g.monitor.online,
-                  needsAuth: g.server.unpaired,
-                  running: g.running.length,
-                  unviewed: g.unviewed.length,
-                  error: g.monitor.error,
-                  active: activeId == g.server.id,
-                  onTap: () => onSelect(g.server),
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }

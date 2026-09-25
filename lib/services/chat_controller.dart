@@ -1,361 +1,344 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:uuid/uuid.dart';
-import '../models/message.dart';
+import '../models/pending.dart';
 import '../utils/constants.dart';
-import '../widgets/approval_card.dart';
-import '../widgets/question_sheet.dart';
-import 'changes_tracker.dart';
-import 'dsh_api.dart';
-import 'dsh_auth.dart';
+import '../utils/session_format.dart';
+import 'dsh_session_state.dart';
+import 'mux_event_dispatcher.dart';
 import 'mux_stream.dart';
+import 'dsh_api.dart';
+import 'model_service.dart';
 import 'server_manager.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
 import 'notification_service.dart';
 
-part 'chat_approval_mixin.dart';
-part 'chat_message_mixin.dart';
-part 'chat_session_mixin.dart';
-
 /// 聊天业务逻辑控制器：管理连接、消息、审批、会话切换
 ///
-/// UI 层通过 addListener 监听变更，通过公开方法触发操作。
-/// 依赖 Context 的操作（SnackBar、Dialog）通过回调委托给 UI。
-///
-/// - 审批/问题管理 → `chat_approval_mixin.dart`（part 文件）
-/// - 消息流处理 → `chat_message_mixin.dart`（part 文件）
-/// - 会话管理 → `chat_session_mixin.dart`（part 文件）
-class ChatController extends ChangeNotifier
-    with _ChatApprovalMixin, _ChatMessageMixin, _ChatSessionMixin {
+/// 重构后：
+/// - 所有状态都从 DshSessionState 读取
+/// - 所有 mux 事件都通过 MuxEventDispatcher 分发
+/// - 不再自己维护业务状态
+class ChatController extends ChangeNotifier {
   final SettingsService settings;
   final ServerManager? manager;
 
+  /// 全局唯一的状态中枢，由上层注入
+  final DshSessionState state;
+  late final MuxEventDispatcher dispatcher;
+
+  /// 本地乐观气泡与 durable 消息对账用的 id 生成器
+  static const _uuid = Uuid();
+
   // ── API / Stream ────────────────────────────────
   DshApi? _api;
+  ModelService? _models;
+
+  /// 模型目录 / 切换（未连接时为 null）
+  ModelService? get models => _models;
   MuxStream? _mux;
 
-  // ── 公开状态（UI 直接读） ───────────────────────
-  final List<DshMessage> messages = [];
-  List<Map<String, dynamic>> sessions = [];
-  String currentTitle = 'DSH Agent';
-  bool connecting = true;
-  @override
-  bool connected = false;
-  /// mux 当前实际连接的会话 ID，与 settings.sessionId 独立。
-  String? get muxSessionId => _muxSessionId;
-  /// 过滤归档会话后的可见列表（供 SessionDrawer 使用）
-  List<Map<String, dynamic>> get visibleSessions {
-    final srv = settings.active;
-    final archived = srv != null && manager != null
-        ? manager!.monitorOf(srv.id)?.archivedIds
-        : null;
-    final archivedSet = archived ?? const <String>{};
-    if (archivedSet.isEmpty) return sessions;
-    return sessions
-        .where((s) => !archivedSet.contains(s['sessionId']))
-        .toList();
-  }
-  bool sending = false;
-  bool agentRunning = false;
-  bool canceling = false;
-  bool loadingSessions = false;
-  String? error;
-  String? activeTool;
-  final ChangesTracker changes = ChangesTracker();
-  @override
-  final List<PendingApproval> approvals = [];
-  final Set<String> queuedTexts = {};
-  @override
-  PendingQuestion? question;
-  @override
-  bool questionDialogOpen = false;
-
   // ── 内部状态 ────────────────────────────────────
-  /// mux 当前实际连接的会话 ID，与 settings.sessionId 独立。
-  /// 用于 switchSession / router 判断是否需要真正切换。
   String? _muxSessionId;
-  Timer? _reconnectTimer;
-  int _reconnectAttempts = 0;
-  final Set<String> _pendingEchoRpc = {};
-  final Set<String> _seenUserSeq = {};
-  String? _lastSentText;
-  DateTime? _lastSentAt;
-
-  void _rememberSent(String text) {
-    _lastSentText = text;
-    _lastSentAt = DateTime.now();
-  }
-
-  @override
-  bool matchesLastSentEcho(String text) {
-    final at = _lastSentAt;
-    return _lastSentText == text &&
-        at != null &&
-        DateTime.now().difference(at) < echoDedupWindow;
-  }
-
-  @override
-  void clearSentEcho() {
-    _lastSentText = null;
-    _lastSentAt = null;
-  }
-  bool _wasCurrentRunning = false;
-  final _deltaBuffer = StringBuffer();
-  Timer? _deltaFlushTimer;
-  final _uuid = const Uuid();
-
-  // ── UI 回调（依赖 Context 的操作委托给 UI 层） ──
-  @override
-  VoidCallback? onScrollToBottom;
-  @override
-  VoidCallback? onJumpToLatest;
-  @override
-  VoidCallback? onShowQuestionDialog;
-  @override
-  VoidCallback? onPopQuestionDialog;
-  void Function(String message)? onShowSnackBar;
+  Timer? _readyTimeout;
 
   ChatController({
     required this.settings,
+    required this.state,
     this.manager,
-  });
+  }) {
+    // dispatcher 与 state 共用同一实例，避免状态分裂
+    dispatcher = MuxEventDispatcher(state: state);
+  }
 
   @override
   void dispose() {
-    _reconnectTimer?.cancel();
-    _deltaFlushTimer?.cancel();
+    _readyTimeout?.cancel();
     _mux?.dispose();
+    dispatcher.dispose();
     super.dispose();
   }
 
   // ── 初始化 / 重连 ───────────────────────────────
 
   Future<void> boot() async {
-    connecting = true;
-    error = null;
-    notifyListeners();
+    // 状态中枢是全局共享的：换 PC 会重建 ChatController，
+    // 必须先清掉上一台的残留，否则控制台会读到过期状态。
+    dispatcher.reset();
+    state.reset();
+
+    state.setConnecting(true);
+    state.setConnectionError(null);
 
     final srv = settings.active;
     if (srv == null) {
-      connecting = false;
-      connected = false;
-      error = '还没有 PC，去设置里添加。';
-      notifyListeners();
+      state.setConnecting(false);
+      state.setConnected(false);
+      state.setConnectionError('还没有 PC，去设置里添加。');
       return;
     }
     if (srv.unpaired) {
-      connecting = false;
-      connected = false;
-      error = '「${srv.name}」授权已过期，去设置里重新授权。';
-      notifyListeners();
+      state.setConnecting(false);
+      state.setConnected(false);
+      state.setConnectionError('需要配对：请先在 PC 上启动 dsh web，然后用启动令牌完成配对。');
       return;
     }
+
     _api = DshApi(baseUrl: srv.httpUrl, cookie: srv.cookie);
+    _models = ModelService(_api!);
+    state.setSessionId(settings.sessionId);
 
-    try {
-      final ok = await _api!.testConnection();
-      if (!ok) {
-        connecting = false;
-        connected = false;
-        error = '连接失败: ${srv.httpUrl}\n请检查 PC 端 DSH 是否启动、同一局域网。';
-        notifyListeners();
-        _scheduleReconnect();
-        return;
-      }
-    } on DshAuthException catch (e) {
-      if (e.unpaired) {
-        await settings.patchServer(
-          srv.id,
-          (s) => s.copyWith(unpaired: true, lastError: e.message),
-        );
-      }
-      connecting = false;
-      connected = false;
-      error = e.message;
-      notifyListeners();
-      return;
-    }
+    await _refreshSessions();
+    await _connectMux(settings.sessionId);
+  }
 
+  Future<void> _refreshSessions() async {
+    if (_api == null) return;
+    state.setLoadingSessions(true);
     try {
-      String? sessionId = settings.sessionId;
-      if (sessionId != null) {
-        final valid = await _validateSession(sessionId);
-        if (!valid) sessionId = null;
-      }
-      sessionId ??= await _api!.createSession();
-      await settings.setSessionId(sessionId);
-      await settings.markSeen(settings.seenKey(srv.id, sessionId));
-      await refreshSessions();
-      connectMux(sessionId);
-      connecting = false;
-      connected = true;
-      error = null;
-      notifyListeners();
-      _reconnectAttempts = 0;
-      onJumpToLatest?.call();
+      final items = await _api!.listSessions();
+      state.setSessions(items);
+      state.setSessionTitle(_titleFor(settings.sessionId));
+      // 拉到了才算数据侧健康 —— 状态点据此变绿
+      state.setSessionsHealth(ok: true);
     } catch (e) {
-      connecting = false;
-      connected = false;
-      error = '初始化失败: $e';
-      notifyListeners();
-      _scheduleReconnect();
+      // 不再静默：列表失败就是降级，状态点会变橙并可点开看原因
+      state.setSessionsHealth(ok: false, error: '会话列表读取失败：$e');
+    } finally {
+      state.setLoadingSessions(false);
     }
   }
 
-  Future<bool> _validateSession(String sessionId) async {
-    try {
-      await _api!.getHistory(sessionId, maxMessages: 1);
-      return true;
-    } catch (_) {
-      return false;
+  String _titleFor(String? sessionId) {
+    if (sessionId == null) return 'DSH Agent';
+    for (final s in state.sessions) {
+      if (s['sessionId'] == sessionId) {
+        return sessionTitleOf(s);
+      }
     }
+    return 'DSH Agent';
   }
-
-  void _scheduleReconnect() {
-    if (!settings.autoReconnect) return;
-    _reconnectTimer?.cancel();
-    _reconnectAttempts++;
-    final delay = Duration(
-        seconds: _reconnectAttempts > 5 ? 30 : _reconnectAttempts * 3);
-    _reconnectTimer = Timer(delay, boot);
-  }
-
-  // ── 会话管理（实现在 chat_session_mixin.dart） ──
 
   // ── Mux 连接 ────────────────────────────────────
 
-  void connectMux(String sessionId) {
+  Future<void> _connectMux(String? sessionId) async {
     _mux?.dispose();
-    _muxSessionId = sessionId;
-    // 重连后 Host 会把仍 pending 的 waterfall 重新投递到新的事件流，
-    // 因此先清空本地卡片，避免已应答/已取消的旧卡片残留。
-    approvals.clear();
-    question = null;
-    if (questionDialogOpen) {
-      questionDialogOpen = false;
-      onPopQuestionDialog?.call();
+    _mux = null;
+
+    final srv = settings.active;
+    if (srv == null || sessionId == null || sessionId.isEmpty) {
+      state.setConnecting(false);
+      state.setConnected(false);
+      return;
     }
-    final mux = MuxStream(
-      wsBaseUrl: settings.wsUrl,
-      cookie: settings.active?.cookie,
-    );
-    mux.sessionId = sessionId;
-    mux.onTextDelta = onDelta;                    // _ChatMessageMixin
-    mux.onAssistantMessage = onAssistantFinal;    // _ChatMessageMixin
-    mux.onUserMessage = onUserMessage;            // _ChatMessageMixin
-    mux.onToolView = onToolView;                  // _ChatMessageMixin
-    mux.onSnapshot = onMuxSnapshot;               // _ChatMessageMixin
-    mux.onApproval = onApproval;                  // _ChatApprovalMixin
-    mux.onApprovalResolved = onApprovalResolved;  // _ChatApprovalMixin
-    mux.onQuestion = onQuestion;                  // _ChatApprovalMixin
-    mux.onQuestionResolved = onQuestionResolved;  // _ChatApprovalMixin
-    mux.onToolCall = (name) {
-      activeTool = name;
-      notifyListeners();
-    };
-    mux.onToolResult = clearToolStatus;           // _ChatMessageMixin
-    mux.onTurnEnd = onTurnEnd;                    // _ChatMessageMixin
-    mux.onQueueUpdate = onQueueUpdate;            // _ChatMessageMixin
-    mux.onSessionStatus = onSessionStatus;        // _ChatMessageMixin
-    mux.onWorkspaceBaseline = (ids) {
-      // 将 workspace/follow 推送的归档 ID 同步到对应 ServerMonitor
-      final srv = settings.active;
-      if (srv != null && manager != null) {
-        final m = manager!.monitorOf(srv.id);
-        if (m != null) {
-          m.archivedIds = ids.toSet();
-          manager!.notifyListeners();
+
+    _muxSessionId = sessionId;
+    state.setConnecting(true);
+
+    _mux = MuxStream(
+      wsBaseUrl: srv.httpUrl.replaceFirst('http', 'ws'),
+      cookie: srv.cookie,
+    )..sessionId = sessionId;
+
+    // 绑定回调
+    _mux!
+      ..onSnapshot = dispatcher.onSnapshot
+      ..onProjections = (projections) {
+        // 开窗投影里的标题是权威值，优先于本地推断
+        final title = extractProjectionTitle(projections);
+        if (title != null && title.isNotEmpty) {
+          state.setSessionTitle(title);
         }
+        // 重连后恢复当前模型（否则切换过的模型会显示回默认值）
+        dispatcher.applySnapshotProjections(projections);
       }
-    };
-    mux.onDisconnected = () {
-      connected = false;
-      notifyListeners();
-      _scheduleReconnect();
-    };
-    mux.connect();
-    connected = true;
-    notifyListeners();
-    _mux = mux;
+      ..onTextDelta = dispatcher.onTextDelta
+      ..onAssistantMessage = dispatcher.onAssistantMessage
+      ..onAssistantFinal = dispatcher.onAssistantFinal
+      ..onUserMessage = dispatcher.onUserMessage
+      ..onApproval = ({
+        required String rpcId,
+        required String sessionId,
+        required String approvalId,
+        required String toolName,
+        String? reason,
+      }) {
+        dispatcher.onApproval(
+          rpcId: rpcId,
+          sessionId: sessionId,
+          approvalId: approvalId,
+          toolName: toolName,
+          reason: reason,
+        );
+        SoundService.approval();
+        NotificationService.show(
+          id: 10000,
+          title: '需要确认',
+          body: '工具 $toolName 需要确认',
+        );
+      }
+      ..onApprovalResolved = dispatcher.onApprovalResolved
+      ..onQuestion = ({
+        required String rpcId,
+        required String sessionId,
+        required List<Map<String, dynamic>> questions,
+      }) {
+        dispatcher.onQuestion(
+          rpcId: rpcId,
+          sessionId: sessionId,
+          questions: questions,
+        );
+        SoundService.question();
+      }
+      ..onQuestionResolved = dispatcher.onQuestionResolved
+      ..onToolView = dispatcher.onToolView
+      ..onTurnStart = dispatcher.onTurnStart
+      ..onToolCall = dispatcher.onToolCall
+      ..onToolResult = dispatcher.onToolResult
+      ..onTurnEnd = () {
+        dispatcher.onTurnEnd();
+        _refreshSessions();
+      }
+      ..onQueueUpdate = dispatcher.onQueueUpdate
+      ..onWorkspaceBaseline = dispatcher.onWorkspaceBaseline
+      ..onSessionStatus = (sessionId, running) {
+        // 权威中枢先落状态，再通知 ServerManager 实时刷新列表
+        dispatcher.onSessionStatus(sessionId, running);
+        manager?.applySessionStatus(
+          settings.activeServerId ?? '',
+          sessionId,
+          running,
+        );
+      }
+      ..onSessionError = (sessionId, message) {
+        dispatcher.onSessionError?.call(sessionId, message);
+      }
+      ..onControlBaseline = dispatcher.onControlBaseline
+      ..onProjectionChange = dispatcher.onProjectionChange
+      ..onReady = () {
+        // mux 真正就绪（clientId 已到手）才算连上
+        state.setConnecting(false);
+        state.setConnected(true);
+      }
+      ..onReconnecting = () {
+        state.setConnected(false);
+      }
+      ..onReconnected = () {
+        state.setConnected(true);
+      }
+      ..onDisconnected = () {
+        state.setConnected(false);
+      }
+      ..onError = (message) {
+        state.setConnectionError(message);
+      };
+
+    await _mux!.connect();
+    // 连接挂起时不至于永远停在「连接中」
+    _readyTimeout?.cancel();
+    _readyTimeout = Timer(connectReadyTimeout, () {
+      if (!state.connected) {
+        state.setConnecting(false);
+        state.setConnectionError('连接超时，正在自动重试…');
+      }
+    });
   }
 
-  // ── Mux 事件处理（实现在 chat_message_mixin.dart） ──
+  // ── 会话操作 ────────────────────────────────────
+
+  Future<void> switchSession(String sessionId) async {
+    if (sessionId == _muxSessionId && state.connected) return;
+    await settings.setSessionId(sessionId);
+    state.setSessionId(sessionId);
+    state.setSessionTitle(_titleFor(sessionId));
+    dispatcher.reset();
+    await _connectMux(sessionId);
+  }
+
+  Future<void> createNewSession({String? cwd}) async {
+    if (_api == null || !state.connected) return;
+    try {
+      final id = await _api!.createSession(cwd: cwd);
+      await _refreshSessions();
+      await switchSession(id);
+    } catch (e) {
+      state.setConnectionError('新建会话失败：$e');
+    }
+  }
 
   // ── 发送 / 取消 ─────────────────────────────────
 
-  Future<String?> send(String text) async {
-    if (text.isEmpty || sending || !connected) return null;
-    final sessionId = settings.sessionId;
-    if (sessionId == null) return null;
+  /// 当前 mux 实际连着的会话（权威值，而非设置里的期望值）
+  String get _activeSessionId => _muxSessionId ?? state.sessionId ?? '';
 
-    sending = true;
-    agentRunning = true;
-    messages.add(DshMessage(
-      id: 'u-${_uuid.v4()}',
-      role: 'user',
-      content: text,
-    ));
-    notifyListeners();
+  /// 发送消息。
+  ///
+  /// 先本地乐观上屏（用同一个 rpcId 与 durable 消息对账），
+  /// 再发 RPC；失败就把乐观气泡撤回并抛出，避免消息「假装发出去了」。
+  Future<void> send(String text) async {
+    if (_api == null) throw StateError('未连接，消息已保留');
+    if (!state.connected) throw StateError('未连接，消息已保留');
+    final sessionId = _activeSessionId;
+    if (sessionId.isEmpty) throw StateError('没有可用会话');
 
+    final rpcId = _uuid.v4();
+    dispatcher.addLocalUserMessage(text, rpcId);
     try {
-      final rpcId = await _api!.sendPrompt(sessionId, text);
-      final idx = messages.lastIndexWhere(
-        (m) => m.role == 'user' && m.id.startsWith('u-'),
-      );
-      if (idx >= 0 && messages[idx].content == text) {
-        messages[idx] = messages[idx].copyWith(id: 'echo-$rpcId');
-      }
-      _pendingEchoRpc.add(rpcId);
-      _rememberSent(text);
-      return rpcId;
+      await _api!.sendPrompt(sessionId, text, requestId: rpcId);
     } catch (e) {
-      messages.removeWhere(
-        (m) => m.role == 'user' && m.id.startsWith('u-') && m.content == text,
-      );
-      agentRunning = false;
-      notifyListeners();
+      dispatcher.failLocalUserMessage(rpcId);
       rethrow;
-    } finally {
-      sending = false;
-      notifyListeners();
     }
   }
 
-  /// 请求停止当前轮。只有 Host 接受后才进入「正在停止」；
-  /// 按钮是否消失由 session status / turn end 决定，避免请求未生效就假装已停。
-  Future<bool> cancel() async {
-    final sessionId = settings.sessionId;
-    if (sessionId == null || canceling) return false;
-    canceling = true;
-    notifyListeners();
-    try {
-      final accepted = await _api!.cancelSession(sessionId);
-      if (!accepted) {
-        onShowSnackBar?.call('停止未被接受，Agent 仍在运行');
-        return false;
-      }
-      return true;
-    } catch (e) {
-      onShowSnackBar?.call('停止失败: $e');
-      return false;
-    } finally {
-      canceling = false;
-      notifyListeners();
+  /// 请求停止当前运行。
+  ///
+  /// 只发请求，**不修改本地 running 状态** —— Web 端要求以 Host 推来的
+  /// 权威状态为准（InputBar.tsx:283 附近）。失败向上抛，由界面提示。
+  Future<void> cancel() async {
+    if (_api == null || !state.connected) {
+      throw StateError('未连接，无法停止');
     }
+    final sessionId = _activeSessionId;
+    if (sessionId.isEmpty) {
+      throw StateError('没有可停止的会话');
+    }
+    await _api!.cancelSession(sessionId);
   }
 
-  // ── 内部辅助 ────────────────────────────────────
+  // ── 审批 / 提问 ─────────────────────────────────
 
-  void _touchActivity() {
-    final id = settings.sessionId;
-    if (id == null) return;
-    for (final s in sessions) {
-      if (s['sessionId'] == id) {
-        s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-        break;
+  Future<bool> answerApproval(PendingApproval a, bool allow) async {
+    final ok = await _mux?.respondApproval(a.approvalId, allow) ?? false;
+    if (ok) {
+      state.removeApproval(a.approvalId);
+    }
+    return ok;
+  }
+
+  Future<bool> submitQuestion(List<Map<String, dynamic>> answers) async {
+    final q = state.question;
+    if (q == null) return false;
+    final ok = await _mux?.respondQuestion(q.rpcId, answers) ?? false;
+    if (ok) {
+      state.removeQuestion(q.rpcId);
+      if (state.questionDialogOpen) {
+        state.setQuestionDialogOpen(false);
       }
     }
+    return ok;
+  }
+
+  /// 放弃回答：显式通知 Host，避免请求一直挂着
+  Future<void> cancelQuestion() async {
+    final q = state.question;
+    if (q == null) return;
+    // 先从界面移除，不让用户对着已放弃的卡片继续操作
+    state.removeQuestion(q.rpcId);
+    if (state.questionDialogOpen) {
+      state.setQuestionDialogOpen(false);
+    }
+    await _mux?.cancelQuestion(q.rpcId);
   }
 }

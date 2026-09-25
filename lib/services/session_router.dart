@@ -11,7 +11,9 @@ class SessionRouter extends ChangeNotifier {
   String? get sessionId => _sessionId;
   int get token => _token;
 
-  void request(String serverId, String sessionId) {
+  /// [sessionId] 可为 null，表示「只切机器，不指定会话」——
+  /// 此时 ChatScreen 会自己回落到该机器上次用的会话。
+  void request(String serverId, String? sessionId) {
     _serverId = serverId;
     _sessionId = sessionId;
     _token++;

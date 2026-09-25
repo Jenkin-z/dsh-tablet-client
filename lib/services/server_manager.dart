@@ -6,6 +6,8 @@ import 'session_monitor.dart';
 import 'settings_service.dart';
 
 /// 聚合多台 PC 的轮询结果，按 PC 分组给控制台用
+///
+/// 重构后：只做服务器管理和会话列表刷新，不做状态推断。
 class ServerGroup {
   final DshServer server;
   final SessionMonitor monitor;
@@ -61,6 +63,21 @@ class ServerManager extends ChangeNotifier {
 
   SessionMonitor? monitorOf(String serverId) => _monitors[serverId];
 
+  /// 活跃 PC 的数据健康度回调
+  ///
+  /// 控制台顶部那个状态点读的是共享状态，而设备卡读的是各自 monitor。
+  /// 不把这里的轮询结果回灌过去，就会出现「三台全离线 + 绿点」——
+  /// 用户看到的就是这个矛盾。由 main.dart 接到 DshSessionState。
+  void Function(bool ok, String? error)? onActiveHealth;
+
+  void _reportActiveHealth() {
+    final activeId = settings.activeServerId;
+    if (activeId == null) return;
+    final m = _monitors[activeId];
+    if (m == null) return;
+    onActiveHealth?.call(m.online, m.online ? null : m.error);
+  }
+
   /// 实时状态推送：立即更新某台 PC 的会话运行标记（无需等下一次轮询）
   void applySessionStatus(String serverId, String sessionId, bool running) {
     final m = _monitors[serverId];
@@ -70,7 +87,7 @@ class ServerManager extends ChangeNotifier {
 
   @override
   void notifyListeners() {
-    _cachedGroups = null; // 数据变更时清除缓存
+    _cachedGroups = null;
     super.notifyListeners();
   }
 
@@ -79,6 +96,8 @@ class ServerManager extends ChangeNotifier {
     _syncMonitors();
     await Future.wait(_monitors.values.map((m) => m.refresh()));
     lastRefresh = DateTime.now();
+    // 设备卡的结论同样要体现在顶部的状态点上
+    _reportActiveHealth();
     notifyListeners();
   }
 
@@ -92,7 +111,6 @@ class ServerManager extends ChangeNotifier {
       } else if (existing.server.host != s.host ||
           existing.server.port != s.port ||
           existing.server.cookie != s.cookie) {
-        // 连接信息变更 → 重建 Monitor（DshApi 是 final 的）
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
       } else {
         existing.updateServer(s);
@@ -148,15 +166,19 @@ class ServerManager extends ChangeNotifier {
             !m.archivedIds.contains(id);
       }
       if (recent) {
-        return !isRun &&
-            !unv.contains(key) &&
-            s['blank'] != true &&
-            !m.archivedIds.contains(id);
+        return !isRun && s['blank'] != true && !m.archivedIds.contains(id);
       }
       return false;
     }).toList();
-    list.sort(
-        (a, b) => SessionMonitor.activityOf(b).compareTo(SessionMonitor.activityOf(a)));
+
+    if (recent) {
+      list.sort((a, b) {
+        final aTime = a['updatedAt'] as int? ?? 0;
+        final bTime = b['updatedAt'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+    }
+
     return list;
   }
 }

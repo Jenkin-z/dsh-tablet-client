@@ -7,10 +7,19 @@ import 'settings_service.dart';
 import 'sound_service.dart';
 
 /// 单台 PC 的会话轮询
+///
+/// 职责：拉会话列表 + 识别「非当前会话刚跑完」并在此刻触发
+/// 未读标记 / 系统通知 / 提示音。
+/// 其余状态推断交给 DshSessionState 与 MuxEventDispatcher。
 class SessionMonitor {
   final SettingsService settings;
   DshServer server;
+
+  /// 通知 id 递增，避免同一条通知互相覆盖
   int _notifySeq = 0;
+
+  /// 上一次轮询时各会话是否在跑，用于识别「刚跑完」的边沿
+  final Map<String, bool> _prevRunning = {};
 
   SessionMonitor({required this.settings, required this.server})
       : _api = DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
@@ -22,7 +31,6 @@ class SessionMonitor {
   bool online = false;
   String? error;
   DateTime? lastRefresh;
-  final Map<String, bool> _prevRunning = {};
 
   final DshApi _api;
 
@@ -41,6 +49,7 @@ class SessionMonitor {
         final running = s['running'] == true;
         final was = _prevRunning[id];
         if (was == true && !running && id != current) {
+          // 非当前会话刚跑完：把时间顶到现在，让它浮到「最近」列表顶部
           s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
           await _markFinished(key);
         } else if (!running &&
@@ -93,6 +102,7 @@ class SessionMonitor {
     final was = _prevRunning[sessionId];
     target['running'] = running;
     _prevRunning[sessionId] = running;
+    // 实时推送也要走完成检测，否则只有轮询到的完成才会通知
     if (was == true && !running && sessionId != server.lastSessionId) {
       target['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
       _markFinished(_key(sessionId));
@@ -101,10 +111,12 @@ class SessionMonitor {
   }
 
   /// 会话完成：标记未读 + 双通道通知 + 提示音
+  ///
+  /// 只对**非当前会话**触发 —— 你正看着的会话不需要通知你。
   Future<void> _markFinished(String key) async {
     await settings.addUnviewed(key);
     try {
-      NotificationService.show(
+      await NotificationService.show(
         id: 10000 + _notifySeq++,
         title: '会话已完成',
         body: '非当前会话有新结果',
@@ -122,15 +134,9 @@ class SessionMonitor {
 
   /// 当 server 信息变更时，刷新内部 DshApi
   void updateServer(DshServer newServer) {
-    if (newServer.host != server.host ||
-        newServer.port != server.port ||
-        newServer.cookie != server.cookie) {
-      server = newServer;
-      // DshApi 是 final 的，需要重建整个 Monitor；
-      // 由 ServerManager._syncMonitors 负责替换
-    } else {
-      server = newServer;
-    }
+    // DshApi 是 final 的，host/port/cookie 变了需要重建整个 Monitor，
+    // 由 ServerManager._syncMonitors 负责替换；这里只更新数据。
+    server = newServer;
   }
 
   static int activityOf(Map<String, dynamic> s) =>

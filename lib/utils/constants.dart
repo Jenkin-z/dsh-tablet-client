@@ -8,10 +8,12 @@ const Duration eventResultTimeout = Duration(seconds: 15);
 const Duration pollInterval = Duration(seconds: 8);
 const Duration updateCheckTimeout = Duration(seconds: 8);
 
-// ── 重连 ──────────────────────────────────────────
+// ── 重连（借鉴 DSH 官方 RemoteStreamMuxClient）────
 const int reconnectFastLimit = 5;
 const int reconnectFastDelaySec = 3;
 const int reconnectSlowDelaySec = 30;
+/// 物理连接重连最大延迟（指数退避上限）
+const int reconnectMaxDelaySec = 60;
 
 // ── 流式消息 ──────────────────────────────────────
 const Duration deltaFlushInterval = Duration(milliseconds: 120);
@@ -42,3 +44,7 @@ const Duration downloadChunkTimeout = Duration(seconds: 30);
 // ── SeenStore ─────────────────────────────────────
 const int seenStoreMaxEntries = 300;
 const Duration seenStoreDebounce = Duration(milliseconds: 500);
+
+// ── Mux 就绪 ──────────────────────────────────────
+/// 发出 open 后等待 `$events` ready 帧的上限，超过则提示重试
+const Duration connectReadyTimeout = Duration(seconds: 12);

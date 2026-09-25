@@ -455,7 +455,7 @@ class IosSwitch extends StatelessWidget {
     return Switch.adaptive(
       value: value,
       onChanged: enabled ? onChanged : null,
-      activeColor: Colors.white,
+      activeThumbColor: Colors.white,
       activeTrackColor: IosTheme.iosGreen,
       inactiveThumbColor: Colors.white,
       inactiveTrackColor: IosTheme.iosGray3,

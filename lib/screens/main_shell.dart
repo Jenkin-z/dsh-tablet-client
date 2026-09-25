@@ -53,29 +53,40 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  /// 打开会话：切机器 + 指定会话 + 跳到对话页。
+  ///
+  /// 两条路径由**机器是否变了**决定，与「那台机器有没有在跑会话」无关
+  /// —— 后者是曾经的错误依据，导致同一个手势有时跳转有时不跳。
+  ///
+  /// · 跨机器：改 activeServerId 会让 ChatScreen 的 key 变化 → 重建 → boot()
+  ///   自动读取目标会话，**不需要也不允许**再发一次路由请求。
+  /// · 同机器：widget 不重建，走 SessionRouter 就地切会话。
   Future<void> _openSession(String serverId, String sessionId) async {
     final settings = Provider.of<SettingsService>(context, listen: false);
-    if (settings.activeServerId != serverId) {
+    final machineChanged = settings.activeServerId != serverId;
+
+    if (machineChanged) {
       await settings.setActiveServer(serverId);
     }
     await settings.setSessionId(sessionId);
     if (!mounted) return;
-    Provider.of<SessionRouter>(context, listen: false)
-        .request(serverId, sessionId);
+
     setState(() => _currentIndex = 1);
+
+    if (!machineChanged) {
+      Provider.of<SessionRouter>(context, listen: false)
+          .request(serverId, sessionId);
+    }
   }
 
-  /// 只切当前机器，不跳转对话页。
+  /// 只切当前机器，留在控制台。
   ///
-  /// 用于「这台机器没有正在跑的会话」时点设备卡：
-  /// 此时该机器的会话列表和状态点都要跟着换过去。
+  /// 这是「点设备卡」的唯一语义。不跳转、不碰会话：
+  /// 目标机器会用它自己上次的会话（sessionId 是每台机器各存各的）。
   Future<void> _switchServer(String serverId) async {
     final settings = Provider.of<SettingsService>(context, listen: false);
     if (settings.activeServerId == serverId) return;
     await settings.setActiveServer(serverId);
-    if (!mounted) return;
-    // 切机器不带会话：让 ChatScreen 用它自己记的该机器会话
-    Provider.of<SessionRouter>(context, listen: false).request(serverId, null);
   }
 
   @override

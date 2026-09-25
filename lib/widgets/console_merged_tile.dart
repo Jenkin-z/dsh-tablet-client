@@ -30,6 +30,12 @@ class ConsoleMergedTile extends StatelessWidget {
   /// 待处理交互类型：`approval` / `question` / `plan-review`，无则 null
   final String? Function(String sessionId)? pendingKindOf;
 
+  /// 这台机器是否就是当前对话的那台
+  ///
+  /// 与设备卡上的「当前」是同一件事，两处必须一致，
+  /// 否则用户不知道「当前」到底指什么。
+  final bool isActiveServer;
+
   const ConsoleMergedTile({
     super.key,
     required this.group,
@@ -39,6 +45,7 @@ class ConsoleMergedTile extends StatelessWidget {
     required this.window,
     this.currentSessionId,
     this.pendingKindOf,
+    this.isActiveServer = false,
   });
 
   /// 窗口期内的会话：去重、过滤空会话与已归档、按最近活动倒序
@@ -110,6 +117,27 @@ class ConsoleMergedTile extends StatelessWidget {
             '$count',
             style: const TextStyle(fontSize: 13, color: IosTheme.iosGray),
           ),
+          if (isActiveServer) ...[
+            const SizedBox(width: IosTheme.spaceS),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: IosTheme.spaceS,
+                vertical: IosTheme.spaceXXS,
+              ),
+              decoration: BoxDecoration(
+                color: IosTheme.iosBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+              ),
+              child: const Text(
+                '当前',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: IosTheme.iosBlue,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

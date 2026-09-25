@@ -164,8 +164,10 @@ class ConsoleScreen extends StatelessWidget {
             // 一断线就全不亮，看着像切换没生效。
             activeServerId: settings.activeServerId,
             onTapDevice: (serverId) {
-              // 点设备 = 切到这台机器（重构前就是直接 setActiveServer）。
-              // 未配对先引导去配对；有运行中的会话就顺带进去。
+              // 手势语义唯一：点卡片 = 只切当前机器，留在控制台。
+              // 曾经这里会「有运行会话就跳对话、否则不跳」，
+              // 同一个动作两种结果，用户感受就是「有点乱」。
+              // 要看会话请点会话行 —— 那是另一个手势。
               final group =
                   groups.where((g) => g.server.id == serverId).firstOrNull;
               if (group == null) return;
@@ -177,12 +179,7 @@ class ConsoleScreen extends StatelessWidget {
                 );
                 return;
               }
-              if (group.running.isNotEmpty) {
-                onOpenSession(
-                    serverId, group.running.first['sessionId'] as String);
-              } else {
-                onSwitchServer(serverId);
-              }
+              onSwitchServer(serverId);
             },
           ),
           const SizedBox(height: IosTheme.spaceL),
@@ -240,6 +237,8 @@ class ConsoleScreen extends StatelessWidget {
                       group: groupsWithRecent[i],
                       window: _window,
                       currentSessionId: session.sessionId,
+                      isActiveServer: groupsWithRecent[i].server.id ==
+                          settings.activeServerId,
                       pendingKindOf: session.pendingKindOf,
                       unviewedKeys: settings.unviewedIds,
                       unviewedKeyBuilder: settings.seenKey,

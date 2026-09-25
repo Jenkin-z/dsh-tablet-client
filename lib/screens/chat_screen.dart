@@ -87,7 +87,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final target = router.sessionId;
     final serverId = router.serverId;
     if (target == null || serverId == null) return;
-    if (serverId != _ctrl.settings.activeServerId) return;
+    // 只处理「同一台机器内换会话」。跨机器的切换由 MainShell 改
+    // activeServerId 完成，那次会重建本 widget 并重新 boot()；
+    // 这里若再切一次，同一件事就做了两遍（竞态来源）。
+    if (serverId != _ctrl.settings.activeServerId) {
+      router.consume(router.token);
+      return;
+    }
     if (target == _ctrl.state.sessionId && _ctrl.state.connected) {
       router.consume(router.token);
       return;

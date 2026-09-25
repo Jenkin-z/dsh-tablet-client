@@ -40,10 +40,27 @@ class ConnectionStatus extends StatelessWidget {
             text = '未连接';
         }
 
-        // 降级/离线时点一下能看到具体原因，否则只有一个颜色让人无从下手
-        final reason = health == ConnectionHealth.degraded
+        // 降级/离线时点一下能看到具体原因，否则只有一个颜色让人无从下手。
+        //
+        // 正常时也给一句可点开的自述：这个点「一直是绿的」到底是因为真的连上了、
+        // 还是某个写入方在盖状态，光看颜色分不出来。把四个原始字段亮出来，
+        // 一眼就能判断它有没有在说谎。
+        final detail = health == ConnectionHealth.degraded
             ? (state.sessionsError ?? '会话列表读取失败')
-            : (health == ConnectionHealth.offline ? state.connectionError : null);
+            : (health == ConnectionHealth.offline
+                ? (state.connectionError ?? '连接尚未建立')
+                : null);
+
+        final diagnostic = StringBuffer()
+          ..write(health == ConnectionHealth.healthy ? '已连接' : text)
+          ..write('\n连接: ${state.connected ? "是" : "否"}')
+          ..write(' · 建连中: ${state.connecting ? "是" : "否"}')
+          ..write('\n数据: ${switch (state.sessionsOk) {
+            null => '未校验',
+            true => '已校验',
+            false => '读取失败',
+          }}');
+        if (detail != null) diagnostic.write('\n$detail');
 
         final dot = Container(
           width: 8,
@@ -54,14 +71,11 @@ class ConnectionStatus extends StatelessWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (reason != null)
-              Tooltip(
-                message: reason,
-                triggerMode: TooltipTriggerMode.tap,
-                child: dot,
-              )
-            else
-              dot,
+            Tooltip(
+              message: diagnostic.toString(),
+              triggerMode: TooltipTriggerMode.tap,
+              child: dot,
+            ),
             if (showLabel) ...[
               const SizedBox(width: 6),
               Text(

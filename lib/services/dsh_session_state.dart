@@ -46,6 +46,12 @@ class DshSessionState extends ChangeNotifier {
   // 会话列表是 HTTP 拉的，socket 通、列表却失败是完全可能的
   // （历史上就发生过：session/list 参数名写错 → 列表空 → 设备全离线，
   //  而右上角一直是绿的）。所以这里单独记一次列表拉取的结果。
+  //
+  // 但**绝不能把轮询的结果也算进来**：ServerManager 每 8 秒对当前机器做一次
+  // HTTP 轮询，它成功只说明「HTTP 能拉到列表」，与对话页那条 WebSocket 无关。
+  // 曾经 main.dart 把 onActiveHealth 直接接到 setSessionsHealth，于是
+  // 只要轮询活着，对话页顶部的点就恒绿 —— 哪怕 mux 早就断了。
+  // 两个信号必须分开存，各归各的消费者。
 
   bool? _sessionsOk;
   String? _sessionsError;

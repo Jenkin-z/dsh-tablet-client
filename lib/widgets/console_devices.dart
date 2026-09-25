@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import '../theme/ios_theme.dart';
 import '../services/server_manager.dart';
+import 'device_row_parts.dart';
 
-/// 顶部设备状态卡：一台 PC 一张 —— iOS 风格
+/// 顶部设备行：一台 PC 一行 —— iOS 风格
+///
+/// 布局按用户要求压成单行：
+/// `[图标] [地址]  ...  [运行数] [未读数] [当前] [状态图标]`
+///
+/// 在线状态**只由右侧图标表达**（绿勾 = 在线，红斜线 = 离线），
+/// 不再占用一行文字，卡片因此比原来矮一半。
 class ConsoleDeviceCard extends StatelessWidget {
-  final String name;
+  /// 显示地址：**不含端口**（用户明确要求）。
+  ///
+  /// 代价是同一 IP 上跑两个实例时看着一样。DSH 默认端口固定，
+  /// 单机单实例是常态，所以按可读性优先。
   final String hostLabel;
   final bool online;
   final bool needsAuth;
@@ -16,7 +26,6 @@ class ConsoleDeviceCard extends StatelessWidget {
 
   const ConsoleDeviceCard({
     super.key,
-    required this.name,
     required this.hostLabel,
     required this.online,
     required this.needsAuth,
@@ -30,20 +39,18 @@ class ConsoleDeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statusColor = needsAuth
-        ? IosTheme.iosOrange
-        : (online ? IosTheme.iosGreen : IosTheme.iosGray);
-    // 状态行只说「状态」，不再重复 IP —— IP 只由 hostLabel 呈现一次。
-    // 之前这里 online 时显示 hostLabel，而标题恰好也是 IP（name 默认为 host），
-    // 于是同一个地址在卡片上出现两遍：一遍带端口、一遍不带。
-    final stateText = needsAuth ? '需要重新授权' : (online ? '在线' : '离线');
-    // 名字本身就是 IP 时（没自定义过名称），标题显示 host:port 更完整，
-    // 状态行只留状态 —— 地址因此只出现一次。
-    final hostOnly = hostLabel.contains(':')
-        ? hostLabel.substring(0, hostLabel.lastIndexOf(':'))
-        : hostLabel;
-    final titleText =
-        name.trim().isEmpty || name == hostOnly ? hostLabel : name;
+
+    // 在线状态用一个图标表达。离线是「红底 + 斜线」，一眼可辨，
+    // 不再需要「在线 / 离线」这行文字。
+    final Color statusColor;
+    if (needsAuth) {
+      statusColor = IosTheme.iosOrange;
+    } else if (online) {
+      statusColor = IosTheme.iosGreen;
+    } else {
+      statusColor = IosTheme.iosRed;
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
@@ -68,128 +75,55 @@ class ConsoleDeviceCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(IosTheme.radiusCard),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(IosTheme.spaceM),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(
+              horizontal: IosTheme.spaceM,
+              vertical: IosTheme.spaceS,
+            ),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius:
-                            BorderRadius.circular(IosTheme.radiusXS),
-                      ),
-                      child: Icon(
-                        Icons.computer,
-                        size: 18,
-                        color: statusColor,
-                      ),
-                    ),
-                    const SizedBox(width: IosTheme.spaceS),
-                    Expanded(
-                      child: Text(
-                        titleText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    if (active)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: IosTheme.spaceS,
-                          vertical: IosTheme.spaceXXS,
-                        ),
-                        decoration: BoxDecoration(
-                          color: IosTheme.iosBlue.withValues(alpha: 0.12),
-                          borderRadius:
-                              BorderRadius.circular(IosTheme.radiusXS),
-                        ),
-                        child: const Text(
-                          '当前',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: IosTheme.iosBlue,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: IosTheme.spaceS),
-                Text(
-                  stateText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: statusColor,
-                  ),
-                ),
-                const SizedBox(height: IosTheme.spaceXS),
-                if (online)
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: IosTheme.spaceS,
-                          vertical: IosTheme.spaceXXS,
-                        ),
-                        decoration: BoxDecoration(
-                          color: IosTheme.iosGreen.withValues(alpha: 0.12),
-                          borderRadius:
-                              BorderRadius.circular(IosTheme.radiusXS),
-                        ),
-                        child: Text(
-                          '运行 $running',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: IosTheme.iosGreen,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      if (unviewed > 0) ...[
-                        const SizedBox(width: IosTheme.spaceS),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: IosTheme.spaceS,
-                            vertical: IosTheme.spaceXXS,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                IosTheme.iosOrange.withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(IosTheme.radiusXS),
-                          ),
-                          child: Text(
-                            '未读 $unviewed',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: IosTheme.iosOrange,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  )
-                else
-                  Text(
-                    error ?? ' ',
+                // 左：图标（颜色跟随状态，扫一眼就知道好坏）
+                Icon(Icons.computer, size: 20, color: statusColor),
+                const SizedBox(width: IosTheme.spaceS),
+                // 中：地址（只显示 IP，不带端口）
+                Expanded(
+                  child: Text(
+                    hostLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: IosTheme.iosGray,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
+                const SizedBox(width: IosTheme.spaceS),
+                // 右：其它信息
+                if (active) ...[
+                  const DeviceActiveBadge(),
+                  const SizedBox(width: IosTheme.spaceS),
+                ],
+                if (online && running > 0) ...[
+                  DeviceMiniStat(
+                    icon: Icons.play_circle_outline,
+                    text: '$running',
+                    color: IosTheme.iosGreen,
+                  ),
+                  const SizedBox(width: IosTheme.spaceS),
+                ],
+                if (online && unviewed > 0) ...[
+                  DeviceMiniStat(
+                    icon: Icons.mark_as_unread_outlined,
+                    text: '$unviewed',
+                    color: IosTheme.iosOrange,
+                  ),
+                  const SizedBox(width: IosTheme.spaceS),
+                ],
+                // 最右：在线状态图标（绿勾 / 红色断开 / 橙色锁）
+                DeviceStatusIcon(
+                  online: online,
+                  needsAuth: needsAuth,
+                  error: error,
+                ),
               ],
             ),
           ),
@@ -264,9 +198,8 @@ class ConsoleDevices extends StatelessWidget {
           for (var i = 0; i < groups.length; i++) ...[
             if (i > 0) const SizedBox(height: IosTheme.spaceS),
             ConsoleDeviceCard(
-              name: groups[i].server.name,
-              // IP 只在这里出现一次（host:port），别处不再重复
-              hostLabel: '${groups[i].server.host}:${groups[i].server.port}',
+              // 地址只显示 host，不带端口
+              hostLabel: groups[i].server.host,
               online: groups[i].monitor.online,
               needsAuth: groups[i].server.unpaired,
               running: groups[i].running.length,

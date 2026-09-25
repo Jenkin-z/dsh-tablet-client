@@ -1,5 +1,6 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../models/dsh_server.dart';
+import '../utils/session_format.dart';
 import 'dsh_api.dart';
 import 'dsh_auth.dart';
 import 'notification_service.dart';
@@ -41,7 +42,10 @@ class SessionMonitor {
     try {
       final items = await _api.listSessions();
       final current = server.lastSessionId;
-      for (final s in items) {
+      // 先剔除子 Agent 与多余的空会话：前者是任务的中间产物，
+      // 后者是「新建对话」的占位。必须在计数和通知之前剔除，
+      // 否则「子 Agent 跑完」会弹出「会话已完成」通知，打扰用户。
+      for (final s in items.where((s) => isUserFacingSession(s, currentSessionId: current))) {
         final id = s['sessionId'] as String? ?? '';
         if (id.isEmpty) continue;
         final key = _key(id);
@@ -60,7 +64,11 @@ class SessionMonitor {
         }
         _prevRunning[id] = running;
       }
-      sessions = items;
+      // 存储的列表也要过滤，否则 _filter()/groups 仍会把子 Agent 数进
+      // 「运行中」「最近」计数，控制台上就会出现莫名其妙的条目。
+      sessions = items
+          .where((s) => isUserFacingSession(s, currentSessionId: current))
+          .toList();
       error = null;
       online = true;
       lastRefresh = DateTime.now();

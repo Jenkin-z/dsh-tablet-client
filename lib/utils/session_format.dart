@@ -1,6 +1,39 @@
 /// 会话展示格式化：标题提取 + 相对时间（聊天侧栏与控制台共用）
 library;
 
+/// 这个会话是否该出现在用户面前
+///
+/// DSH 在执行任务时会自动拉起**子 Agent 会话**，它们带着
+/// `origin == 'subagent'` 和 `parentSessionId` 出现在 `session/list` 里。
+/// 这些是任务的中间产物，不是用户创建的对话，**不应该出现在任何会话列表**。
+///
+/// Web 端的等价规则在 `ui-workspace/src/client/tree.ts` 的 `sessionVisible()`：
+///
+/// ```ts
+/// session.origin !== 'subagent'
+///   && !archived.has(session.id)
+///   && (!session.blank || session.id === current)
+/// ```
+///
+/// 本函数承担 `origin` 与 `blank` 两项；归档由调用方各自的 archivedIds 处理。
+///
+/// **过滤必须发生在数据入口**：只挡 UI 的话，子 Agent 跑完仍会弹出
+/// 「会话已完成」通知——那是用户最不该被打扰的时刻。
+///
+/// [currentSessionId] 是「当前选中的会话」。空会话只是「新建对话」的占位行，
+/// 和 Web 端一样只保留当前那一个，否则列表会堆满「新会话」。
+bool isUserFacingSession(
+  Map<String, dynamic> s, {
+  String? currentSessionId,
+}) {
+  if (s['origin'] == 'subagent') return false;
+  if (s['blank'] == true && s['sessionId'] != currentSessionId) return false;
+  return true;
+}
+
+/// 子 Agent 会话判定（单独暴露，供测试与诊断使用）
+bool isSubagentSession(Map<String, dynamic> s) => s['origin'] == 'subagent';
+
 /// 安全访问 projections.values.title（兼容嵌套结构）
 String sessionTitleOf(Map<String, dynamic> s) {
   final t = _safeProjectionTitle(s);

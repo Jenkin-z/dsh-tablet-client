@@ -98,7 +98,12 @@ class ChatController extends ChangeNotifier {
     state.setLoadingSessions(true);
     try {
       final items = await _api!.listSessions();
-      state.setSessions(items);
+      // 与 SessionMonitor 用同一个判定：子 Agent 会话和多余的空会话
+      // 都不进任何列表（Web 端 sessionVisible() 的等价规则）
+      state.setSessions(items
+          .where((s) => isUserFacingSession(s,
+              currentSessionId: settings.sessionId))
+          .toList());
       state.setSessionTitle(_titleFor(settings.sessionId));
       // 拉到了才算数据侧健康 —— 状态点据此变绿
       state.setSessionsHealth(ok: true);

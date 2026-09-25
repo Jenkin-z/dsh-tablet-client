@@ -83,7 +83,33 @@ Web 端的状态点是**单一问题**：「我的连接活着吗」。平板拆
 「字段被赋值、无人读取」的哑巴字段（`connectionError`、`lastTurnEnd`），
 这类字段等于没有。新增状态字段时必须同时接上呈现。
 
-## 六、重构不得静默删除功能
+## 六、什么该出现在会话列表里
+
+DSH 在执行任务时会自动拉起**子 Agent 会话**。它们带 `origin == 'subagent'`
+和 `parentSessionId`，和用户的对话混在同一个 `session/list` 里返回。
+
+**它们不是用户的对话，一个都不该显示。** Web 端的规则在
+`ui-workspace/src/client/tree.ts` 的 `sessionVisible()`：
+
+```ts
+session.origin !== 'subagent'
+  && !archived.has(session.id)
+  && (!session.blank || session.id === current)
+```
+
+App 端用 `utils/session_format.dart` 的 `isUserFacingSession()` 表达前两项
+（归档由各调用方的 `archivedIds` 处理）。
+
+**硬性规则：过滤必须发生在数据入口，不能只在 UI 层挡。**
+
+理由不只是「列表要干净」：`SessionMonitor.refresh()` 在同一次循环里做
+未读标记和**完成通知**。如果子 Agent 留在数据里，那么任何一个子 Agent
+跑完都会弹「会话已完成」并响提示音——用户会在完全无关的时刻被打扰。
+
+因此 `SessionMonitor` 和 `ChatController` 两处 `listSessions()` 的返回值
+都必须过这一层。新增任何消费 `session/list` 的地方，同样要过。
+
+## 七、重构不得静默删除功能
 
 这个仓库发生过一次大规模重构，把控制台的「最近 3 小时 / 全部已读 / 未读橙标 /
 设备徽章 / 下拉刷新」、对话页的「停止 / 变更入口 / 重连 / 断线横幅」、

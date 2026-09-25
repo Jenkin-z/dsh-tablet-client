@@ -63,19 +63,21 @@ class ServerManager extends ChangeNotifier {
 
   SessionMonitor? monitorOf(String serverId) => _monitors[serverId];
 
-  /// 活跃 PC 的数据健康度回调
+  /// 当前机器轮询结果的对外广播口。
   ///
-  /// 控制台顶部那个状态点读的是共享状态，而设备卡读的是各自 monitor。
-  /// 不把这里的轮询结果回灌过去，就会出现「三台全离线 + 绿点」——
-  /// 用户看到的就是这个矛盾。由 main.dart 接到 DshSessionState。
+  /// **不要接到 DshSessionState.setSessionsHealth 上。** 那个字段代表
+  /// 对话页 mux 的数据健康，轮询是另一条通道；接上去会让状态点恒绿。
+  /// 保留这个口子是给需要轮询视图的消费者（例如控制台自身）用的。
   void Function(bool ok, String? error)? onActiveHealth;
 
   void _reportActiveHealth() {
-    final activeId = settings.activeServerId;
-    if (activeId == null) return;
-    final m = _monitors[activeId];
-    if (m == null) return;
-    onActiveHealth?.call(m.online, m.online ? null : m.error);
+    // 曾经这里把活跃机器的轮询结果推给 DshSessionState，用来给顶部状态点
+    // 上色。那是错的：状态点属于**对话页那条 WebSocket**，而轮询是另一条
+    // 独立的 HTTP 通道 —— 轮询一直成功，点就永远绿，与对话页是否真连上无关。
+    //
+    // 现在 `_sessionsOk` 只由 ChatController 写入，这里不再对外广播。
+    // 每台机器的健康度由设备卡各读各的 monitor（groups / _buildGroups）。
+    _cachedGroups = null;
   }
 
   /// 实时状态推送：立即更新某台 PC 的会话运行标记（无需等下一次轮询）

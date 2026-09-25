@@ -41,9 +41,9 @@ class ConsoleSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        IosTheme.spaceXXS,
+        IosTheme.spaceL,
         IosTheme.spaceS,
-        0,
+        IosTheme.spaceL,
         IosTheme.spaceXS,
       ),
       child: Row(

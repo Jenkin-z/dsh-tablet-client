@@ -44,12 +44,18 @@ void main() async {
     ),
   );
 
-  // 先把两个实例建出来，好把「活跃 PC 的轮询结果」接进共享状态——
-  // 否则控制台会出现「设备卡全离线、顶部状态点还是绿的」这种自相矛盾。
+  // 注意：这里**不再**把 ServerManager 的轮询结果接进 DshSessionState。
+  //
+  // 曾经是 `onActiveHealth = (ok, e) => sessionState.setSessionsHealth(...)`，
+  // 于是每 8 秒的 HTTP 轮询成功就把状态点刷成绿色 —— 对话页那个点反映的
+  // 其实是「轮询能拉到列表」，与对话页那条 WebSocket 毫无关系，
+  // 所以它一直绿、永远不会变。
+  //
+  // 现在 `_sessionsOk` 只由 ChatController 自己写入（boot 与重连时各拉一次
+  // 会话列表），点代表的就是「对话页这台机器连上了吗、数据新鲜吗」。
+  // 设备卡各自读自己的 monitor，不受影响。
   final sessionState = DshSessionState();
-  final serverManager = ServerManager(settings)
-    ..onActiveHealth = (ok, error) =>
-        sessionState.setSessionsHealth(ok: ok, error: error);
+  final serverManager = ServerManager(settings);
 
   runApp(
     MultiProvider(

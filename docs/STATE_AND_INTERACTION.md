@@ -69,15 +69,33 @@ if (group.running.isNotEmpty) { onOpenSession(...); } else { onSwitchServer(...)
 
 ## 五、状态颜色向 Web 端看齐
 
-Web 端的状态点是**单一问题**：「我的连接活着吗」。平板拆成四态是必要的，
-因为平板多了「连上但数据不可信」这一种真实存在的中间态：
+Web 端**不做轮询**（`packages/client` 里没有任何拉会话状态的 `setInterval`，
+只有 UI 时钟和 HMR 文件监听）。它靠 `$events` / `session/follow` /
+`session/control` 三路推送，加一次初始 `session/list` baseline。
 
-| 状态 | 颜色 | 含义 |
-|------|------|------|
-| connecting | 橙 | 正在建连 |
-| healthy | 绿 | socket 通 **且** 数据新鲜 |
-| degraded | 橙 | socket 通但接口失败（可点开看原因） |
-| offline | 红 | 断开 |
+平板多了一个轮询（`ServerManager` 每 8 秒对**所有**机器拉一次列表），
+因为要监控不在对话中的那些机器。
+
+**但轮询的结果绝不能写进状态点。** 状态点属于对话页那条 WebSocket；
+轮询是另一条独立 HTTP 通道。曾经 `main.dart` 把 `onActiveHealth` 接到
+`setSessionsHealth`，于是只要轮询活着点就恒绿、永远不变 —— 这正是
+「对话页顶部的点一直不变」的根因。
+
+四个颜色的含义（`ConnectionStatus` 按 `state.health` 上色）：
+
+| 状态 | 颜色 | 含义 | 触发条件 |
+|------|------|------|----------|
+| connecting | 橙 | 正在建连 / 数据尚未校验 | `_connecting`，或 `_sessionsOk == null` |
+| healthy | 绿 | 连上**且**数据新鲜 | `_connected && _sessionsOk == true` |
+| degraded | 橙「数据异常」 | socket 通但列表拉取失败 | `_connected && _sessionsOk == false` |
+| offline | 红「未连接」 | 连接已断开 | `!_connected` |
+
+**绿点必须同时满足两个条件。** 只有 socket 通不算健康。点可以点开，
+显示 `连接 / 建连中 / 数据校验` 三个原始字段与失败原因。
+
+`_sessionsOk` 只由 `ChatController` 写入：boot 时、`onReady` 时、
+`onReconnected` 时各拉一次列表。**新增任何写入方之前，先想清楚
+这个点代表谁。**
 
 **任何写入状态字段的地方，都必须有地方读它。** 历史上多次出现
 「字段被赋值、无人读取」的哑巴字段（`connectionError`、`lastTurnEnd`），

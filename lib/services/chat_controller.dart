@@ -237,12 +237,17 @@ class ChatController extends ChangeNotifier {
         // mux 真正就绪（clientId 已到手）才算连上
         state.setConnecting(false);
         state.setConnected(true);
+        // 连上后校准一次数据基线：状态点的绿色必须建立在
+        // 「列表确实拉到了」之上，而不是「socket 通了」。
+        _refreshSessions();
       }
       ..onReconnecting = () {
         state.setConnected(false);
       }
       ..onReconnected = () {
         state.setConnected(true);
+        // 重连后重新校准（Web 端也是在重连时重拉 baseline 的）
+        _refreshSessions();
       }
       ..onDisconnected = () {
         state.setConnected(false);

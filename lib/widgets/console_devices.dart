@@ -33,8 +33,17 @@ class ConsoleDeviceCard extends StatelessWidget {
     final statusColor = needsAuth
         ? IosTheme.iosOrange
         : (online ? IosTheme.iosGreen : IosTheme.iosGray);
-    final stateText =
-        needsAuth ? '需要重新授权' : (online ? hostLabel : '离线');
+    // 状态行只说「状态」，不再重复 IP —— IP 只由 hostLabel 呈现一次。
+    // 之前这里 online 时显示 hostLabel，而标题恰好也是 IP（name 默认为 host），
+    // 于是同一个地址在卡片上出现两遍：一遍带端口、一遍不带。
+    final stateText = needsAuth ? '需要重新授权' : (online ? '在线' : '离线');
+    // 名字本身就是 IP 时（没自定义过名称），标题显示 host:port 更完整，
+    // 状态行只留状态 —— 地址因此只出现一次。
+    final hostOnly = hostLabel.contains(':')
+        ? hostLabel.substring(0, hostLabel.lastIndexOf(':'))
+        : hostLabel;
+    final titleText =
+        name.trim().isEmpty || name == hostOnly ? hostLabel : name;
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
@@ -82,7 +91,7 @@ class ConsoleDeviceCard extends StatelessWidget {
                     const SizedBox(width: IosTheme.spaceS),
                     Expanded(
                       child: Text(
-                        name,
+                        titleText,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -248,29 +257,26 @@ class ConsoleDevices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 120,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceM),
-        itemCount: groups.length,
-        itemBuilder: (context, index) {
-          final group = groups[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: IosTheme.spaceS),
-            child: ConsoleDeviceCard(
-              name: group.server.name,
-              hostLabel: '${group.server.host}:${group.server.port}',
-              online: group.monitor.online,
-              needsAuth: group.server.unpaired,
-              running: group.running.length,
-              unviewed: group.unviewed.length,
-              error: group.monitor.error,
-              active: group.server.id == activeServerId,
-              onTap: () => onTapDevice(group.server.id),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+      child: Column(
+        children: [
+          for (var i = 0; i < groups.length; i++) ...[
+            if (i > 0) const SizedBox(height: IosTheme.spaceS),
+            ConsoleDeviceCard(
+              name: groups[i].server.name,
+              // IP 只在这里出现一次（host:port），别处不再重复
+              hostLabel: '${groups[i].server.host}:${groups[i].server.port}',
+              online: groups[i].monitor.online,
+              needsAuth: groups[i].server.unpaired,
+              running: groups[i].running.length,
+              unviewed: groups[i].unviewed.length,
+              error: groups[i].monitor.error,
+              active: groups[i].server.id == activeServerId,
+              onTap: () => onTapDevice(groups[i].server.id),
             ),
-          );
-        },
+          ],
+        ],
       ),
     );
   }

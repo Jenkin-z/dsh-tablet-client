@@ -13,6 +13,7 @@ import 'server_manager.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
 import 'notification_service.dart';
+import 'app_visibility.dart';
 
 /// 聊天业务逻辑控制器：管理连接、消息、审批、会话切换
 ///
@@ -190,7 +191,7 @@ class ChatController extends ChangeNotifier {
         );
         SoundService.approval();
         NotificationService.show(
-          id: 10000,
+          id: 30000,
           title: '需要确认',
           body: '工具 $toolName 需要确认',
         );
@@ -207,6 +208,14 @@ class ChatController extends ChangeNotifier {
           questions: questions,
         );
         SoundService.question();
+        // 切到后台时提问也要弹通知，否则最小化时看不到提问
+        if (!AppVisibility.foreground) {
+          NotificationService.show(
+            id: 30001,
+            title: 'DSH 向你提问',
+            body: questions.map((q) => q['question']).whereType<String>().join(' '),
+          );
+        }
       }
       ..onQuestionResolved = dispatcher.onQuestionResolved
       ..onToolView = dispatcher.onToolView

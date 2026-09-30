@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/app_visibility.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
@@ -16,7 +17,7 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _updateChecked = false;
   ServerManager? _manager;
@@ -24,6 +25,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_updateChecked || !mounted) return;
       _updateChecked = true;
@@ -49,8 +51,15 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _manager?.stop();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppVisibility.foreground =
+        state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
   }
 
   /// 打开会话：切机器 + 指定会话 + 跳到对话页。

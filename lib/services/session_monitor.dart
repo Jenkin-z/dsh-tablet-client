@@ -1,8 +1,9 @@
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../models/dsh_server.dart';
 import '../utils/session_format.dart';
+import 'app_visibility.dart';
 import 'dsh_api.dart';
 import 'dsh_auth.dart';
+import 'keep_alive_service.dart';
 import 'notification_service.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
@@ -52,13 +53,17 @@ class SessionMonitor {
         await settings.rememberBaseline(key, (s['updatedAt'] as int?) ?? 0);
         final running = s['running'] == true;
         final was = _prevRunning[id];
-        if (was == true && !running && id != current) {
-          // 非当前会话刚跑完：把时间顶到现在，让它浮到「最近」列表顶部
+        // 正在前台看当前会话 → 它的完成不需要打扰；切到后台后（哪怕在看它）
+        // 也必须通知，否则「最小化等结果」永远等不到通知。
+        final isCurrent = id == current;
+        final watching = isCurrent && AppVisibility.foreground;
+        if (was == true && !running && !watching) {
+          // 刚跑完：把时间顶到现在，让它浮到「最近」列表顶部
           s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
           await _markFinished(key);
         } else if (!running &&
             s['blank'] != true &&
-            id != current &&
+            !watching &&
             ((s['updatedAt'] as int?) ?? 0) > settings.lastSeen(key)) {
           await settings.addUnviewed(key);
         }
@@ -111,7 +116,9 @@ class SessionMonitor {
     target['running'] = running;
     _prevRunning[sessionId] = running;
     // 实时推送也要走完成检测，否则只有轮询到的完成才会通知
-    if (was == true && !running && sessionId != server.lastSessionId) {
+    final isCurrent = sessionId == server.lastSessionId;
+    final watching = isCurrent && AppVisibility.foreground;
+    if (was == true && !running && !watching) {
       target['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
       _markFinished(_key(sessionId));
     }
@@ -120,21 +127,17 @@ class SessionMonitor {
 
   /// 会话完成：标记未读 + 双通道通知 + 提示音
   ///
-  /// 只对**非当前会话**触发 —— 你正看着的会话不需要通知你。
+  /// 前台看当前会话时不打扰；切到后台后当前会话完成也要通知。
   Future<void> _markFinished(String key) async {
     await settings.addUnviewed(key);
     try {
       await NotificationService.show(
-        id: 10000 + _notifySeq++,
+        id: 20000 + _notifySeq++,
         title: '会话已完成',
         body: '非当前会话有新结果',
       );
     } catch (_) {}
-    try {
-      FlutterForegroundTask.updateService(
-        notificationText: '会话已完成: 非当前会话有新结果',
-      );
-    } catch (_) {}
+    KeepAliveService.setStatus('会话已完成: 非当前会话有新结果');
     if (settings.soundEnabled && settings.completionSound) {
       SoundService.done(customPath: settings.customSoundPath('done'));
     }

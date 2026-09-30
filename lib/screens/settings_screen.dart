@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/dsh_api.dart';
+import '../services/keep_alive_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
@@ -358,86 +358,67 @@ class _ForegroundServiceTile extends StatefulWidget {
 
 class _ForegroundServiceTileState extends State<_ForegroundServiceTile> {
   bool _running = false;
+  bool _batteryOk = true;
 
   @override
   void initState() {
     super.initState();
-    FlutterForegroundTask.isRunningService.then((v) {
-      if (mounted) setState(() => _running = v);
-    });
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final running = await KeepAliveService.isRunning;
+    final battery = await KeepAliveService.ignoringBatteryOptimizations;
+    if (mounted) {
+      setState(() {
+        _running = running;
+        _batteryOk = battery;
+      });
+    }
   }
 
   Future<void> _toggle(bool value) async {
-    try {
-      if (value) {
-        await FlutterForegroundTask.startService(
-          notificationTitle: 'DSH Agent 运行中',
-          notificationText: '与 PC 端保持连接',
-          callback: _foregroundCallback,
-        );
-      } else {
-        await FlutterForegroundTask.stopService();
-      }
-      final running = await FlutterForegroundTask.isRunningService;
-      if (mounted) setState(() => _running = running);
-      if (value && !running && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('前台保活没有启动，请检查通知权限')),
-        );
-      }
-    } catch (e) {
-      final running = await FlutterForegroundTask.isRunningService;
-      if (!mounted) return;
-      setState(() => _running = running);
+    final running =
+        value ? await KeepAliveService.start() : await KeepAliveService.stop();
+    if (!mounted) return;
+    setState(() => _running = running);
+    if (value && !running) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('前台保活失败: $e')),
+        const SnackBar(content: Text('前台保活没有启动，请检查通知权限')),
       );
     }
   }
 
+  Future<void> _requestBattery() async {
+    await KeepAliveService.requestIgnoreBatteryOptimization();
+    await _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
-      secondary: Icon(
-        Icons.shield_outlined,
-        color: IosTheme.iosGreen,
-        size: 22,
-      ),
-      title: const Text('前台保活服务'),
-      subtitle: const Text('通知栏常驻，防止系统杀掉应用',
-          style: TextStyle(fontSize: 13)),
-      value: _running,
-      onChanged: _toggle,
-      activeThumbColor: IosTheme.iosGreen,
+    return Column(
+      children: [
+        SwitchListTile(
+          secondary: Icon(Icons.shield_outlined,
+              color: IosTheme.iosGreen, size: 22),
+          title: const Text('前台保活服务'),
+          subtitle: const Text('启动时自动开启；关掉后切到后台将收不到通知',
+              style: TextStyle(fontSize: 13)),
+          value: _running,
+          onChanged: _toggle,
+          activeThumbColor: IosTheme.iosGreen,
+        ),
+        if (!_batteryOk)
+          ListTile(
+            leading: Icon(Icons.battery_alert_outlined,
+                color: IosTheme.iosOrange, size: 22),
+            title: const Text('忽略电池优化'),
+            subtitle: const Text('未加入白名单，熄屏后可能被系统冻结',
+                style: TextStyle(fontSize: 13)),
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: _requestBattery,
+          ),
+      ],
     );
-  }
-}
-
-/// 前台服务入口（必须为顶层函数）
-@pragma('vm:entry-point')
-void _foregroundCallback() {
-  FlutterForegroundTask.setTaskHandler(_DshTaskHandler());
-}
-
-class _DshTaskHandler extends TaskHandler {
-  @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
-
-  @override
-  void onRepeatEvent(DateTime timestamp) {
-    FlutterForegroundTask.updateService(
-      notificationText: '与 PC 端保持连接',
-    );
-  }
-
-  @override
-  Future<void> onDestroy(DateTime timestamp) async {}
-
-  @override
-  void onNotificationButtonPressed(String id) {}
-
-  @override
-  void onNotificationPressed() {
-    FlutterForegroundTask.launchApp('/');
   }
 }

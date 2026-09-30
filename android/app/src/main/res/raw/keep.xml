@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知提示音只在 Dart 里按名字引用（RawResourceAndroidNotificationSound），
+     R8 资源压缩看不到引用会把它删掉，导致带声音的通知整条发不出去。 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/dshm_alert" />

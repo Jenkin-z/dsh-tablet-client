@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/main_shell.dart';
 import 'services/dsh_session_state.dart';
+import 'services/keep_alive_service.dart';
 import 'services/notification_service.dart';
 import 'services/server_manager.dart';
 import 'services/session_router.dart';
@@ -24,25 +25,9 @@ void main() async {
   // 初始化本地通知（审批/提问/完成时弹出 heads-up 通知）
   await NotificationService.init();
 
-  FlutterForegroundTask.init(
-    androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'dshm_foreground',
-      channelName: 'DSHM 后台保活',
-      channelDescription: '保持与 PC 端连接的常驻通知',
-      channelImportance: NotificationChannelImportance.LOW,
-      priority: NotificationPriority.LOW,
-      playSound: false,
-    ),
-    iosNotificationOptions: const IOSNotificationOptions(
-      showNotification: false,
-    ),
-    foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(60000),
-      autoRunOnBoot: true,
-      allowWakeLock: true,
-      allowWifiLock: true,
-    ),
-  );
+  // 前台保活：启动即拉起，否则切到后台后进程被冻结，轮询停了就不会有通知
+  KeepAliveService.init();
+  await KeepAliveService.start();
 
   // 注意：这里**不再**把 ServerManager 的轮询结果接进 DshSessionState。
   //

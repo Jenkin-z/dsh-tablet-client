@@ -9,6 +9,7 @@
 
     <!-- 前台保活服务 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -47,14 +48,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- 前台保活服务：开机自启 -->
-        <receiver
-            android:name="com.pravera.flutter_foreground_task.service.BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
+        <!-- 前台保活服务本体。插件自身 manifest 不声明它，必须由 App 声明，
+             否则 startService 静默失败、后台轮询被系统冻结、通知不会发出。
+             开机自启由插件自带的 RebootReceiver 负责（旧的 BootReceiver 类已不存在）。 -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync|specialUse"
+            android:stopWithTask="false"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="保持与局域网 PC 的 DSH 连接，接收会话完成与审批通知" />
+        </service>
         <!-- 应用内更新：给系统安装器授权读取下载的 APK -->
         <provider
             android:name="androidx.core.content.FileProvider"

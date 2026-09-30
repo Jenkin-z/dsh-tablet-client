@@ -75,6 +75,30 @@ class NotificationService {
         styleInformation: const DefaultStyleInformation(true, true),
       ),
     );
-    await _plugin.show(nid, title, body, details);
+    try {
+      await _plugin.show(nid, title, body, details);
+    } catch (_) {
+      // 自定义声音资源不可用（例如资源被压缩掉）时，整个 show 会抛错，
+      // 通知发不出去。兜底：去掉自定义声音再发一次，保证通知至少能弹出来。
+      final fallback = NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          importance: Importance.max,
+          priority: Priority.max,
+          icon: '@mipmap/ic_launcher',
+          ticker: 'DSHM',
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 300, 150, 300]),
+          playSound: false,
+          category: AndroidNotificationCategory.alarm,
+          visibility: NotificationVisibility.public,
+          fullScreenIntent: true,
+          styleInformation: const DefaultStyleInformation(true, true),
+        ),
+      );
+      await _plugin.show(nid, title, body, fallback);
+    }
   }
 }

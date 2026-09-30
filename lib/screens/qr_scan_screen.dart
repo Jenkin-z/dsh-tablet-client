@@ -43,7 +43,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
   Future<void> _handleResult(String raw) async {
     final target = NativeAuth.parse(raw);
-    if (target == null || target.token == null || target.token!.isEmpty) {
+    final hasToken = target?.token != null && target!.token!.isNotEmpty;
+    if (target == null || !(hasToken || target.isPairServer)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -56,10 +57,10 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
     setState(() => _busy = true);
     try {
-      final cookie = await NativeAuth.exchangeCookie(target);
+      final g = await NativeAuth.authorize(target);
       if (!mounted) return;
       Navigator.of(context).pop(
-        PairResult(host: target.host, port: target.port, cookie: cookie),
+        PairResult(host: g.host, port: g.port, cookie: g.cookie),
       );
     } on DshAuthException catch (e) {
       if (!mounted) return;

@@ -10,9 +10,10 @@ import 'qr_scan_screen.dart';
 
 /// 用 DSH 启动令牌换取 browser-session cookie（约 30 天，DSH 重启仍有效）
 ///
-/// 两条路：
+/// 三条路：
 /// 1. 自动：PC 运行 tool/publish_launch_token.ps1 把令牌发到 8099，这里一键拉取
 /// 2. 手动：粘贴 dsh web 启动输出的完整链接（http://IP:3080/?token=r_...）
+/// 3. 配对页：PC 双击「手机授权.bat」，从 IP:8899 领自签 cookie（桌面端 19387）
 class PairScreen extends StatefulWidget {
   final String? existingServerId;
   const PairScreen({super.key, this.existingServerId});
@@ -62,6 +63,17 @@ class _PairScreenState extends State<PairScreen> {
     }
   }
 
+  /// 新方案：PC 双击「手机授权.bat」后，从 8899 配对页领 cookie
+  Future<void> _pairPageAuthorize() async {
+    if (_busy) return;
+    final target = NativeAuth.parse(_paste.text);
+    if (target == null) {
+      setState(() => _error = '无法识别，请输入 PC 局域网 IP（如 192.168.10.171）');
+      return;
+    }
+    await _run(() => NativeAuth.fetchFromPairServer(target.host));
+  }
+
   Future<void> _authorizeWithToken() async {
     if (_busy) return;
     final target = NativeAuth.parse(_paste.text);
@@ -69,17 +81,22 @@ class _PairScreenState extends State<PairScreen> {
       setState(() => _error = '无法识别，请粘贴完整启动链接（http://IP:3080/?token=...）');
       return;
     }
-    if (target.token == null || target.token!.isEmpty) {
-      setState(() => _error = '链接里没有 token。请复制 dsh web 启动输出的完整网址，或在 PC 上运行发布脚本后点“自动授权”');
+    if (!target.isPairServer &&
+        (target.token == null || target.token!.isEmpty)) {
+      setState(() => _error = '链接里没有 token。请复制 dsh web 启动输出的完整网址，或粘贴 8899 配对页地址');
       return;
     }
+    await _run(() => NativeAuth.authorize(target));
+  }
+
+  Future<void> _run(Future<AuthGrant> Function() job) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final cookie = await NativeAuth.exchangeCookie(target);
-      await _finish(target.host, target.port, cookie);
+      final g = await job();
+      await _finish(g.host, g.port, g.cookie);
     } on DshAuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -207,15 +224,26 @@ class _PairScreenState extends State<PairScreen> {
                   ],
                 ),
                 const SizedBox(height: IosTheme.spaceM),
-                // 扫码按钮
-                SizedBox(
-                  width: double.infinity,
-                  child: IosButton(
-                    label: '扫码授权',
-                    icon: Icons.qr_code_scanner,
-                    filled: false,
-                    onPressed: _busy ? null : _scanAuthorize,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: IosButton(
+                        label: '配对页授权',
+                        icon: Icons.phonelink_lock,
+                        filled: false,
+                        onPressed: _busy ? null : _pairPageAuthorize,
+                      ),
+                    ),
+                    const SizedBox(width: IosTheme.spaceM),
+                    Expanded(
+                      child: IosButton(
+                        label: '扫码授权',
+                        icon: Icons.qr_code_scanner,
+                        filled: false,
+                        onPressed: _busy ? null : _scanAuthorize,
+                      ),
+                    ),
+                  ],
                 ),
                 if (_busy) ...[
                   const SizedBox(height: IosTheme.spaceL),
@@ -292,6 +320,11 @@ class _PairScreenState extends State<PairScreen> {
                 _infoRow(
                   icon: Icons.auto_fix_high,
                   text: '自动方式：在 PC 上运行 tool\\publish_launch_token.ps1，令牌会发到 8099 下载服务，平板一键拉取',
+                ),
+                const SizedBox(height: IosTheme.spaceS),
+                _infoRow(
+                  icon: Icons.phonelink_lock,
+                  text: '配对页方式（桌面端 19387）：PC 双击「手机授权.bat」，这里填 PC 局域网 IP 后点「配对页授权」，授权完即可关掉 PC 上的窗口；换网段需重新授权',
                 ),
               ],
             ),

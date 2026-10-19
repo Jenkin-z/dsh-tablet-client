@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../services/model_service.dart';
+import '../services/model_catalog.dart';
 import '../theme/ios_theme.dart';
 
 /// 模型面板的纯展示组件

@@ -17,7 +17,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-const _apiPath = 'lib/services/dsh_api.dart';
+const _apiPath = 'lib/services/dsh/dsh_api.dart';
 
 /// 取出某个 `rpc('method', {...})` 调用里 args 的最外层键名
 Set<String> _argKeysFor(String source, String method) {
@@ -111,7 +111,7 @@ void main() {
   group('session/follow 的 request 包装层', () {
     test('mux_stream.dart 的 follow 开窗必须含 request 层', () {
       // index.ts:401  follow(request: SessionFollowRequest, signal)
-      final src = File('lib/services/mux_stream.dart').readAsStringSync();
+      final src = File('lib/services/dsh/mux_stream.dart').readAsStringSync();
       final idx = src.indexOf("'session/follow'");
       expect(idx >= 0, isTrue, reason: '找不到 session/follow 开窗代码');
       // 取该 open 调用附近的一段，确认 args → request → address 三层
@@ -127,7 +127,7 @@ void main() {
     late String modelSource;
 
     setUpAll(() {
-      final f = File('lib/services/model_service.dart');
+      final f = File('lib/services/dsh/model_service.dart');
       expect(f.existsSync(), isTrue);
       modelSource = f.readAsStringSync();
     });
@@ -155,8 +155,11 @@ void main() {
 
     test('modelSelection 投影读 next 优先，回落 lastUsed', () {
       // types.ts:101  ModelSelectionProjection = {lastUsed, next}
-      expect(modelSource.contains("['next']"), isTrue);
-      expect(modelSource.contains("['lastUsed']"), isTrue);
+      // 投影解析随重构迁到 model_catalog.dart 的 ModelSelection.fromProjection
+      final projectionSource =
+          File('lib/services/model_catalog.dart').readAsStringSync();
+      expect(projectionSource.contains("['next']"), isTrue);
+      expect(projectionSource.contains("['lastUsed']"), isTrue);
     });
   });
 }

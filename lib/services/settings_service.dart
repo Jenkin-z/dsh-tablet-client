@@ -2,16 +2,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import '../models/dsh_server.dart';
+import '../models/agent_server.dart';
 import 'seen_store.dart';
 
-/// 持久化：多 PC 列表、主题、声音、未读水位
+/// 持久化：多后端列表（DSH / opencode）、主题、声音、未读水位
 class SettingsService extends ChangeNotifier {
   late SharedPreferences _prefs;
   final _uuid = const Uuid();
   final SeenStore _seen = SeenStore();
 
-  List<DshServer> _servers = [];
+  List<AgentServer> _servers = [];
   String? _activeServerId;
   bool _keepScreenOn = true;
   bool _autoReconnect = true;
@@ -23,9 +23,9 @@ class SettingsService extends ChangeNotifier {
   bool _updateAutoCheck = true;
   String _themeModeKey = 'system';
 
-  List<DshServer> get servers => List.unmodifiable(_servers);
+  List<AgentServer> get servers => List.unmodifiable(_servers);
   String? get activeServerId => _activeServerId;
-  DshServer? get active {
+  AgentServer? get active {
     if (_servers.isEmpty) return null;
     for (final s in _servers) {
       if (s.id == _activeServerId) return s;
@@ -33,7 +33,13 @@ class SettingsService extends ChangeNotifier {
     return _servers.first;
   }
 
-  String get serverHost => active?.host ?? '192.168.10.171';
+  String get serverHost {
+    final a = active;
+    if (a == null) return '192.168.10.171';
+    // opencode 隧道条目没有 host，退回展示地址
+    return a.host.isNotEmpty ? a.host : a.displayAddress;
+  }
+
   int get serverPort => active?.port ?? 3080;
   String get serverUrl => active?.httpUrl ?? 'http://192.168.10.171:3080';
   String get wsUrl => active?.wsUrl ?? 'ws://192.168.10.171:3080';
@@ -51,7 +57,7 @@ class SettingsService extends ChangeNotifier {
   int lastSeen(String id) => _seen.lastSeen(id);
   String? customSoundPath(String name) => _customSounds[name];
   String seenKey(String serverId, String sessionId) =>
-      DshServer.sessionKey(serverId, sessionId);
+      AgentServer.sessionKey(serverId, sessionId);
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -76,8 +82,9 @@ class SettingsService extends ChangeNotifier {
         final list = jsonDecode(raw) as List<dynamic>;
         _servers = list
             .whereType<Map<String, dynamic>>()
-            .map(DshServer.fromJson)
-            .where((s) => s.id.isNotEmpty && s.host.isNotEmpty)
+            .map(AgentServer.fromJson)
+            // opencode 隧道条目只有 url 没有 host，两者有其一即可
+            .where((s) => s.id.isNotEmpty && (s.host.isNotEmpty || (s.url ?? '').isNotEmpty))
             .toList();
       } catch (_) {
         _servers = [];
@@ -90,7 +97,7 @@ class SettingsService extends ChangeNotifier {
       final sid = _prefs.getString('sessionId');
       final id = _uuid.v4();
       _servers = [
-        DshServer(
+        AgentServer(
             id: id, name: host, host: host, port: port, lastSessionId: sid),
       ];
       _activeServerId = id;
@@ -113,14 +120,15 @@ class SettingsService extends ChangeNotifier {
     }
     final a = active;
     if (a == null) return;
-    await _prefs.setString('serverHost', a.host);
+    // 旧镜像字段：opencode 隧道条目没有 host，别用空串把旧值盖掉
+    if (a.host.isNotEmpty) await _prefs.setString('serverHost', a.host);
     await _prefs.setInt('serverPort', a.port);
     if (a.lastSessionId != null) {
       await _prefs.setString('sessionId', a.lastSessionId!);
     }
   }
 
-  Future<void> upsertServer(DshServer server) async {
+  Future<void> upsertServer(AgentServer server) async {
     final i = _servers.indexWhere((s) => s.id == server.id);
     if (i >= 0) {
       _servers[i] = server;
@@ -148,7 +156,7 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> patchServer(String id, DshServer Function(DshServer) fn) async {
+  Future<void> patchServer(String id, AgentServer Function(AgentServer) fn) async {
     final i = _servers.indexWhere((s) => s.id == id);
     if (i < 0) return;
     _servers[i] = fn(_servers[i]);
@@ -161,7 +169,7 @@ class SettingsService extends ChangeNotifier {
     if (a == null) {
       final id = _uuid.v4();
       await upsertServer(
-          DshServer(id: id, name: host, host: host, port: port));
+          AgentServer(id: id, name: host, host: host, port: port));
       await setActiveServer(id);
       return;
     }

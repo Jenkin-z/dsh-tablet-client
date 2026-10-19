@@ -1,16 +1,16 @@
-/// DSH 消息模型
-class DshMessage {
+/// 聊天消息模型（与后端无关：DSH 与 opencode 产出同一种气泡）
+class ChatMessage {
   final String id;
   final String role; // 'user' | 'assistant' | 'system'
   final String content;
   final DateTime timestamp;
   final bool isStreaming;
 
-  /// 本地乐观气泡：已发出但还没被 Host 的 durable user/message 确认。
-  /// 收到带同一 rpcId 的 durable 消息后，本地这条会被撤掉。
+  /// 本地乐观气泡：已发出但还没被后端确认。
+  /// 收到确认后，本地这条会被撤掉或转为确认态。
   final bool pending;
 
-  DshMessage({
+  ChatMessage({
     required this.id,
     required this.role,
     required this.content,
@@ -19,13 +19,13 @@ class DshMessage {
     this.pending = false,
   }) : timestamp = timestamp ?? DateTime.now();
 
-  DshMessage copyWith({
+  ChatMessage copyWith({
     String? id,
     String? content,
     bool? isStreaming,
     bool? pending,
   }) {
-    return DshMessage(
+    return ChatMessage(
       id: id ?? this.id,
       role: role,
       content: content ?? this.content,

@@ -3,7 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/main_shell.dart';
-import 'services/dsh_session_state.dart';
+import 'services/session_state.dart';
 import 'services/keep_alive_service.dart';
 import 'services/notification_service.dart';
 import 'services/server_manager.dart';
@@ -29,7 +29,7 @@ void main() async {
   KeepAliveService.init();
   await KeepAliveService.start();
 
-  // 注意：这里**不再**把 ServerManager 的轮询结果接进 DshSessionState。
+  // 注意：这里**不再**把 ServerManager 的轮询结果接进 SessionState。
   //
   // 曾经是 `onActiveHealth = (ok, e) => sessionState.setSessionsHealth(...)`，
   // 于是每 8 秒的 HTTP 轮询成功就把状态点刷成绿色 —— 对话页那个点反映的
@@ -39,7 +39,7 @@ void main() async {
   // 现在 `_sessionsOk` 只由 ChatController 自己写入（boot 与重连时各拉一次
   // 会话列表），点代表的就是「对话页这台机器连上了吗、数据新鲜吗」。
   // 设备卡各自读自己的 monitor，不受影响。
-  final sessionState = DshSessionState();
+  final sessionState = SessionState();
   final serverManager = ServerManager(settings);
 
   runApp(

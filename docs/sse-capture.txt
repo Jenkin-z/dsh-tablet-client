@@ -1,0 +1,7 @@
+# status=OK at 2026-10-19T20:58:36.5070665+08:00
+data: {"id":"evt_1543e11c3001YEsdSvQP5Fpm3D","type":"server.connected","data":{}}
+
+: heartbeat
+
+data: {"id":"evt_1543e130b001Bz2u2XMN2td7W2","created":1792414716683,"type":"session.created","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabc1eda1ffe8uE717ZD3yCeQ2","slug":"stellar-harbor","version":"2.0.32","projectID":"e8b11ab45190658f55a0feec4383460223ed7929","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"subpath":""},"durable":{"aggregateID":"ses_eabc1eda1ffe8uE717ZD3yCeQ2","seq":0,"version":1}}
+

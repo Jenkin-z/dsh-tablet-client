@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/dsh_session_state.dart';
+import '../services/session_state.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
@@ -14,7 +14,7 @@ import 'pair_screen.dart';
 /// 控制台：顶部每设备一张状态卡，下方按设备分组展示会话
 ///
 /// 重构后：只做展示，不做权威判断。
-/// 连接/会话状态一律从 DshSessionState 读取，不自己推断。
+/// 连接/会话状态一律从 SessionState 读取，不自己推断。
 class ConsoleScreen extends StatelessWidget {
   final void Function(String serverId, String sessionId) onOpenSession;
 
@@ -32,7 +32,7 @@ class ConsoleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<ServerManager, SettingsService, DshSessionState>(
+    return Consumer3<ServerManager, SettingsService, SessionState>(
       builder: (context, manager, settings, session, _) {
         final groups = manager.groups;
         final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -82,7 +82,7 @@ class ConsoleScreen extends StatelessWidget {
     BuildContext context,
     ServerManager manager,
     SettingsService settings,
-    DshSessionState session,
+    SessionState session,
     List<ServerGroup> groups,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

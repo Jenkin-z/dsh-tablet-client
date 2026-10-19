@@ -33,7 +33,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (s.updateAutoCheck) {
         UpdateFlow.checkAndPrompt(
           context,
-          s.servers.map((e) => e.host).followedBy([s.serverHost]),
+          // opencode 隧道条目没有 host，只拿有 host 的去探测 8099
+          s.servers
+              .where((e) => e.host.isNotEmpty)
+              .map((e) => e.host)
+              .followedBy([s.serverHost]),
           auto: true,
         );
       }

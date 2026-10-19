@@ -2,16 +2,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../models/pending.dart';
-import 'dsh_session_state.dart';
-import 'mux_history.dart';
-import 'model_service.dart';
+import 'app_visibility.dart';
+import 'dsh/mux_history.dart';
+import 'model_catalog.dart';
+import 'notification_service.dart';
+import 'session_state.dart';
+import 'sound_service.dart';
 
-/// 事件统一入口：所有 mux 事件都先进这里，再更新状态中枢
+/// 事件统一入口：所有后端事件都先进这里，再更新状态中枢
 ///
-/// 不要在其他模块里自己处理 mux 事件。
-/// 所有事件都必须通过这个 dispatcher 分发。
-class MuxEventDispatcher {
-  final DshSessionState state;
+/// 不要在其他模块里自己处理后端事件。
+/// 所有事件都必须通过这个 dispatcher 分发 —— DSH（mux）与 opencode（SSE）
+/// 走同一套对账/状态迁移逻辑，页面与状态中枢对后端无感。
+class EventDispatcher {
+  final SessionState state;
 
   /// 运行状态推送的外部观察者（如 ServerManager 的实时刷新）
   void Function(String sessionId, bool running)? onSessionStatusExternal;
@@ -23,7 +27,7 @@ class MuxEventDispatcher {
   VoidCallback? onPopQuestionDialog;
   void Function(String message)? onShowSnackBar;
 
-  MuxEventDispatcher({
+  EventDispatcher({
     required this.state,
     this.onSessionStatusExternal,
     this.onSessionError,
@@ -38,7 +42,7 @@ class MuxEventDispatcher {
 
   final StringBuffer _deltaBuffer = StringBuffer();
   Timer? _deltaFlushTimer;
-  final List<DshMessage> _messages = [];
+  final List<ChatMessage> _messages = [];
   final Set<String> _seenUserSeq = {};
 
   /// 本地乐观气泡的 rpcId → 内容。
@@ -53,12 +57,12 @@ class MuxEventDispatcher {
 
   final Map<String, String> _pendingEcho = {};
 
-  List<DshMessage> get messages => List.unmodifiable(_messages);
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
 
-  /// 本地立刻上屏一条用户气泡（发送后不等 Host 回显）
+  /// 本地立刻上屏一条用户气泡（发送后不等后端回显）
   void addLocalUserMessage(String text, String rpcId) {
     _pendingEcho[rpcId] = text;
-    _messages.add(DshMessage(
+    _messages.add(ChatMessage(
       id: rpcId,
       role: 'user',
       content: text,
@@ -76,6 +80,21 @@ class MuxEventDispatcher {
     if (_messages.length != before) state.notify();
   }
 
+  /// 发送成功确认：把乐观气泡就地转为确认态。
+  ///
+  /// opencode 的 durable 消息不带 rpcId，无法按 id 对账；
+  /// POST /prompt 返回 2xx 即服务端已收，此时就地确认即可
+  /// （DSH 仍走 [_reconcileEcho] 的 durable 对账，两条路并存）。
+  void confirmLocalUserMessage(String rpcId) {
+    if (!_pendingEcho.containsKey(rpcId)) return;
+    _pendingEcho.remove(rpcId);
+    final idx = _messages.indexWhere((m) => m.id == rpcId && m.pending);
+    if (idx >= 0) {
+      _messages[idx] = _messages[idx].copyWith(pending: false);
+      state.notify();
+    }
+  }
+
   /// 用 durable 消息替换乐观气泡（同一 rpcId 只保留一条，最终态为准）
   void _reconcileEcho(String? rpcId, String text) {
     if (rpcId == null || rpcId.isEmpty) return;
@@ -90,18 +109,16 @@ class MuxEventDispatcher {
     state.setLastTurnEnd(null);
   }
 
-  void onSnapshot(List<Map<String, dynamic>> records) {
-    final parsed = parseHistory(records);
+  /// 历史装载的公共段：DSH 的 onSnapshot 与 opencode 的 onHistoryLoaded
+  /// 共用（重连瞬间自己刚发的消息不能凭空消失，两条路都必须补回未确认回显）。
+  void _loadMessages(List<ChatMessage> loaded) {
     _messages.clear();
     _seenUserSeq.clear();
-    for (final p in parsed) {
-      _messages.add(DshMessage(id: p.id, role: p.role, content: p.text));
-      _seenUserSeq.add(p.id);
-    }
+    _messages.addAll(loaded);
     // 快照里没出现、但仍未确认的本地回显要补回去，
     // 否则重连瞬间自己刚发的消息会凭空消失
     for (final entry in _pendingEcho.entries) {
-      _messages.add(DshMessage(
+      _messages.add(ChatMessage(
         id: entry.key,
         role: 'user',
         content: entry.value,
@@ -109,6 +126,14 @@ class MuxEventDispatcher {
       ));
     }
     state.clearChanges();
+    state.notify();
+    onJumpToLatest?.call();
+  }
+
+  void onSnapshot(List<Map<String, dynamic>> records) {
+    final parsed = parseHistory(records);
+    _loadMessages(
+        parsed.map((p) => ChatMessage(id: p.id, role: p.role, content: p.text)).toList());
     for (final v in parseHistoryViews(records)) {
       state.applyToolView(
         diffs: v.diffs,
@@ -117,9 +142,11 @@ class MuxEventDispatcher {
         turn: v.turn,
       );
     }
-    state.notify();
-    onJumpToLatest?.call();
   }
+
+  /// 历史装载统一入口（opencode 走这条；消息已由 opencode_mapper 转成
+  /// [ChatMessage]，装载/对账逻辑与 DSH 的 onSnapshot 完全同一段）。
+  void onHistoryLoaded(List<ChatMessage> messages) => _loadMessages(messages);
 
   void onTextDelta(String delta) {
     _touchActivity();
@@ -146,7 +173,7 @@ class MuxEventDispatcher {
       );
     } else {
       state.setActiveTool(null);
-      _messages.add(DshMessage(
+      _messages.add(ChatMessage(
         id: 'stream-${DateTime.now().millisecondsSinceEpoch}',
         role: 'assistant',
         content: text,
@@ -197,7 +224,7 @@ class MuxEventDispatcher {
           isStreaming: false,
         );
       } else {
-        _messages.add(DshMessage(
+        _messages.add(ChatMessage(
           id: 'a-${DateTime.now().millisecondsSinceEpoch}',
           role: 'assistant',
           content: text,
@@ -234,7 +261,7 @@ class MuxEventDispatcher {
     // 必须在这里重新武装运行态：本轮消息可能被客户端去重（同内容、
     // 同 seq）而跳过下面那行，但用户的心智模型是「我一发，它就又在跑了」。
     _turnClosed = false;
-    _messages.add(DshMessage(
+    _messages.add(ChatMessage(
       id: key.isEmpty ? 'u-${DateTime.now().millisecondsSinceEpoch}' : key,
       role: 'user',
       content: text,
@@ -331,6 +358,10 @@ class MuxEventDispatcher {
     state.notify();
   }
 
+  /// 审批到达。
+  ///
+  /// 声音 + 系统通知挂在**这里**（而不是各后端的接线里）：
+  /// 两个后端行为天然一致，接第三个后端时白拿。
   void onApproval({
     required String rpcId,
     required String sessionId,
@@ -346,12 +377,19 @@ class MuxEventDispatcher {
       reason: reason,
     ));
     _touchActivity();
+    SoundService.approval();
+    NotificationService.show(
+      id: 30000,
+      title: '需要确认',
+      body: '工具 $toolName 需要确认',
+    );
   }
 
   void onApprovalResolved(String approvalId) {
     state.removeApproval(approvalId);
   }
 
+  /// 提问到达（opencode 表单 v1 不在范围，钩子后端无关，接表单时白拿）
   void onQuestion({
     required String rpcId,
     required String sessionId,
@@ -363,6 +401,15 @@ class MuxEventDispatcher {
       questions: questions,
     ));
     _touchActivity();
+    SoundService.question();
+    // 切到后台时提问也要弹通知，否则最小化时看不到提问
+    if (!AppVisibility.foreground) {
+      NotificationService.show(
+        id: 30001,
+        title: 'DSH 向你提问',
+        body: questions.map((q) => q['question']).whereType<String>().join(' '),
+      );
+    }
     // 非当前会话的提问不入弹窗：Web 端只在侧栏显示告警点，落选者留在队列里
     if (state.sessionId == sessionId) {
       onShowQuestionDialog?.call();
@@ -394,7 +441,7 @@ class MuxEventDispatcher {
     // 只关心当前会话的模型选择投影，其余投影暂不消费
     if (key != 'modelSelection') return;
     if (sessionId != state.sessionId) return;
-    state.setModelSelection(ModelService.selectionFromProjection(value));
+    state.setModelSelection(ModelSelection.fromProjection(value));
   }
 
   /// 开窗快照里的投影（`{values: {...}}`）
@@ -403,7 +450,7 @@ class MuxEventDispatcher {
   void applySnapshotProjections(Map<String, dynamic> projections) {
     final values = projections['values'];
     if (values is! Map) return;
-    final selection = ModelService.selectionFromProjection(values['modelSelection']);
+    final selection = ModelSelection.fromProjection(values['modelSelection']);
     if (selection != null) state.setModelSelection(selection);
   }
 
@@ -416,6 +463,7 @@ class MuxEventDispatcher {
     _turnClosed = false;
     _messages.clear();
     _seenUserSeq.clear();
+    _pendingEcho.clear();
   }
 
   void dispose() {

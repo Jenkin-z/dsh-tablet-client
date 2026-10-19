@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/chat_controller.dart';
-import '../services/dsh_session_state.dart';
-import '../services/model_service.dart';
+import '../services/session_state.dart';
+import '../services/model_catalog.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
@@ -20,7 +20,7 @@ import '../widgets/tool_status_bar.dart';
 
 /// 聊天主界面：会话侧栏 + Markdown 对话 + 流式展示
 ///
-/// 重构后：所有状态都从 DshSessionState 读取，不再自己维护状态。
+/// 重构后：所有状态都从 SessionState 读取，不再自己维护状态。
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -45,7 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
       settings: context.read<SettingsService>(),
       manager: context.read<ServerManager>(),
       // 使用全局唯一的状态中枢，控制台等页面读同一实例
-      state: context.read<DshSessionState>(),
+      state: context.read<SessionState>(),
     );
     _ctrl
       ..dispatcher.onScrollToBottom = _scrollToBottom

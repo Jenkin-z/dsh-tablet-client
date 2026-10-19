@@ -6,7 +6,6 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/theme/ios_theme.dart';
 import 'package:dsh_tablet_client/widgets/device_row_parts.dart';

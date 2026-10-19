@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import '../services/dsh_api.dart';
+import '../models/agent_server.dart';
+import '../services/dsh/dsh_api.dart';
 import '../services/keep_alive_service.dart';
 import '../services/notification_service.dart';
+import '../services/opencode/opencode_api.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../theme/ios_theme.dart';
@@ -32,8 +34,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl, cookie: s.active?.cookie);
-      final ok = await api.testConnection();
+      final active = s.active;
+      final ok = active == null
+          ? false
+          : switch (active.kind) {
+              AgentKind.dsh => await DshApi(
+                  baseUrl: s.serverUrl,
+                  cookie: active.cookie,
+                ).testConnection(),
+              AgentKind.opencode => await OpenCodeApi(
+                  baseUrl: active.httpUrl,
+                  password: active.token,
+                ).testConnection(),
+            };
       if (!mounted) return;
       setState(() => _testResult = ok ? '连接正常 ✓' : '连接失败 ✗');
     } catch (e) {
@@ -47,8 +60,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _newSession() async {
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final api = DshApi(baseUrl: s.serverUrl, cookie: s.active?.cookie);
-      final id = await api.createSession();
+      final active = s.active;
+      if (active == null) return;
+      final id = switch (active.kind) {
+        AgentKind.dsh =>
+          await DshApi(baseUrl: s.serverUrl, cookie: active.cookie)
+              .createSession(),
+        AgentKind.opencode =>
+          await OpenCodeApi(baseUrl: active.httpUrl, password: active.token)
+              .createSession()
+              .then((info) => info['id'] as String? ?? ''),
+      };
+      if (id.isEmpty) throw Exception('响应里没有会话 id');
       await s.setSessionId(id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -339,7 +362,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           filled: false,
           onPressed: () => UpdateFlow.checkAndPrompt(
             context,
-            s.servers.map((e) => e.host).followedBy([s.serverHost]),
+            s.servers
+              .where((e) => e.host.isNotEmpty)
+              .map((e) => e.host)
+              .followedBy([s.serverHost]),
           ),
         ),
       ),

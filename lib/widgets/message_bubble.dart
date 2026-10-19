@@ -8,7 +8,7 @@ import '../theme/ios_theme.dart';
 /// iOS 风格：用户消息蓝色圆角气泡，Agent 消息白色/深色背景，
 /// 系统消息（错误等）淡红背景居中显示。
 class MessageBubble extends StatelessWidget {
-  final DshMessage message;
+  final ChatMessage message;
 
   const MessageBubble({super.key, required this.message});
 

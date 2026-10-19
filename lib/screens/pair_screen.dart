@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import '../models/dsh_server.dart';
-import '../services/dsh_auth.dart';
+import '../models/agent_server.dart';
+import '../services/dsh/dsh_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
@@ -129,7 +129,7 @@ class _PairScreenState extends State<PairScreen> {
         (existingId == null || s.id == existingId));
     final id = existingId ?? (same.isEmpty ? const Uuid().v4() : same.first.id);
     final prev = settings.servers.where((s) => s.id == id);
-    await settings.upsertServer(DshServer(
+    await settings.upsertServer(AgentServer(
       id: id,
       name: prev.isEmpty ? host : prev.first.name,
       host: host,

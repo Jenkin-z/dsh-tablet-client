@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../utils/constants.dart';
+import '../../utils/constants.dart';
 import 'mux_history.dart';
 
 export 'mux_history.dart';
@@ -26,7 +26,7 @@ part 'mux_session_handler.dart';
 ///
 /// 物理连接管理内置：断线后自动指数退避重连，重连后自动恢复所有逻辑流。
 ///
-/// 重构后：所有事件都通过回调分发到 MuxEventDispatcher，不再自己维护业务状态。
+/// 重构后：所有事件都通过回调分发到 EventDispatcher，不再自己维护业务状态。
 class MuxStream {
   final String wsBaseUrl;
   final String? cookie;
@@ -47,7 +47,7 @@ class MuxStream {
   int? _assistantRevision;
   int? _lastChunkIndex;
 
-  // ── 事件回调（全部分发到 MuxEventDispatcher）────
+  // ── 事件回调（全部分发到 EventDispatcher）────
 
   void Function(List<Map<String, dynamic>> records)? onSnapshot;
   /// 开窗快照的会话投影（标题、模型等实时元数据）

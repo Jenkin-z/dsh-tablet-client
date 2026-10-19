@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
-import '../utils/constants.dart';
+import '../../utils/constants.dart';
 import 'dsh_auth.dart';
 
 /// DSH RPC 业务错误（与 DshAuthException 区分：401/403 走 Auth，其余走此）

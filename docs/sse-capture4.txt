@@ -1,0 +1,81 @@
+# status=OK at 2026-10-19T21:10:07.3628713+08:00
+data: {"id":"evt_154489c7b001peLfz4PH49KvGl","type":"server.connected","data":{}}
+
+: heartbeat
+
+data: {"id":"evt_154489daf0015e3s0B7V85qBRA","created":1792415407535,"type":"session.created","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","slug":"quick-river","version":"2.0.32","projectID":"e8b11ab45190658f55a0feec4383460223ed7929","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"subpath":"","permissions":[{"action":"bash","resource":"*","effect":"ask"}]},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":0,"version":1}}
+
+data: {"id":"evt_154489db5001XW2s39FWwQuttf","created":1792415407541,"type":"project.updated","data":{"id":"e8b11ab45190658f55a0feec4383460223ed7929","canonical":"D:\\Hermes_workspace\\dsh_tablet_client","vcs":"git","time":{"created":1792414696032,"updated":1792414696032,"active":1792415407540},"sandboxes":[]}}
+
+data: {"id":"evt_15448a1ff001YGEsVTz5gx1aDk","created":1792415408639,"type":"session.inbox.enqueued","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"inboxID":"msg_15448a1fd001xHtLhfx7426Qdm","sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","item":{"type":"user","payload":{"text":"运行 bash 命令 echo perm-test"},"delivery":"steer"}},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":1,"version":1}}
+
+data: {"id":"evt_15448a202001S0Ckb0gUqN9zu3","created":1792415408643,"type":"session.execution.started","data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":2,"version":1}}
+
+data: {"id":"evt_15448a2170017d96oGlm2AYTPh","created":1792415408663,"metadata":{"instructions":{"initial":true}},"type":"session.instructions.updated","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","delta":{"core/codemode":"e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b","core/skill-guidance":"c4baf9b49290db4c1dca2cba4ccff03960760f11b5d34ea24d3f2871bfa0912d","core/instructions":"776e6abf2f8d8ffc98022a1ac6a89d47ca8b711d2e53a79af9e794b7bc21e167","core/date":"e909bd3b3871d135436ed762c98f88a250acbb0c538f3ac59031859f9b5f115b","core/environment":"222460cb72b073ff0fdae00b20c0928ce7247110428414c182401f5845cdd994"}},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":3,"version":2}}
+
+data: {"id":"evt_15448a21b0018MigE01dnOwyi1","created":1792415408667,"type":"session.inbox.delivered","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","inboxID":"msg_15448a1fd001xHtLhfx7426Qdm"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":4,"version":1}}
+
+data: {"id":"evt_15448abb3001PxhicgEV8knL98","created":1792415411123,"type":"session.usage.updated","data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","cost":0,"tokens":{"input":519,"output":5,"reasoning":116,"cache":{"read":187,"write":0}}}}
+
+data: {"id":"evt_15448abb40012u59qjaZFSNiB9","created":1792415411124,"type":"session.renamed","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","title":"运行 echo perm-test 命令"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":6,"version":1}}
+
+data: {"id":"evt_15448abcc001jeAm7sgKMYBtg2","created":1792415411148,"type":"session.step.started","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","agent":"build","model":{"id":"minimax-m3.1-flash-free","providerID":"opencode"},"assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","snapshot":"344e24742c18a23f82b402cf91c3e88e51873541","started":1792415408707},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":7,"version":1}}
+
+data: {"id":"evt_15448abcf00126mDMOH5gQyE2x","created":1792415411151,"type":"session.reasoning.started","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","ordinal":0,"state":{"reasoningField":"reasoning_content"}},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":8,"version":1}}
+
+data: {"id":"evt_15448ac37001Gfh1yZjP85ydyI","created":1792415411255,"type":"session.reasoning.delta","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","ordinal":0,"delta":"The user wants"}}
+
+data: {"id":"evt_15448ada100176MnSxR3RPXmqJ","created":1792415411617,"type":"session.reasoning.delta","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","ordinal":0,"delta":" to run a bash command `echo perm-test`. On Windows with pwsh... Let me just run it via the shell tool. The shell is"}}
+
+data: {"id":"evt_15448ae6c00103HEQS4z0Uo7gG","created":1792415411820,"type":"session.reasoning.delta","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","ordinal":0,"delta":" pwsh, but `echo perm-test` works in pwsh too. Let me run it.\n\nThe user says \"运行 bash 命令\" - run bash command. I can just execute it."}}
+
+data: {"id":"evt_15448ae6d001J8lZfvevMey0PH","created":1792415411821,"type":"session.tool.input.started","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","id":"call_function_ukyxail7he1r_1","name":"shell"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":9,"version":1}}
+
+data: {"id":"evt_15448ae74001uNSbqsZDrpxHTe","created":1792415411829,"type":"session.reasoning.ended","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","ordinal":0,"text":"The user wants to run a bash command `echo perm-test`. On Windows with pwsh... Let me just run it via the shell tool. The shell is pwsh, but `echo perm-test` works in pwsh too. Let me run it.\n\nThe user says \"运行 bash 命令\" - run bash command. I can just execute it.","state":{"reasoningField":"reasoning_content"}},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":10,"version":1}}
+
+data: {"id":"evt_15448ae780017n5l9oQweJvHwn","created":1792415411832,"type":"session.tool.input.ended","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","id":"call_function_ukyxail7he1r_1","text":"{\"command\": \"echo perm-test\"}"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":11,"version":1}}
+
+data: {"id":"evt_15448ae7a0016MaaL5lWJ3oAIU","created":1792415411834,"type":"session.tool.called","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","id":"call_function_ukyxail7he1r_1","input":{"command":"echo perm-test"},"executed":false},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":12,"version":1}}
+
+data: {"id":"evt_15448ae7d001zW9qCVtMvjYFr5","created":1792415411837,"type":"session.step.streamed","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":13,"version":1}}
+
+data: {"id":"evt_15448ae8e0011NBEz0Lix3JtcX","created":1792415411854,"type":"shell.created","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"info":{"id":"sh_15448ae84001Sa4kK4FPXQvRj9","status":"running","command":"echo perm-test","cwd":"D:\\Hermes_workspace\\dsh_tablet_client","shell":"C:\\Program Files\\PowerShell\\7\\pwsh.EXE","file":"C:\\Users\\11207\\.local\\share\\opencode\\shell\\e8b11ab45190658f55a0feec4383460223ed7929\\sh_15448ae84001Sa4kK4FPXQvRj9.out","metadata":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ"},"time":{"started":1792415411845}}}}
+
+data: {"id":"evt_15448ae8f001Cx7FFjO4vI67SQ","created":1792415411855,"type":"session.tool.progress","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","id":"call_function_ukyxail7he1r_1","metadata":{"shellID":"sh_15448ae84001Sa4kK4FPXQvRj9"}}}
+
+data: {"id":"evt_15448b056001lH7Hxm7eduFW7d","created":1792415412310,"type":"shell.exited","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"id":"sh_15448ae84001Sa4kK4FPXQvRj9","exit":0,"status":"exited"}}
+
+data: {"id":"evt_15448b058001e2ggXooxdS7ytL","created":1792415412312,"type":"session.tool.success","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","id":"call_function_ukyxail7he1r_1","content":[{"type":"text","text":"perm-test\r\n"}],"metadata":{"status":"completed","truncated":false,"exit":0},"executed":false},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":14,"version":2}}
+
+data: {"id":"evt_15448b27c001WiBK2zuGDIlewg","created":1792415412860,"type":"session.step.ended","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448a230001lzCZtOs7x8z2WE","finish":"tool-calls","rawFinish":"tool_calls","cost":0,"tokens":{"input":13,"output":27,"reasoning":73,"cache":{"read":37774,"write":0}},"snapshot":"b1baddab97256442bc005bacc46d45845a8729ff","files":["docs/sse-capture4.txt"]},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":15,"version":1}}
+
+data: {"id":"evt_15448b27e001QA7oDQQsG17aQ0","created":1792415412862,"type":"session.usage.updated","data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","cost":0,"tokens":{"input":532,"output":32,"reasoning":189,"cache":{"read":37961,"write":0}}}}
+
+data: {"id":"evt_15448b9a1001dry9JOTqewbLDy","created":1792415414689,"type":"session.step.started","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","agent":"build","model":{"id":"minimax-m3.1-flash-free","providerID":"opencode"},"assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","snapshot":"30822a330355daa37f1d012794f6e77da7d511d2","started":1792415412894},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":16,"version":1}}
+
+data: {"id":"evt_15448b9a3001YU7fD4ueu7hhXP","created":1792415414691,"type":"session.text.started","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","ordinal":0},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":17,"version":1}}
+
+data: {"id":"evt_15448ba0e001Qk3mUXnmOrKyTH","created":1792415414798,"type":"session.text.delta","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","ordinal":0,"delta":"命令执行成功"}}
+
+data: {"id":"evt_15448ba8f001NLfDqKCpejFSl7","created":1792415414927,"type":"session.text.delta","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","ordinal":0,"delta":"，输出：\n\n```\nperm-test\n```\n\n（注：当前 shell 是 PowerShell 而非 bash，但 `echo perm-test` 在两者中语法一致，结果相同。）"}}
+
+data: {"id":"evt_15448ba900016dF7fxF1lFb37m","created":1792415414928,"type":"session.text.ended","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","ordinal":0,"text":"命令执行成功，输出：\n\n```\nperm-test\n```\n\n（注：当前 shell 是 PowerShell 而非 bash，但 `echo perm-test` 在两者中语法一致，结果相同。）"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":18,"version":1}}
+
+data: {"id":"evt_15448ba92001mv68N3SMbqNM7l","created":1792415414930,"type":"session.step.streamed","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":19,"version":1}}
+
+data: {"id":"evt_15448bca7001Ir3Pxt5Zcgt2zJ","created":1792415415463,"type":"session.step.ended","location":{"directory":"D:\\Hermes_workspace\\dsh_tablet_client"},"data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","assistantMessageID":"msg_15448b28f0015DbRyR9418Sb3T","finish":"stop","rawFinish":"stop","cost":0,"tokens":{"input":21,"output":36,"reasoning":0,"cache":{"read":37885,"write":0}},"snapshot":"808f25121efedaacd2a487c1112ff85c1caccad1","files":["docs/sse-capture4.txt"]},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":20,"version":1}}
+
+data: {"id":"evt_15448bcaa001r6Vc20W0Wu3Vmi","created":1792415415466,"type":"session.usage.updated","data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","cost":0,"tokens":{"input":553,"output":68,"reasoning":189,"cache":{"read":75846,"write":0}}}}
+
+data: {"id":"evt_15448bcab001Ljc5FeXNLEYXAw","created":1792415415467,"type":"session.execution.succeeded","data":{"sessionID":"ses_eabb762f9ffeY7YQ978zMDkAxQ"},"durable":{"aggregateID":"ses_eabb762f9ffeY7YQ978zMDkAxQ","seq":21,"version":1}}
+
+: heartbeat
+
+: heartbeat
+
+: heartbeat
+
+: heartbeat
+
+: heartbeat
+

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../services/model_service.dart';
+import '../services/model_catalog.dart';
 import '../theme/ios_theme.dart';
 import 'model_sheet_parts.dart';
 
 /// 模型切换面板（底部弹出）
 ///
-/// 打开时拉 `session/modelCatalog`，点选后调 `session/selectModel`。
+/// 打开时拉模型目录，点选后调后端切换（DSH / opencode 同一条路）。
 /// 选中结果通过 `Navigator.pop` 返回给调用方，由调用方决定是否回写状态
 /// —— 面板本身不碰全局状态，权威值仍以 Host 推来的投影为准。
 class ModelSheet extends StatefulWidget {
-  final ModelService service;
+  final ModelCatalogService service;
   final String sessionId;
   final ModelSelection? current;
 

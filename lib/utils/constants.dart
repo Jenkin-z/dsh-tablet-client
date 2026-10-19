@@ -48,3 +48,8 @@ const Duration seenStoreDebounce = Duration(milliseconds: 500);
 // ── Mux 就绪 ──────────────────────────────────────
 /// 发出 open 后等待 `$events` ready 帧的上限，超过则提示重试
 const Duration connectReadyTimeout = Duration(seconds: 12);
+
+// ── opencode ──────────────────────────────────────
+/// opencode /api/session/active 轮询间隔：补 running 标记 + 断线兜底
+/// （实时侧 SSE session.execution.* 已覆盖，这是双通道里的轮询侧）
+const Duration opencodeActivePollInterval = Duration(seconds: 5);

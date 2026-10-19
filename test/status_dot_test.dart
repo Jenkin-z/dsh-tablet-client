@@ -16,7 +16,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
-import 'package:dsh_tablet_client/services/dsh_session_state.dart';
+import 'package:dsh_tablet_client/services/session_state.dart';
 import 'package:dsh_tablet_client/theme/ios_theme.dart';
 
 void main() {
@@ -51,13 +51,13 @@ void main() {
 
   group('四种颜色的含义', () {
     test('connecting：正在建连或数据尚未校验 → 橙「连接中」', () {
-      final s = DshSessionState()..setConnecting(true);
+      final s = SessionState()..setConnecting(true);
       expect(s.health, ConnectionHealth.connecting);
       expect(_colorOf(s.health), IosTheme.iosOrange);
     });
 
     test('offline：连接已断开 → 红「未连接」', () {
-      final s = DshSessionState()
+      final s = SessionState()
         ..setConnecting(false)
         ..setConnected(false);
       expect(s.health, ConnectionHealth.offline);
@@ -65,7 +65,7 @@ void main() {
     });
 
     test('degraded：socket 通但列表拉取失败 → 橙「数据异常」', () {
-      final s = DshSessionState()
+      final s = SessionState()
         ..setConnecting(false)
         ..setConnected(true)
         ..setSessionsHealth(ok: false, error: '列表失败');
@@ -75,7 +75,7 @@ void main() {
     });
 
     test('healthy：连上且列表确实拉到了 → 绿「已连接」', () {
-      final s = DshSessionState()
+      final s = SessionState()
         ..setConnecting(false)
         ..setConnected(true)
         ..setSessionsHealth(ok: true);
@@ -85,13 +85,13 @@ void main() {
 
     test('绿色必须同时满足 connected 与 sessionsOk，缺一不可', () {
       // 只连上、没校验数据 → 不是绿
-      final a = DshSessionState()
+      final a = SessionState()
         ..setConnecting(false)
         ..setConnected(true);
       expect(a.health, isNot(ConnectionHealth.healthy));
 
       // 校验过数据、但连接断了 → 不是绿
-      final b = DshSessionState()
+      final b = SessionState()
         ..setConnecting(false)
         ..setConnected(false)
         ..setSessionsHealth(ok: true);
@@ -99,14 +99,16 @@ void main() {
     });
   });
 
-  group('ChatController 在连上与重连后校准数据基线', () {
+  group('DSH 后端在连上与重连后校准数据基线', () {
     test('onReady 与 onReconnected 都重新拉会话列表', () {
-      final src = File('lib/services/chat_controller.dart').readAsStringSync();
+      // 多后端重构后，mux 接线从 ChatController 迁到了 DshBackend，
+      // 但「连上/重连必须校准数据基线」的语义不变，否则绿点是假的。
+      final src = File('lib/services/dsh_backend.dart').readAsStringSync();
       for (final hook in ['onReady', 'onReconnected']) {
         final idx = src.indexOf('..$hook = () {');
         expect(idx >= 0, isTrue, reason: '找不到 $hook');
         final body = src.substring(idx, (idx + 400).clamp(0, src.length));
-        expect(body.contains('_refreshSessions()'), isTrue,
+        expect(body.contains('onRefreshSessions()'), isTrue,
             reason: '$hook 之后必须校准数据基线，否则绿点是假的');
       }
     });

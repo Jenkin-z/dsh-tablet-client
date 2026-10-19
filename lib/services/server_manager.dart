@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../models/dsh_server.dart';
+import '../models/agent_server.dart';
 import '../utils/constants.dart';
 import 'session_monitor.dart';
 import 'settings_service.dart';
 
-/// 聚合多台 PC 的轮询结果，按 PC 分组给控制台用
+/// 聚合多台后端（DSH / opencode）的轮询结果，按机器分组给控制台用
 ///
 /// 重构后：只做服务器管理和会话列表刷新，不做状态推断。
 class ServerGroup {
-  final DshServer server;
+  final AgentServer server;
   final SessionMonitor monitor;
   final List<Map<String, dynamic>> running;
   final List<Map<String, dynamic>> unviewed;
@@ -65,13 +65,13 @@ class ServerManager extends ChangeNotifier {
 
   /// 当前机器轮询结果的对外广播口。
   ///
-  /// **不要接到 DshSessionState.setSessionsHealth 上。** 那个字段代表
+  /// **不要接到 SessionState.setSessionsHealth 上。** 那个字段代表
   /// 对话页 mux 的数据健康，轮询是另一条通道；接上去会让状态点恒绿。
   /// 保留这个口子是给需要轮询视图的消费者（例如控制台自身）用的。
   void Function(bool ok, String? error)? onActiveHealth;
 
   void _reportActiveHealth() {
-    // 曾经这里把活跃机器的轮询结果推给 DshSessionState，用来给顶部状态点
+    // 曾经这里把活跃机器的轮询结果推给 SessionState，用来给顶部状态点
     // 上色。那是错的：状态点属于**对话页那条 WebSocket**，而轮询是另一条
     // 独立的 HTTP 通道 —— 轮询一直成功，点就永远绿，与对话页是否真连上无关。
     //
@@ -110,9 +110,10 @@ class ServerManager extends ChangeNotifier {
       final existing = _monitors[s.id];
       if (existing == null) {
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
-      } else if (existing.server.host != s.host ||
-          existing.server.port != s.port ||
-          existing.server.cookie != s.cookie) {
+      } else if (existing.server.kind != s.kind ||
+          existing.server.httpUrl != s.httpUrl ||
+          existing.server.cookie != s.cookie ||
+          existing.server.token != s.token) {
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
       } else {
         existing.updateServer(s);
@@ -149,7 +150,7 @@ class ServerManager extends ChangeNotifier {
 
   List<Map<String, dynamic>> _filter(
     SessionMonitor m,
-    DshServer server, {
+    AgentServer server, {
     bool running = false,
     bool unviewed = false,
     bool recent = false,

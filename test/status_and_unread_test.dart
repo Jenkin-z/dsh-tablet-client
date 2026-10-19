@@ -10,12 +10,12 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
-import 'package:dsh_tablet_client/services/dsh_session_state.dart';
+import 'package:dsh_tablet_client/services/session_state.dart';
 
 void main() {
   group('状态点：null 不能算健康', () {
     test('未验证过 → 连接中（橙），不是绿', () {
-      final s = DshSessionState();
+      final s = SessionState();
       s.setConnecting(false);
       s.setConnected(true);
       // 还没跑过任何 session/list，_sessionsOk 仍是 null
@@ -24,7 +24,7 @@ void main() {
     });
 
     test('验证成功 → 绿', () {
-      final s = DshSessionState();
+      final s = SessionState();
       s.setConnecting(false);
       s.setConnected(true);
       s.setSessionsHealth(ok: true);
@@ -32,7 +32,7 @@ void main() {
     });
 
     test('验证失败 → 数据异常（橙），不是绿', () {
-      final s = DshSessionState();
+      final s = SessionState();
       s.setConnecting(false);
       s.setConnected(true);
       s.setSessionsHealth(ok: false, error: 'boom');
@@ -40,7 +40,7 @@ void main() {
     });
 
     test('断开 → 红，且 reset() 之后回到橙而不是绿', () {
-      final s = DshSessionState();
+      final s = SessionState();
       s.setConnected(false);
       expect(s.health, ConnectionHealth.offline);
 
@@ -99,7 +99,7 @@ void main() {
     late String disp;
 
     setUpAll(() {
-      disp = File('lib/services/mux_event_dispatcher.dart').readAsStringSync();
+      disp = File('lib/services/event_dispatcher.dart').readAsStringSync();
     });
 
     test('onSessionStatus 里 running:true 必须检查 _turnClosed', () {

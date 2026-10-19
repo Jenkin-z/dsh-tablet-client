@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../services/dsh_auth.dart';
+import '../services/dsh/dsh_auth.dart';
 import '../theme/ios_theme.dart';
 
 /// 扫码授权页面：扫描 DSH 启动链接二维码（含 token）

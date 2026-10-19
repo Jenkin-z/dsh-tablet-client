@@ -1,21 +1,22 @@
-import '../models/dsh_server.dart';
+import '../models/agent_server.dart';
 import '../utils/session_format.dart';
 import 'app_visibility.dart';
-import 'dsh_api.dart';
-import 'dsh_auth.dart';
+import 'dsh/dsh_auth.dart';
 import 'keep_alive_service.dart';
 import 'notification_service.dart';
+import 'opencode/opencode_api.dart';
+import 'session_source.dart';
 import 'settings_service.dart';
 import 'sound_service.dart';
 
-/// 单台 PC 的会话轮询
+/// 单台后端的会话轮询（DSH 与 opencode 共用）
 ///
 /// 职责：拉会话列表 + 识别「非当前会话刚跑完」并在此刻触发
 /// 未读标记 / 系统通知 / 提示音。
-/// 其余状态推断交给 DshSessionState 与 MuxEventDispatcher。
+/// 其余状态推断交给 SessionState 与 EventDispatcher。
 class SessionMonitor {
   final SettingsService settings;
-  DshServer server;
+  AgentServer server;
 
   /// 通知 id 递增，避免同一条通知互相覆盖
   int _notifySeq = 0;
@@ -24,7 +25,7 @@ class SessionMonitor {
   final Map<String, bool> _prevRunning = {};
 
   SessionMonitor({required this.settings, required this.server})
-      : _api = DshApi(baseUrl: server.httpUrl, cookie: server.cookie);
+      : _source = sessionSourceFor(server);
 
   List<Map<String, dynamic>> sessions = [];
   List<Map<String, dynamic>> workspaces = [];
@@ -34,14 +35,14 @@ class SessionMonitor {
   String? error;
   DateTime? lastRefresh;
 
-  final DshApi _api;
+  final SessionListSource _source;
 
   String _key(String sessionId) => settings.seenKey(server.id, sessionId);
 
   Future<void> refresh() async {
     loading = sessions.isEmpty;
     try {
-      final items = await _api.listSessions();
+      final items = await _source.fetchSessions();
       final current = server.lastSessionId;
       // 先剔除子 Agent 与多余的空会话：前者是任务的中间产物，
       // 后者是「新建对话」的占位。必须在计数和通知之前剔除，
@@ -92,6 +93,14 @@ class SessionMonitor {
           (s) => s.copyWith(unpaired: true, lastError: e.message),
         );
       }
+    } on OpenCodeAuthException catch (e) {
+      // opencode 授权失败一律要重新添加（密码/令牌无效）
+      online = false;
+      error = e.message;
+      await settings.patchServer(
+        server.id,
+        (s) => s.copyWith(unpaired: true, lastError: e.message),
+      );
     } catch (e) {
       online = false;
       error = '$e';
@@ -143,9 +152,9 @@ class SessionMonitor {
     }
   }
 
-  /// 当 server 信息变更时，刷新内部 DshApi
-  void updateServer(DshServer newServer) {
-    // DshApi 是 final 的，host/port/cookie 变了需要重建整个 Monitor，
+  /// 当 server 信息变更时，刷新内部引用
+  void updateServer(AgentServer newServer) {
+    // 数据源按 kind/url/凭据 构造，这些变了需要重建整个 Monitor，
     // 由 ServerManager._syncMonitors 负责替换；这里只更新数据。
     server = newServer;
   }

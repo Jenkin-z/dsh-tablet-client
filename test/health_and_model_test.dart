@@ -7,14 +7,14 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
-import 'package:dsh_tablet_client/services/dsh_session_state.dart';
-import 'package:dsh_tablet_client/services/model_service.dart';
+import 'package:dsh_tablet_client/services/session_state.dart';
+import 'package:dsh_tablet_client/services/model_catalog.dart';
 
 void main() {
   group('连接健康度四态', () {
-    late DshSessionState state;
+    late SessionState state;
 
-    setUp(() => state = DshSessionState());
+    setUp(() => state = SessionState());
 
     test('初始：未连接 → offline', () {
       expect(state.health, ConnectionHealth.offline);
@@ -77,7 +77,7 @@ void main() {
 
   group('ModelSelection 解析与比较', () {
     test('从投影读 next 优先于 lastUsed', () {
-      final sel = ModelService.selectionFromProjection({
+      final sel = ModelSelection.fromProjection({
         'lastUsed': {'provider': 'a', 'model': 'old'},
         'next': {'provider': 'b', 'model': 'new', 'reasoningEffort': 'high'},
       });
@@ -87,7 +87,7 @@ void main() {
     });
 
     test('next 为空时回落到 lastUsed', () {
-      final sel = ModelService.selectionFromProjection({
+      final sel = ModelSelection.fromProjection({
         'lastUsed': {'provider': 'a', 'model': 'used'},
         'next': null,
       });
@@ -97,11 +97,11 @@ void main() {
 
     test('两个都空 → null', () {
       expect(
-        ModelService.selectionFromProjection({'lastUsed': null, 'next': null}),
+        ModelSelection.fromProjection({'lastUsed': null, 'next': null}),
         isNull,
       );
-      expect(ModelService.selectionFromProjection(null), isNull);
-      expect(ModelService.selectionFromProjection('nonsense'), isNull);
+      expect(ModelSelection.fromProjection(null), isNull);
+      expect(ModelSelection.fromProjection('nonsense'), isNull);
     });
 
     test('sameAs 比较三个字段', () {

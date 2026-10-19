@@ -2,14 +2,14 @@ import 'package:flutter/foundation.dart';
 import '../models/connection_health.dart';
 import '../models/pending.dart';
 import 'changes_tracker.dart';
-import 'model_service.dart';
+import 'model_catalog.dart';
 
-/// 状态中枢：所有关键状态都从这里读取
+/// 状态中枢（与后端无关）：所有关键状态都从这里读取
 ///
 /// 任何模块不能自己猜状态，只能从这个中枢读。
-/// 所有 mux 事件都必须先进 MuxEventDispatcher，再更新这个中枢。
-class DshSessionState extends ChangeNotifier {
-  /// 供外部（如 MuxEventDispatcher）在批量更新后统一广播一次
+/// 所有后端事件都必须先进 EventDispatcher，再更新这个中枢。
+class SessionState extends ChangeNotifier {
+  /// 供外部（如 EventDispatcher）在批量更新后统一广播一次
   void notify() => notifyListeners();
 
   // ── 连接状态 ────────────────────────────────────

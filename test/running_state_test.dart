@@ -6,17 +6,17 @@
 /// turn/end 来收尾 —— 按钮就再也回不到「发送」。
 library;
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dsh_tablet_client/services/dsh_session_state.dart';
-import 'package:dsh_tablet_client/services/mux_event_dispatcher.dart';
+import 'package:flutter_test/flutter_test.dart' hide EventDispatcher;
+import 'package:dsh_tablet_client/services/session_state.dart';
+import 'package:dsh_tablet_client/services/event_dispatcher.dart';
 
 void main() {
-  late DshSessionState state;
-  late MuxEventDispatcher dispatcher;
+  late SessionState state;
+  late EventDispatcher dispatcher;
 
   setUp(() {
-    state = DshSessionState();
-    dispatcher = MuxEventDispatcher(state: state);
+    state = SessionState();
+    dispatcher = EventDispatcher(state: state);
     state.setSessionId('s1');
   });
 

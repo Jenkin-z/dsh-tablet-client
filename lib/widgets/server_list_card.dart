@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/dsh_server.dart';
+import '../models/agent_server.dart';
 import '../screens/pair_screen.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
+import 'add_opencode_dialog.dart';
 
-/// 设置页：PC 列表 + 添加/授权入口 —— iOS 风格
+/// 设置页：后端列表（DSH PC + opencode）+ 添加/授权入口 —— iOS 风格
 ///
 /// 不再包裹 Card，由父级 IosGroupedList 提供分组容器。
 class ServerListCard extends StatelessWidget {
@@ -41,9 +42,35 @@ class ServerListCard extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const PairScreen()),
               ),
             ),
+            ListTile(
+              leading: Icon(
+                Icons.terminal,
+                color: IosTheme.iosPurple,
+                size: 22,
+              ),
+              title: const Text('添加 opencode'),
+              subtitle: const Text(
+                '粘贴授权链接，或填局域网地址 + 服务密码',
+                style: TextStyle(fontSize: 13),
+              ),
+              trailing: const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: IosTheme.iosGray3,
+              ),
+              onTap: () => _addOpenCode(context),
+            ),
           ],
         );
       },
+    );
+  }
+
+  /// 打开添加/重新授权对话框，返回 true 表示刚保存过
+  Future<bool?> _addOpenCode(BuildContext context, {String? existingServerId}) {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) => AddOpenCodeDialog(existingServerId: existingServerId),
     );
   }
 
@@ -51,7 +78,7 @@ class ServerListCard extends StatelessWidget {
     BuildContext context,
     SettingsService settings,
     ServerManager manager,
-    DshServer s,
+    AgentServer s,
   ) {
     final mon = manager.monitorOf(s.id);
     final active = settings.activeServerId == s.id;
@@ -61,6 +88,7 @@ class ServerListCard extends StatelessWidget {
     final statusColor = s.unpaired
         ? IosTheme.iosOrange
         : (mon?.online == true ? IosTheme.iosGreen : IosTheme.iosGray);
+    final isOpenCode = s.kind == AgentKind.opencode;
     return ListTile(
       leading: Container(
         width: 36,
@@ -70,7 +98,7 @@ class ServerListCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(IosTheme.radiusXS),
         ),
         child: Icon(
-          Icons.computer,
+          isOpenCode ? Icons.terminal : Icons.computer,
           color: statusColor,
           size: 20,
         ),
@@ -82,13 +110,17 @@ class ServerListCard extends StatelessWidget {
         ),
       ),
       subtitle: Text(
-        '${s.host}:${s.port} · $status',
+        '${s.displayAddress} · $status',
         style: const TextStyle(fontSize: 13),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (s.unpaired || s.cookie == null)
+          // DSH 条目走配对页换 cookie；opencode 条目走授权链接/密码，
+          // 不显示 DSH 的钥匙按钮（两种授权体系不互通）
+          if (isOpenCode
+              ? s.unpaired
+              : (s.unpaired || s.cookie == null))
             IconButton(
               icon: Icon(
                 Icons.key_outlined,
@@ -96,11 +128,17 @@ class ServerListCard extends StatelessWidget {
                 size: 20,
               ),
               tooltip: '重新授权',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PairScreen(existingServerId: s.id),
-                ),
-              ),
+              onPressed: () async {
+                if (isOpenCode) {
+                  await _addOpenCode(context, existingServerId: s.id);
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PairScreen(existingServerId: s.id),
+                    ),
+                  );
+                }
+              },
             ),
           IconButton(
             icon: Icon(

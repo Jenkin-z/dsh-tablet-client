@@ -20,6 +20,7 @@ class OpenCodeEventSink {
     required this.onUserEcho,
     required this.onSessionCreated,
     required this.onSessionRenamed,
+    required this.onFormResolved,
   });
 
   final void Function(String delta) onTextDelta;
@@ -45,6 +46,12 @@ class OpenCodeEventSink {
   final void Function(String inboxId) onUserEcho;
   final void Function(String sessionId) onSessionCreated;
   final void Function(String sessionId, String title) onSessionRenamed;
+
+  /// 表单被取消（`form.cancelled`，data 形如 `{id, sessionID}`）。
+  ///
+  /// 创建/应答经 REST 无 SSE 事件（实测），pending 的发现由
+  /// OpenCodeBackend 轮询对账负责——这里只处理取消这一条推送。
+  final void Function(String formId) onFormResolved;
 }
 
 /// opencode 协议 → 统一动作（纯函数）
@@ -134,6 +141,12 @@ class OpenCodeMapper {
         if (id.isNotEmpty && title != null && title.isNotEmpty) {
           sink.onSessionRenamed(id, title);
         }
+        break;
+
+      // ── 表单（只推取消；创建/应答无事件，靠轮询对账） ──
+      case 'form.cancelled':
+        final formId = data['id'] as String?;
+        if (formId != null && formId.isNotEmpty) sink.onFormResolved(formId);
         break;
     }
   }

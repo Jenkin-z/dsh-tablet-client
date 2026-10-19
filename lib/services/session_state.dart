@@ -164,7 +164,9 @@ class SessionState extends ChangeNotifier {
 
   final List<PendingApproval> _approvals = [];
   final List<PendingQuestion> _questions = [];
+  final List<PendingForm> _forms = [];
   bool _questionDialogOpen = false;
+  bool _formDialogOpen = false;
 
   List<PendingApproval> get approvals => List.unmodifiable(_approvals);
 
@@ -230,6 +232,53 @@ class SessionState extends ChangeNotifier {
   void setQuestionDialogOpen(bool value) {
     if (_questionDialogOpen == value) return;
     _questionDialogOpen = value;
+    notifyListeners();
+  }
+
+  // ── opencode 表单（与提问对称：按会话隔离 + 当前会话选举）──────
+
+  /// 全部待回答表单（含其它会话）
+  List<PendingForm> get allForms => List.unmodifiable(_forms);
+
+  /// 当前会话待回答的表单（先进先出：最早的 pending 排最前）
+  PendingForm? get form {
+    final sid = _sessionId;
+    for (final f in _forms) {
+      if (f.sessionId == sid) return f;
+    }
+    return null;
+  }
+
+  /// 其它会话是否有待处理的表单（用于侧栏提示）
+  bool get hasForeignForm {
+    final sid = _sessionId;
+    return _forms.any((f) => f.sessionId != sid);
+  }
+
+  bool get formDialogOpen => _formDialogOpen;
+
+  void addForm(PendingForm value) {
+    // 同 formId 只保留一份（轮询对账与 SSE 可能重复送达）
+    if (_forms.any((f) => f.formId == value.formId)) return;
+    _forms.add(value);
+    notifyListeners();
+  }
+
+  void removeForm(String formId) {
+    final before = _forms.length;
+    _forms.removeWhere((f) => f.formId == formId);
+    if (_forms.length != before) notifyListeners();
+  }
+
+  void clearForms() {
+    if (_forms.isEmpty) return;
+    _forms.clear();
+    notifyListeners();
+  }
+
+  void setFormDialogOpen(bool value) {
+    if (_formDialogOpen == value) return;
+    _formDialogOpen = value;
     notifyListeners();
   }
 
@@ -314,6 +363,8 @@ class SessionState extends ChangeNotifier {
     _approvals.clear();
     _questions.clear();
     _questionDialogOpen = false;
+    _forms.clear();
+    _formDialogOpen = false;
     _activeTool = null;
     _changes.clear();
     _sessions = [];
@@ -336,6 +387,8 @@ class SessionState extends ChangeNotifier {
       hasQuestion = true;
     }
     if (hasQuestion) return 'question';
+    // opencode 表单与 DSH 提问同级：都在等用户回答
+    if (_forms.any((f) => f.sessionId == sessionId)) return 'question';
     for (final a in _approvals) {
       if (a.sessionId == sessionId) return 'approval';
     }
@@ -350,6 +403,9 @@ class SessionState extends ChangeNotifier {
     }
     for (final q in _questions) {
       ids.add(q.sessionId);
+    }
+    for (final f in _forms) {
+      ids.add(f.sessionId);
     }
     return ids;
   }

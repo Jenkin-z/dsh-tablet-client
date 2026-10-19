@@ -14,6 +14,7 @@ import '../widgets/chat_input_bar.dart';
 import '../widgets/connection_status.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_sheet.dart';
+import '../widgets/open_code_form_host.dart';
 import '../widgets/question_sheet.dart';
 import '../widgets/session_drawer.dart';
 import '../widgets/tool_status_bar.dart';
@@ -433,6 +434,8 @@ class _ChatScreenState extends State<ChatScreen> {
           if (_ctrl.state.activeTool != null)
             ToolStatusBar(toolName: _ctrl.state.activeTool!),
           _questionPrompt(),
+          // opencode 表单（自挂 dispatcher 回调 + 入口条）
+          OpenCodeFormHost(ctrl: _ctrl),
           Expanded(
             child: _buildMessages(),
           ),

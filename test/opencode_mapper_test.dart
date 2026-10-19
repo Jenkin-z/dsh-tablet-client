@@ -24,6 +24,7 @@ class _Recorder {
   final userEchoes = <String>[];
   final created = <String>[];
   final renamed = <Map<String, String>>[];
+  final formsResolved = <String>[];
 
   late final OpenCodeEventSink sink = OpenCodeEventSink(
     onTextDelta: deltas.add,
@@ -50,6 +51,7 @@ class _Recorder {
     onUserEcho: userEchoes.add,
     onSessionCreated: created.add,
     onSessionRenamed: (id, title) => renamed.add({'id': id, 'title': title}),
+    onFormResolved: formsResolved.add,
   );
 }
 
@@ -165,6 +167,15 @@ void main() {
       // 空标题不改名
       map('session.renamed', {'sessionID': 's9', 'title': ''});
       expect(rec.renamed, hasLength(1));
+    });
+
+    test('form.cancelled → 表单解决（实测唯一有事件的表单动作）', () {
+      // 真机实测：创建/应答无 SSE 事件，只有 cancelled 推 {id, sessionID}
+      map('form.cancelled', {'id': 'frm_1', 'sessionID': 's1'});
+      expect(rec.formsResolved, ['frm_1']);
+      // 缺 id 不上抛
+      map('form.cancelled', {'sessionID': 's1'});
+      expect(rec.formsResolved, hasLength(1));
     });
 
     test('未列举的事件类型安全忽略', () {

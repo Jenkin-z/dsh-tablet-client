@@ -26,7 +26,6 @@ class PendingQuestion {
     required this.sessionId,
     required this.questions,
   });
-
   /// plan-review 意图：Web 端用专用卡片（通过/否决），
   /// 且按钮不提供自定义文本入口（PlanReviewPanel 无输入框）。
   bool get isPlanReview {
@@ -44,5 +43,41 @@ class PendingQuestion {
     final intent = questions.first['intent'];
     if (intent is! Map) return null;
     return intent['approve'] as String?;
+  }
+}
+
+/// 待回答的 opencode 表单（Agent 通过 form 工具挂起 turn 提问；
+/// 字段为服务端原始 shape，弹窗按 type 分发渲染）
+class PendingForm {
+  final String formId;
+  final String sessionId;
+  final String title;
+  final List<Map<String, dynamic>> fields;
+  final Map<String, dynamic>? metadata;
+
+  const PendingForm({
+    required this.formId,
+    required this.sessionId,
+    required this.title,
+    required this.fields,
+    this.metadata,
+  });
+
+  /// Agent 提问建的表单带 metadata.kind == 'question'；
+  /// API 客户端建的不带——UI 上一视同仁，都允许回答/取消。
+  bool get fromAgent => metadata?['kind'] == 'question';
+
+  factory PendingForm.fromInfo(Map<String, dynamic> info) {
+    return PendingForm(
+      formId: info['id'] as String? ?? '',
+      sessionId: info['sessionID'] as String? ?? '',
+      title: info['title'] as String? ?? '表单',
+      fields: (info['fields'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+      metadata: info['metadata'] is Map
+          ? Map<String, dynamic>.from(info['metadata'] as Map)
+          : null,
+    );
   }
 }

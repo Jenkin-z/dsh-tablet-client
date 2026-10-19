@@ -293,4 +293,32 @@ class ChatController extends ChangeNotifier {
     final dsh = _backend is DshBackend ? _backend as DshBackend : null;
     await dsh?.cancelQuestion(q.rpcId);
   }
+
+  // ── opencode 表单（opencode 独有；DSH 无对应物） ──
+
+  /// 应答 opencode 表单。返回 true = 已提交或已被解决（UI 安静关闭）；
+  /// 答案不合法时上抛（message 来自服务端，可直显）。
+  Future<bool> submitForm(
+    String formId,
+    Map<String, dynamic> answer,
+  ) async {
+    final oc = _backend is OpenCodeBackend ? _backend as OpenCodeBackend : null;
+    if (oc == null) return false;
+    final ok = await oc.submitForm(formId, answer);
+    if (state.formDialogOpen) {
+      state.setFormDialogOpen(false);
+    }
+    return ok;
+  }
+
+  /// 放弃回答 opencode 表单：通知 Agent 后本地移除
+  Future<void> cancelForm(String formId) async {
+    // 先从界面移除，不让用户对着已放弃的表单继续操作
+    state.removeForm(formId);
+    if (state.formDialogOpen) {
+      state.setFormDialogOpen(false);
+    }
+    final oc = _backend is OpenCodeBackend ? _backend as OpenCodeBackend : null;
+    await oc?.cancelForm(formId, message: '用户放弃回答');
+  }
 }

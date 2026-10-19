@@ -25,6 +25,8 @@ class EventDispatcher {
   VoidCallback? onJumpToLatest;
   VoidCallback? onShowQuestionDialog;
   VoidCallback? onPopQuestionDialog;
+  VoidCallback? onShowFormDialog;
+  VoidCallback? onPopFormDialog;
   void Function(String message)? onShowSnackBar;
 
   EventDispatcher({
@@ -35,6 +37,8 @@ class EventDispatcher {
     this.onJumpToLatest,
     this.onShowQuestionDialog,
     this.onPopQuestionDialog,
+    this.onShowFormDialog,
+    this.onPopFormDialog,
     this.onShowSnackBar,
   });
 
@@ -422,6 +426,36 @@ class EventDispatcher {
     if (wasShown && state.questionDialogOpen) {
       state.setQuestionDialogOpen(false);
       onPopQuestionDialog?.call();
+    }
+  }
+
+  // ── opencode 表单（与提问对称：声音 / 通知 / 弹窗钩子） ──
+
+  /// 表单待回答（opencode 轮询对账发现 pending form 时调用）
+  void onForm(PendingForm form) {
+    state.addForm(form);
+    _touchActivity();
+    SoundService.question();
+    if (!AppVisibility.foreground) {
+      NotificationService.show(
+        id: 30002,
+        title: 'opencode 表单待填写',
+        body: form.title,
+      );
+    }
+    // 非当前会话的表单不入弹窗：只留在队列里，等用户切过去
+    if (state.sessionId == form.sessionId) {
+      onShowFormDialog?.call();
+    }
+  }
+
+  /// 表单已被解决（取消事件 / 应答成功 / 对账发现已消失）
+  void onFormResolved(String formId) {
+    final wasShown = state.form?.formId == formId && state.formDialogOpen;
+    state.removeForm(formId);
+    if (wasShown && state.formDialogOpen) {
+      state.setFormDialogOpen(false);
+      onPopFormDialog?.call();
     }
   }
 

@@ -92,24 +92,45 @@ class ChatController extends ChangeNotifier {
       });
       return;
     }
-    if (settings.sessionId == null || settings.sessionId!.isEmpty) {
-      // 有机器没会话：明说，别显示误导人的「正在重连」
-      state.setConnecting(false);
-      state.setConnected(false);
-      state.setConnectionError('还没有会话：到设置里「新建会话」开始第一段对话。');
-      return;
+    // 无会话不算死局：backend 必须先建出来，否则侧栏「新建会话」会静默
+    // 无效（曾经授权成功却永远连不上就是这个坑）。建好后刷新列表，
+    // 有会话就自动打开最近一条；真没有再提示（此时侧栏新建也可用了）。
+    var sessionId = settings.sessionId;
+    var backendReady = false;
+    if (sessionId == null || sessionId.isEmpty) {
+      await _backend?.dispose();
+      _backend = _createBackend(srv);
+      backendReady = true;
+      await _refreshSessions();
+      final candidates = state.sessions.toList();
+      final latest = candidates.isEmpty
+          ? null
+          : candidates.reduce((a, b) =>
+              ((a['updatedAt'] as int? ?? 0) >= (b['updatedAt'] as int? ?? 0))
+                  ? a
+                  : b);
+      sessionId = latest?['sessionId'] as String?;
+      if (sessionId == null || sessionId.isEmpty) {
+        state.setConnecting(false);
+        state.setConnected(false);
+        state.setConnectionError('这台后端还没有会话：打开侧栏「新建会话」开始第一段对话。');
+        return;
+      }
+      await settings.setSessionId(sessionId);
     }
 
-    state.setSessionId(settings.sessionId);
-    state.setSessionTitle(_defaultTitle(srv));
+    state.setSessionId(sessionId);
+    state.setSessionTitle(_titleFor(sessionId));
 
-    await _markCurrentSeen(srv.id, settings.sessionId);
+    await _markCurrentSeen(srv.id, sessionId);
 
-    await _backend?.dispose();
-    _backend = _createBackend(srv);
+    if (!backendReady) {
+      await _backend?.dispose();
+      _backend = _createBackend(srv);
+    }
 
     await _refreshSessions();
-    await _backend!.open(settings.sessionId);
+    await _backend!.open(sessionId);
   }
 
   AgentBackend _createBackend(AgentServer srv) {
@@ -194,9 +215,16 @@ class ChatController extends ChangeNotifier {
 
   Future<void> createNewSession({String? cwd}) async {
     final backend = _backend;
-    if (backend == null || !state.connected) return;
+    // 不再要求 state.connected：opencode 的 createSession 是纯 REST，
+    // 「授权成功但还没会话」时也必须能从这里起步。
+    // DSH 未连上时由 backend 自己抛 StateError，下面统一显示。
+    if (backend == null) {
+      state.setConnectionError('后端未就绪：请先在设置里添加并选择一台 PC。');
+      return;
+    }
     try {
       final id = await backend.createSession(cwd: cwd);
+      await settings.setSessionId(id);
       await _refreshSessions();
       await switchSession(id);
     } catch (e) {

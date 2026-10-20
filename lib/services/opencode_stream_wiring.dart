@@ -4,8 +4,9 @@ import 'opencode/opencode_stream.dart';
 
 /// SSE 事件 → OpenCodeEventSink 的装配（从 OpenCodeBackend 拆出）
 ///
-/// backend 只提供三个判断回调（是否当前会话 / 是否自己的回显 / turn 边沿），
-/// 这里负责把 mapper 的每个动作接到 dispatcher 与对账通道上。
+/// backend 只提供几个判断/动作回调（是否当前会话 / 是否自己的回显 /
+/// turn 边沿 / 流就绪 / 流断开），这里负责把流回调与 mapper 的每个动作
+/// 接到 dispatcher 与对账通道上。
 class OpenCodeWiring {
   final BackendContext ctx;
 
@@ -24,6 +25,15 @@ class OpenCodeWiring {
   /// 别的客户端发来用户消息：重拉历史（reconciler 提供）
   final Future<void> Function() onForeignEcho;
 
+  /// SSE 流就绪：置连接态 + 全量对账（backend 提供 reconciler 动作）
+  final void Function() onStreamConnected;
+
+  /// SSE 流断开（尚未进入重试）
+  final void Function() onStreamDisconnected;
+
+  /// SSE 传输级错误（含授权失败，401 时流不再重试）
+  final void Function(String message) onStreamError;
+
   OpenCodeWiring({
     required this.ctx,
     required this.isCurrent,
@@ -31,10 +41,16 @@ class OpenCodeWiring {
     required this.onTurnEdge,
     required this.onApprovalEvent,
     required this.onForeignEcho,
+    required this.onStreamConnected,
+    required this.onStreamDisconnected,
+    required this.onStreamError,
   });
 
   void attach(OpenCodeStream stream) {
     stream.onEvent = _onEvent;
+    stream.onConnected = onStreamConnected;
+    stream.onDisconnected = onStreamDisconnected;
+    stream.onError = onStreamError;
   }
 
   void _onEvent(String type, Map<String, dynamic> data) {

@@ -112,6 +112,15 @@ class OpenCodeBackend implements AgentBackend {
       onTurnEdge: () => _reconciler.reconcileForms(),
       onApprovalEvent: () => _reconciler.reconcilePermissions(),
       onForeignEcho: _reconciler.reloadHistory,
+      onStreamConnected: _onStreamConnected,
+      onStreamDisconnected: () {
+        // 指数退避重连由 stream 自理；这里只如实反映状态
+        ctx.state.setConnected(false);
+      },
+      onStreamError: (message) {
+        ctx.state.setConnectionError(message);
+        ctx.state.setConnected(false);
+      },
     );
     _wiring!.attach(_stream!);
     _stream!.connect();
@@ -134,6 +143,15 @@ class OpenCodeBackend implements AgentBackend {
 
   bool _isCurrent(String sid) =>
       sid.isNotEmpty && sid == (_boundSessionId ?? ctx.state.sessionId);
+
+  /// SSE 流就绪 = 真正连上（与 DSH 的 onReady 同语义）。
+  /// REST 历史已装载、SSE 已握手，这里统一落连接态 + 全量对账兜漏事件。
+  Future<void> _onStreamConnected() async {
+    ctx.state.setConnecting(false);
+    ctx.state.setConnectionError(null);
+    ctx.state.setConnected(true);
+    await _reconciler.reconcileAll();
+  }
 
   // ── 周期轮询 ────────────────────────────────────
 

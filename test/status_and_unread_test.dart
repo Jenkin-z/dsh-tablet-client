@@ -74,7 +74,10 @@ void main() {
     test('boot 与 switchSession 两条进入路径都清未读', () {
       expect(ctrl.contains('_markCurrentSeen'), isTrue);
       final bootIdx = ctrl.indexOf('Future<void> boot()');
-      final bootBody = ctrl.substring(bootIdx, (bootIdx + 1200).clamp(0, ctrl.length));
+      final openIdx = ctrl.indexOf('_backend!.open(');
+      expect(openIdx > bootIdx, isTrue);
+      // boot 里无会话自动选会话分支较长，取到第一处 open 为止
+      final bootBody = ctrl.substring(bootIdx, openIdx);
       expect(bootBody.contains('_markCurrentSeen'), isTrue);
 
       final swIdx = ctrl.indexOf('Future<void> switchSession(');

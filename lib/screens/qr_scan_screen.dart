@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/dsh/dsh_auth.dart';
+import '../services/opencode/opencode_target.dart';
 import '../theme/ios_theme.dart';
 
-/// 扫码授权页面：扫描 DSH 启动链接二维码（含 token）
+/// 扫码页面向的链接类型（决定格式校验与提示文案）
+enum QrScanExpect {
+  /// DSH 启动链接（含 token）或 8899 配对页地址
+  dshLink,
+
+  /// opencode 授权链接（/auth/connect/<code>）
+  opencodeLink,
+}
+
+/// 扫码授权页面：把二维码内容原样带回给调用方
+///
+/// 本页只做「扫码 + 格式校验」，授权的网络动作由调用方完成——
+/// 这样 DSH 与 opencode 两套授权流程可以共用同一个扫码入口。
 class QrScanScreen extends StatefulWidget {
-  const QrScanScreen({super.key});
+  final QrScanExpect expect;
+
+  const QrScanScreen({super.key, this.expect = QrScanExpect.dshLink});
 
   @override
   State<QrScanScreen> createState() => _QrScanScreenState();
@@ -13,8 +28,12 @@ class QrScanScreen extends StatefulWidget {
 
 class _QrScanScreenState extends State<QrScanScreen> {
   MobileScannerController? _controller;
-  bool _busy = false;
-  bool _done = false;
+
+  /// 无效码冷却：相机每帧都会重复识别同一张二维码，
+  /// 不去重的话 SnackBar 会连环轰炸（曾经的线上体验问题）。
+  String? _lastInvalidRaw;
+  DateTime? _lastInvalidAt;
+  static const _invalidCooldown = Duration(seconds: 3);
 
   @override
   void initState() {
@@ -31,8 +50,24 @@ class _QrScanScreenState extends State<QrScanScreen> {
     super.dispose();
   }
 
+  bool _isValid(String raw) => switch (widget.expect) {
+        QrScanExpect.dshLink => () {
+            final t = NativeAuth.parse(raw);
+            return t != null &&
+                (t.isPairServer ||
+                    (t.token != null && t.token!.isNotEmpty));
+          }(),
+        // 授权链接（含 /auth/connect/<code>）或局域网地址二维码都收，
+        // 由调用方按内容决定填哪个模式
+        QrScanExpect.opencodeLink => parseOpenCodeTarget(raw) != null,
+      };
+
+  String get _invalidHint => switch (widget.expect) {
+        QrScanExpect.dshLink => '未识别到有效链接，请扫描 DSH 启动二维码',
+        QrScanExpect.opencodeLink => '未识别到有效地址，请扫描 opencode 授权二维码或地址二维码',
+      };
+
   void _onDetect(BarcodeCapture capture) {
-    if (_busy || _done) return;
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue;
       if (raw == null || raw.isEmpty) continue;
@@ -41,55 +76,39 @@ class _QrScanScreenState extends State<QrScanScreen> {
     }
   }
 
-  Future<void> _handleResult(String raw) async {
-    final target = NativeAuth.parse(raw);
-    final hasToken = target?.token != null && target!.token!.isNotEmpty;
-    if (target == null || !(hasToken || target.isPairServer)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('未识别到有效链接，请扫描 DSH 启动二维码'),
-          backgroundColor: IosTheme.iosRed,
-        ),
-      );
+  void _handleResult(String raw) {
+    if (_isValid(raw)) {
+      Navigator.of(context).pop(raw);
       return;
     }
-
-    setState(() => _busy = true);
-    try {
-      final g = await NativeAuth.authorize(target);
-      if (!mounted) return;
-      Navigator.of(context).pop(
-        PairResult(host: g.host, port: g.port, cookie: g.cookie),
-      );
-    } on DshAuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: IosTheme.iosRed,
-        ),
-      );
-      setState(() => _busy = false);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('授权失败: $e'),
-          backgroundColor: IosTheme.iosRed,
-        ),
-      );
-      setState(() => _busy = false);
+    // 无效码冷却：同一条内容 3 秒内只提示一次，换内容立即提示
+    final now = DateTime.now();
+    final last = _lastInvalidAt;
+    final same = _lastInvalidRaw == raw;
+    if (same && last != null && now.difference(last) < _invalidCooldown) {
+      return;
     }
+    _lastInvalidRaw = raw;
+    _lastInvalidAt = now;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(_invalidHint),
+        backgroundColor: IosTheme.iosRed,
+      ));
   }
 
   @override
   Widget build(BuildContext context) {
+    final hint = switch (widget.expect) {
+      QrScanExpect.dshLink => '将 DSH 启动二维码放入框内',
+      QrScanExpect.opencodeLink => '将 opencode 授权二维码放入框内',
+    };
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text(
-          '扫描授权',
+          '扫码连接',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.black,
@@ -138,33 +157,23 @@ class _QrScanScreenState extends State<QrScanScreen> {
             bottom: 80,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _busy ? '正在授权...' : '将 DSH 启动二维码放入框内',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                      ),
-                    ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  hint,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
                   ),
-                  if (_busy) ...[
-                    const SizedBox(height: 12),
-                    const CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
@@ -172,17 +181,4 @@ class _QrScanScreenState extends State<QrScanScreen> {
       ),
     );
   }
-}
-
-/// 扫码授权结果
-class PairResult {
-  final String host;
-  final int port;
-  final String cookie;
-
-  const PairResult({
-    required this.host,
-    required this.port,
-    required this.cookie,
-  });
 }

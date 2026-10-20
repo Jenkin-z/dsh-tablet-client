@@ -114,11 +114,18 @@ class _PairScreenState extends State<PairScreen> {
 
   Future<void> _scanAuthorize() async {
     if (_busy) return;
-    final result = await Navigator.of(context).push<PairResult>(
+    final raw = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const QrScanScreen()),
     );
-    if (result == null || !mounted) return;
-    await _finish(result.host, result.port, result.cookie);
+    if (raw == null || !mounted) return;
+    final target = NativeAuth.parse(raw);
+    if (target == null ||
+        !(target.isPairServer ||
+            (target.token != null && target.token!.isNotEmpty))) {
+      setState(() => _error = '扫到的内容不是有效的 DSH 启动链接');
+      return;
+    }
+    await _run(() => NativeAuth.authorize(target));
   }
 
   Future<void> _finish(String host, int port, String cookie) async {

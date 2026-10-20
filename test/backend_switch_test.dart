@@ -48,4 +48,32 @@ void main() {
           isTrue);
     });
   });
+
+  group('opencode 连接态接线守卫', () {
+    late String wiringSrc;
+    late String backendSrc;
+
+    setUpAll(() {
+      wiringSrc =
+          File('lib/services/opencode_stream_wiring.dart').readAsStringSync();
+      backendSrc = File('lib/services/opencode_backend.dart').readAsStringSync();
+    });
+
+    test('Wiring.attach 必须接上 onConnected/onDisconnected/onError', () {
+      final idx = wiringSrc.indexOf('void attach(');
+      expect(idx >= 0, isTrue);
+      final body = wiringSrc.substring(idx);
+      expect(body.contains('stream.onConnected'), isTrue,
+          reason: '不接 onConnected，connected 永远 false（线上 bug）');
+      expect(body.contains('stream.onDisconnected'), isTrue);
+      expect(body.contains('stream.onError'), isTrue);
+    });
+
+    test('backend 连上时落连接态并做全量对账', () {
+      expect(backendSrc.contains('setConnected(true)'), isTrue,
+          reason: 'opencode 全链路没有任何 setConnected(true) 就是永远连不上');
+      expect(backendSrc.contains('reconcileAll()'), isTrue,
+          reason: '连上后必须全量对账兜漏事件');
+    });
+  });
 }

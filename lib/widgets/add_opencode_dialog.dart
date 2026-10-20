@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/agent_server.dart';
+import '../screens/qr_scan_screen.dart';
 import '../services/opencode/opencode_api.dart';
 import '../services/opencode/opencode_target.dart';
 import '../services/server_manager.dart';
@@ -93,6 +94,36 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
     return password;
   }
 
+  /// 扫码填入：授权二维码（含 /auth/connect/<code>）→ 链接模式；
+  /// 局域网地址二维码 → 手动模式。识别不出给错误提示。
+  Future<void> _scan() async {
+    final raw = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) =>
+            const QrScanScreen(expect: QrScanExpect.opencodeLink),
+      ),
+    );
+    if (raw == null || !mounted) return;
+    final target = parseOpenCodeTarget(raw);
+    if (target == null) {
+      setState(() => _error = '扫到的内容不是有效的 opencode 地址');
+      return;
+    }
+    if (target.pairCode != null) {
+      _link.text = raw.trim();
+      setState(() {
+        _linkMode = true;
+        _error = null;
+      });
+    } else {
+      _url.text = target.baseUrl;
+      setState(() {
+        _linkMode = false;
+        _error = null;
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (_busy) return;
     setState(() {
@@ -154,6 +185,7 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
         busy: _busy,
         error: _error,
         onModeChanged: (v) => setState(() => _linkMode = v),
+        onScan: _scan,
       ),
       actions: [
         TextButton(

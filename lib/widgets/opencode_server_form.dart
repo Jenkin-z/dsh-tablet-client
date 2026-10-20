@@ -15,6 +15,7 @@ class OpenCodeServerForm extends StatelessWidget {
   final bool busy;
   final String? error;
   final ValueChanged<bool> onModeChanged;
+  final VoidCallback? onScan;
 
   const OpenCodeServerForm({
     super.key,
@@ -26,6 +27,7 @@ class OpenCodeServerForm extends StatelessWidget {
     required this.busy,
     required this.onModeChanged,
     this.error,
+    this.onScan,
   });
 
   @override
@@ -81,10 +83,11 @@ class OpenCodeServerForm extends StatelessWidget {
           hint: 'https://xxxx.opencode.run/auth/connect/abc123',
           label: '授权链接',
           isDark: isDark,
+          scan: true,
         ),
         const SizedBox(height: IosTheme.spaceS),
         const Text(
-          'PC 上运行 opencode pair --remote 生成，300 秒内有效',
+          'PC 上运行 opencode pair --remote 生成，300 秒内有效；也可直接扫授权二维码',
           style: TextStyle(fontSize: 12, color: IosTheme.iosGray),
         ),
       ];
@@ -95,6 +98,7 @@ class OpenCodeServerForm extends StatelessWidget {
           hint: 'http://IP:4096，任意 IP 或主机名',
           label: '地址',
           isDark: isDark,
+          scan: true,
         ),
         const SizedBox(height: IosTheme.spaceM),
         _field(
@@ -117,6 +121,7 @@ class OpenCodeServerForm extends StatelessWidget {
     required String label,
     required bool isDark,
     bool obscure = false,
+    bool scan = false,
   }) {
     return TextField(
       controller: controller,
@@ -133,6 +138,14 @@ class OpenCodeServerForm extends StatelessWidget {
           borderRadius: BorderRadius.circular(IosTheme.radiusInput),
           borderSide: BorderSide.none,
         ),
+        suffixIcon: scan && onScan != null
+            ? IconButton(
+                icon: const Icon(Icons.qr_code_scanner, size: 22),
+                color: IosTheme.iosBlue,
+                tooltip: '扫码填入',
+                onPressed: busy ? null : onScan,
+              )
+            : null,
       ),
     );
   }

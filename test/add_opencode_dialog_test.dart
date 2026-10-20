@@ -26,7 +26,7 @@ void main() {
     expect(find.text('授权链接'), findsWidgets); // 段标题 + 输入框标签
     expect(find.text('手动连接'), findsOne);
     // 默认授权链接模式：提示语可见
-    expect(find.text('PC 上运行 opencode pair --remote 生成，300 秒内有效'),
+    expect(find.text('PC 上运行 opencode pair --remote 生成，300 秒内有效；也可直接扫授权二维码'),
         findsOne);
   });
 
@@ -38,7 +38,7 @@ void main() {
     expect(find.text('局域网直连需 PC 端 opencode serve --hostname 0.0.0.0'),
         findsOne);
     // 授权链接模式的提示语应消失
-    expect(find.text('PC 上运行 opencode pair --remote 生成，300 秒内有效'),
+    expect(find.text('PC 上运行 opencode pair --remote 生成，300 秒内有效；也可直接扫授权二维码'),
         findsNothing);
   });
 

@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$flutter = 'D:\software\flutter_windows_3.47.2-stable\bin\flutter.bat'
+$flutter = 'E:\software\flutter_windows_3.47.2-stable\bin\flutter.bat'
 $outDir = Join-Path $root 'build\app\outputs\flutter-apk'
 $apk = Join-Path $outDir 'app-release.apk'
 $served = Join-Path $outDir 'dsh-agent.apk'

@@ -15,6 +15,11 @@ const int reconnectSlowDelaySec = 30;
 /// 物理连接重连最大延迟（指数退避上限）
 const int reconnectMaxDelaySec = 60;
 
+/// SSE 建连超时：TCP 能通但对端不响应（如 stale 的 adb reverse / 半开
+/// 连接）时 send 会永远挂起，超时掐断并继续重试，否则重试链会卡死——
+/// 表现就是「正在重连」永远转下去。
+const Duration sseConnectTimeout = Duration(seconds: 15);
+
 // ── 流式消息 ──────────────────────────────────────
 const Duration deltaFlushInterval = Duration(milliseconds: 120);
 const Duration approvalPollInterval = Duration(seconds: 5);

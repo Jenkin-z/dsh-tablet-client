@@ -16,7 +16,14 @@ class OpenCodeStream {
   final String baseUrl;
   final String? password;
 
-  OpenCodeStream({required this.baseUrl, this.password});
+  /// 建连超时（可注入便于测试）；默认 [sseConnectTimeout]
+  final Duration connectTimeout;
+
+  OpenCodeStream({
+    required this.baseUrl,
+    this.password,
+    this.connectTimeout = sseConnectTimeout,
+  });
 
   /// 流（重）建立成功。首次连接与重连都会触发 —— 后端据此做全量对账。
   void Function()? onConnected;
@@ -64,6 +71,7 @@ class OpenCodeStream {
 
     client
         .send(request)
+        .timeout(connectTimeout)
         .then((resp) async {
       if (_disposed) {
         client.close();
@@ -94,6 +102,8 @@ class OpenCodeStream {
     }).catchError((Object e) {
       if (_disposed) return;
       _client = null;
+      // 挂死的半开连接必须显式掐断，否则 socket 泄漏
+      client.close();
       onError?.call('事件流连接失败：$e');
       _scheduleRetry();
     });

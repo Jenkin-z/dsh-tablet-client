@@ -172,4 +172,36 @@ void main() {
     await Future.delayed(const Duration(milliseconds: 3500));
     expect(hits.length, hitsBefore, reason: '401 后不应重试');
   });
+
+  test('对端只收连接不响应 → 建连超时报错并继续重试（回归：重试链卡死）',
+      () async {
+    // 起一个 accept 后装聋的 TCP 服务：模拟 stale 的 adb reverse / 半开连接
+    final blackHole = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    blackHole.listen((socket) {});
+    addTearDown(blackHole.close);
+
+    final errors = <String>[];
+    final stream = OpenCodeStream(
+      baseUrl: 'http://127.0.0.1:${blackHole.port}',
+      password: _password,
+      connectTimeout: const Duration(milliseconds: 400),
+    )..onError = errors.add;
+    addTearDown(stream.dispose);
+
+    stream.connect();
+
+    expect(
+      await _waitFor(() => errors.isNotEmpty, timeout: const Duration(seconds: 5)),
+      isTrue,
+      reason: '挂死连接必须在 connectTimeout 内报错，而不是永远等下去',
+    );
+    expect(errors.first, contains('事件流连接失败'));
+
+    // 超时后必须继续排重试（退避 3s 后第二次尝试再次超时 → 第二条错误）
+    expect(
+      await _waitFor(() => errors.length >= 2, timeout: const Duration(seconds: 8)),
+      isTrue,
+      reason: '超时后重试链不能断——之前 send 挂死导致「正在重连」永远转',
+    );
+  });
 }

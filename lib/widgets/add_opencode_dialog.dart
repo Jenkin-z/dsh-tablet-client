@@ -29,7 +29,7 @@ class AddOpenCodeDialog extends StatefulWidget {
 
 class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
   final _link = TextEditingController();
-  final _url = TextEditingController(text: 'http://192.168.10.');
+  final _url = TextEditingController();
   final _password = TextEditingController();
   final _name = TextEditingController();
 

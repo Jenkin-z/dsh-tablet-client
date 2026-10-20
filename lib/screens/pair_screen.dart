@@ -23,7 +23,7 @@ class PairScreen extends StatefulWidget {
 }
 
 class _PairScreenState extends State<PairScreen> {
-  final _paste = TextEditingController(text: '192.168.10.171:3080');
+  final _paste = TextEditingController();
   bool _busy = false;
   String? _error;
 
@@ -37,7 +37,7 @@ class _PairScreenState extends State<PairScreen> {
     if (_busy) return;
     final target = NativeAuth.parse(_paste.text);
     if (target == null) {
-      setState(() => _error = '无法识别，请输入 PC 地址（如 192.168.10.171:3080）');
+      setState(() => _error = '无法识别地址。任意 IP/主机名均可，如 192.168.10.171:3080、myhost:3080');
       return;
     }
     setState(() {
@@ -68,7 +68,7 @@ class _PairScreenState extends State<PairScreen> {
     if (_busy) return;
     final target = NativeAuth.parse(_paste.text);
     if (target == null) {
-      setState(() => _error = '无法识别，请输入 PC 局域网 IP（如 192.168.10.171）');
+      setState(() => _error = '无法识别地址。填 PC 的 IP 或主机名即可，如 192.168.10.171、10.0.0.5、myhost');
       return;
     }
     await _run(() => NativeAuth.fetchFromPairServer(target.host));
@@ -184,7 +184,7 @@ class _PairScreenState extends State<PairScreen> {
                   controller: _paste,
                   style: const TextStyle(fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: '192.168.10.171:3080',
+                    hintText: 'IP 或主机名:端口，如 192.168.10.171:3080',
                     hintStyle: TextStyle(color: IosTheme.iosGray),
                     filled: true,
                     fillColor: isDark

@@ -20,36 +20,53 @@ class OpenCodeTarget {
 
 /// 解析用户输入：完整授权链接 / 普通 URL / 裸 host:port
 ///
-/// 三种形态都来自真实使用场景：
+/// 支持任意 IP / 主机名 / IPv6 / 尾斜杠 / 带路径——裸输入统一补 http://
+/// 交给 Uri 解析，不限定点分十进制格式：
 /// 1. 授权链接：`opencode pair --remote` 输出的
 ///    `https://<隧道域名>/auth/connect/<code>`（码 300s 有效）；
-/// 2. 普通 URL：`http://192.168.10.x:4096`（可带路径，只取 scheme+host+port）；
-/// 3. 裸 host:port：`192.168.10.x:4096` 或 `192.168.10.x`（默认 4096）。
+/// 2. 普通 URL：`http://<ip>:4096`（可带路径，只取 scheme+host+port）；
+/// 3. 裸 host:port：`0.0.0.0:4096` / `myhost` / `[::1]:4096`（默认 4096）。
 ///
 /// 认不出的输入返回 null（调用方给错误提示，不猜）。
 OpenCodeTarget? parseOpenCodeTarget(String raw) {
   final t = raw.trim();
   if (t.isEmpty) return null;
-  if (!t.startsWith('http://') && !t.startsWith('https://')) {
-    if (RegExp(r'^[\w.-]+(:\d+)?$').hasMatch(t)) {
-      final hp = t.split(':');
-      return OpenCodeTarget(
-        baseUrl: 'http://$t',
-        host: hp[0],
-        port: hp.length > 1 ? int.tryParse(hp[1]) ?? 4096 : 4096,
-      );
-    }
+  // 输入分派：`word://` 是完整 URL；`word:数字` 是被误认成 scheme 的
+  // host:port（如 myhost:4096/x）；其余裸输入统一补 http:// 交给 Uri
+  final sm = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$').firstMatch(t);
+  final String toParse;
+  if (sm == null) {
+    toParse = 'http://$t';
+  } else if (sm.group(2)!.startsWith('//')) {
+    toParse = t;
+  } else if (RegExp(r'^\d').hasMatch(sm.group(2)!)) {
+    toParse = 'http://$t';
+  } else {
+    toParse = t; // http:/x 之类的坏 URL：解析不出 host，走 null
+  }
+  final uri = Uri.tryParse(toParse);
+  if (uri == null || uri.host.isEmpty || uri.host.contains('%')) {
     return null;
   }
-  final uri = Uri.tryParse(t);
-  if (uri == null || uri.host.isEmpty) return null;
-  final base = '${uri.scheme}://${uri.host}'
-      '${uri.hasPort ? ':${uri.port}' : ''}';
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return null;
+  }
+  int port;
+  try {
+    port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 4096);
+  } catch (_) {
+    return null; // 端口不是数字 / 溢出
+  }
+  if (port <= 0 || port > 65535) return null;
+  // IPv6 的 Uri.host 不带方括号，重组 URL 时要补回
+  final hostPart = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+  final base = '${uri.scheme}://$hostPart'
+      '${uri.hasPort ? ':$port' : ''}';
   final m = RegExp(r'/auth/connect/([^/?#]+)').firstMatch(uri.path);
   return OpenCodeTarget(
     baseUrl: base,
     host: uri.host,
-    port: uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 4096),
+    port: port,
     pairCode: m?.group(1),
   );
 }

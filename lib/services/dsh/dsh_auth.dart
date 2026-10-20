@@ -131,25 +131,40 @@ class NativeAuth {
   static PairTarget? parse(String raw) {
     final t = raw.trim();
     if (t.isEmpty) return null;
-    if (t.startsWith('http')) {
-      final uri = Uri.tryParse(t);
-      if (uri != null && uri.host.isNotEmpty) {
-        return PairTarget(
-          host: uri.host,
-          port: uri.hasPort ? uri.port : 3080,
-          token: uri.queryParameters['token'],
-        );
-      }
+    // 输入分派：`word://` 是完整 URL（scheme 白名单 http/https）；
+    // `word:数字` 是被误认成 scheme 的 host:port（如 myhost:4096/x）；
+    // 其余裸输入（IP / 主机名 / IPv6 / 尾斜杠 / 带路径）统一补 http://
+    // 交给 Uri，不限定点分十进制格式（host 合法性由网络层裁决）。
+    final sm = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$').firstMatch(t);
+    final String toParse;
+    if (sm == null) {
+      toParse = 'http://$t';
+    } else if (sm.group(2)!.startsWith('//')) {
+      toParse = t;
+    } else if (RegExp(r'^\d').hasMatch(sm.group(2)!)) {
+      toParse = 'http://$t';
+    } else {
+      toParse = t; // http:/x 之类的坏 URL：解析不出 host，走 null
+    }
+    final uri = Uri.tryParse(toParse);
+    if (uri == null || uri.host.isEmpty || uri.host.contains('%')) {
       return null;
     }
-    final hp = RegExp(r'^([\w.-]+):(\d+)$').firstMatch(t);
-    if (hp != null) {
-      return PairTarget(host: hp.group(1)!, port: int.parse(hp.group(2)!));
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
     }
-    if (RegExp(r'^[\w.-]+$').hasMatch(t)) {
-      return PairTarget(host: t);
+    int port;
+    try {
+      port = uri.hasPort ? uri.port : 3080;
+    } catch (_) {
+      return null; // 端口不是数字 / 溢出
     }
-    return null;
+    if (port <= 0 || port > 65535) return null;
+    return PairTarget(
+      host: uri.host,
+      port: port,
+      token: uri.queryParameters['token'],
+    );
   }
 
   /// 用启动令牌换取 browser cookie。返回 "name=value"，原样放进 Cookie 头。

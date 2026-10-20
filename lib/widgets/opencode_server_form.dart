@@ -92,7 +92,7 @@ class OpenCodeServerForm extends StatelessWidget {
   List<Widget> _manualFields(bool isDark) => [
         _field(
           controller: url,
-          hint: 'http://192.168.10.x:4096',
+          hint: 'http://IP:4096，任意 IP 或主机名',
           label: '地址',
           isDark: isDark,
         ),

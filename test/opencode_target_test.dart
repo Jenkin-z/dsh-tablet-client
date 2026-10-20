@@ -54,10 +54,43 @@ void main() {
       expect(parseOpenCodeTarget('my-pc:abc'), isNull);
     });
 
-    test('端口溢出 → 回落 4096', () {
-      final t = parseOpenCodeTarget('my-pc:99999999999999999999');
-      expect(t!.port, 4096);
-      expect(t.host, 'my-pc');
+    test('端口溢出 → 拒认（不猜）', () {
+      expect(parseOpenCodeTarget('my-pc:99999999999999999999'), isNull);
+    });
+  });
+
+  group('任意 host 格式（不限定点分十进制）', () {
+    test('0.0.0.0 与非 192 网段照常解析', () {
+      final a = parseOpenCodeTarget('0.0.0.0:4096');
+      expect(a!.host, '0.0.0.0');
+      expect(a.baseUrl, 'http://0.0.0.0:4096');
+      final b = parseOpenCodeTarget('10.255.1.2:4096');
+      expect(b!.host, '10.255.1.2');
+    });
+
+    test('尾斜杠 / 带路径 → 只取 scheme+host+port', () {
+      final a = parseOpenCodeTarget('0.0.0.0:4096/');
+      expect(a!.baseUrl, 'http://0.0.0.0:4096');
+      final b = parseOpenCodeTarget('myhost:4096/some/path');
+      expect(b!.baseUrl, 'http://myhost:4096');
+      expect(b.host, 'myhost');
+    });
+
+    test('纯主机名', () {
+      final t = parseOpenCodeTarget('my-pc.local');
+      expect(t!.host, 'my-pc.local');
+      expect(t.port, 4096);
+    });
+
+    test('IPv6 裸输入 → baseUrl 补方括号', () {
+      final t = parseOpenCodeTarget('[::1]:4096');
+      expect(t!.host, '::1');
+      expect(t.baseUrl, 'http://[::1]:4096');
+      expect(t.port, 4096);
+    });
+
+    test('端口越界（>65535）→ 拒认', () {
+      expect(parseOpenCodeTarget('0.0.0.0:99999'), isNull);
     });
   });
 

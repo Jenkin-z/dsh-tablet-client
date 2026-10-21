@@ -8,147 +8,152 @@ import '../theme/ios_theme.dart';
 import 'custom_sound_tile.dart';
 import 'sound_settings_row.dart';
 
-/// 声音设置区块 —— iOS 风格
+/// 提示音开关区（只出「行」，卡片与标题由页面负责）
 ///
-/// 提示音开关 + 试听 + 自定义铃声。
-/// 分隔线/试听按钮拆到 sound_settings_row.dart，自定义铃声行拆到
-/// custom_sound_tile.dart，让本文件守住 200 行上限。
-class SoundSettingsSection extends StatelessWidget {
+/// 提示音总开关 + 需确认/完成提示音 + 试听。
+class SoundTogglesSection extends StatelessWidget {
   final SettingsService settings;
 
-  const SoundSettingsSection({super.key, required this.settings});
+  const SoundTogglesSection({super.key, required this.settings});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const IosSectionHeader(title: '提示音'),
-        IosCard(
-          child: Column(
-            children: [
-              SwitchListTile(
-                secondary: Icon(
-                  Icons.volume_up_outlined,
-                  color: IosTheme.iosBlue,
-                  size: 22,
-                ),
-                title: const Text('提示音'),
-                subtitle: const Text(
-                  '需确认与完成时播放',
-                  style: TextStyle(fontSize: 13),
-                ),
-                value: settings.soundEnabled,
-                onChanged: (v) => settings.setSoundEnabled(v),
-                activeThumbColor: IosTheme.iosGreen,
-              ),
-              const SoundSettingsDivider(),
-              SwitchListTile(
-                secondary: Icon(
-                  Icons.notification_important_outlined,
-                  color: IosTheme.iosOrange,
-                  size: 22,
-                ),
-                title: const Text('需确认提示音'),
-                subtitle: const Text(
-                  '审批 / 问题请求到达时',
-                  style: TextStyle(fontSize: 13),
-                ),
-                value: settings.approvalSound,
-                onChanged: settings.soundEnabled
-                    ? (v) => settings.setApprovalSound(v)
-                    : null,
-                activeThumbColor: IosTheme.iosGreen,
-              ),
-              const SoundSettingsDivider(),
-              SwitchListTile(
-                secondary: Icon(
-                  Icons.task_alt_outlined,
-                  color: IosTheme.iosGreen,
-                  size: 22,
-                ),
-                title: const Text('完成提示音'),
-                subtitle: const Text(
-                  'Agent 一轮回答结束时',
-                  style: TextStyle(fontSize: 13),
-                ),
-                value: settings.completionSound,
-                onChanged: settings.soundEnabled
-                    ? (v) => settings.setCompletionSound(v)
-                    : null,
-                activeThumbColor: IosTheme.iosGreen,
-              ),
-              const SoundSettingsDivider(),
-              ListTile(
-                leading: Icon(
-                  Icons.play_circle_outline,
-                  color: IosTheme.iosPurple,
-                  size: 22,
-                ),
-                title: const Text('试听'),
-                subtitle: const Text(
-                  '逐个播放，确认平板有声',
-                  style: TextStyle(fontSize: 13),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SoundPreviewButton(
-                      label: '确认',
-                      onPressed: () => _previewSound('approval'),
-                    ),
-                    SoundPreviewButton(
-                      label: '提问',
-                      onPressed: () => _previewSound('question'),
-                    ),
-                    SoundPreviewButton(
-                      label: '完成',
-                      onPressed: () => _previewSound('done'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        SwitchListTile(
+          secondary: Icon(
+            Icons.volume_up_outlined,
+            color: IosTheme.iosBlue,
+            size: 22,
           ),
+          title: const Text('提示音'),
+          subtitle: const Text(
+            '需确认与完成时播放',
+            style: TextStyle(fontSize: 13),
+          ),
+          value: settings.soundEnabled,
+          onChanged: (v) => settings.setSoundEnabled(v),
+          activeThumbColor: IosTheme.iosGreen,
         ),
-        const SizedBox(height: IosTheme.spaceL),
-        const IosSectionHeader(title: '自定义铃声'),
-        IosCard(
-          child: Column(
+        const SoundSettingsDivider(),
+        SwitchListTile(
+          secondary: Icon(
+            Icons.notification_important_outlined,
+            color: IosTheme.iosOrange,
+            size: 22,
+          ),
+          title: const Text('需确认提示音'),
+          subtitle: const Text(
+            '审批 / 问题请求到达时',
+            style: TextStyle(fontSize: 13),
+          ),
+          value: settings.approvalSound,
+          onChanged: settings.soundEnabled
+              ? (v) => settings.setApprovalSound(v)
+              : null,
+          activeThumbColor: IosTheme.iosGreen,
+        ),
+        const SoundSettingsDivider(),
+        SwitchListTile(
+          secondary: Icon(
+            Icons.task_alt_outlined,
+            color: IosTheme.iosGreen,
+            size: 22,
+          ),
+          title: const Text('完成提示音'),
+          subtitle: const Text(
+            'Agent 一轮回答结束时',
+            style: TextStyle(fontSize: 13),
+          ),
+          value: settings.completionSound,
+          onChanged: settings.soundEnabled
+              ? (v) => settings.setCompletionSound(v)
+              : null,
+          activeThumbColor: IosTheme.iosGreen,
+        ),
+        const SoundSettingsDivider(),
+        ListTile(
+          leading: Icon(
+            Icons.play_circle_outline,
+            color: IosTheme.iosPurple,
+            size: 22,
+          ),
+          title: const Text('试听'),
+          subtitle: const Text(
+            '逐个播放，确认平板有声',
+            style: TextStyle(fontSize: 13),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _customSoundTile(context, 'approval', '确认音',
-                  '审批 / 问题请求到达'),
-              const SoundSettingsDivider(),
-              _customSoundTile(
-                  context, 'question', '提问音', 'Agent 提问到达'),
-              const SoundSettingsDivider(),
-              _customSoundTile(
-                  context, 'done', '完成音', 'Agent 一轮回答结束'),
+              SoundPreviewButton(
+                label: '确认',
+                onPressed: () => SoundActions.preview(settings, 'approval'),
+              ),
+              SoundPreviewButton(
+                label: '提问',
+                onPressed: () => SoundActions.preview(settings, 'question'),
+              ),
+              SoundPreviewButton(
+                label: '完成',
+                onPressed: () => SoundActions.preview(settings, 'done'),
+              ),
             ],
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _customSoundTile(
+/// 自定义铃声区（只出「行」，卡片与标题由页面负责）
+class CustomSoundsSection extends StatelessWidget {
+  final SettingsService settings;
+
+  const CustomSoundsSection({super.key, required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _tile(context, 'approval', '确认音', '审批 / 问题请求到达'),
+        const SoundSettingsDivider(),
+        _tile(context, 'question', '提问音', 'Agent 提问到达'),
+        const SoundSettingsDivider(),
+        _tile(context, 'done', '完成音', 'Agent 一轮回答结束'),
+      ],
+    );
+  }
+
+  Widget _tile(
       BuildContext context, String name, String label, String desc) {
     return CustomSoundTile(
       settings: settings,
       name: name,
       label: label,
       desc: desc,
-      onPick: () => _pickCustomSound(context, name),
-      onReset: () => _resetCustomSound(name),
+      onPick: () => SoundActions.pick(context, settings, name),
+      onReset: () => SoundActions.reset(settings, name),
     );
   }
+}
 
-  Future<void> _previewSound(String name) async {
+/// 铃声的试听/选取/重置动作
+class SoundActions {
+  const SoundActions._();
+
+  static Future<void> preview(SettingsService settings, String name) async {
     await SoundService.play(name, customPath: settings.customSoundPath(name));
   }
 
-  Future<void> _pickCustomSound(
-      BuildContext context, String name) async {
+  static Future<void> reset(SettingsService settings, String name) async {
+    await settings.setCustomSound(name, null);
+  }
+
+  static Future<void> pick(
+      BuildContext context, SettingsService settings, String name) async {
     try {
       final picked = await FilePicker.pickFile(type: FileType.audio);
       if (picked == null) return;
@@ -175,9 +180,5 @@ class SoundSettingsSection extends StatelessWidget {
         );
       }
     }
-  }
-
-  Future<void> _resetCustomSound(String name) async {
-    await settings.setCustomSound(name, null);
   }
 }

@@ -324,7 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             segments: const [
               ButtonSegment(
                 value: 'system',
-                label: Text('跟随系统'),
+                label: Text('自动'),
                 icon: Icon(Icons.settings_suggest_outlined, size: 18),
               ),
               ButtonSegment(

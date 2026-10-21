@@ -104,6 +104,124 @@ class ConsoleScreen extends StatelessWidget {
   ) {
     if (groups.isEmpty) return _emptyState(context);
 
+    // 用实际布局约束判断，而不是 MediaQuery：
+    // 分屏/旋转时 MediaQuery 可能比布局晚一帧，横竖屏会闪回旧布局。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isLandscape = constraints.maxWidth > constraints.maxHeight;
+        return isLandscape
+            ? _landscapeBody(context, manager, settings, session, groups)
+            : _portraitBody(context, manager, settings, session, groups);
+      },
+    );
+  }
+
+  /// 竖屏：保持原来的顶部设备条 + 下方最近会话。
+  Widget _portraitBody(
+    BuildContext context,
+    ServerManager manager,
+    SettingsService settings,
+    SessionState session,
+    List<ServerGroup> groups,
+  ) {
+    return RefreshIndicator(
+      onRefresh: manager.refreshAll,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
+        children: [
+          const SizedBox(height: IosTheme.spaceS),
+          ConsoleDevices(
+            groups: groups,
+            // 高亮只看「哪台是当前机器」，与连没连上无关。
+            activeServerId: settings.activeServerId,
+            onTapDevice: (serverId) => _onTapDevice(context, groups, serverId),
+          ),
+          const SizedBox(height: IosTheme.spaceS),
+          _recentBlock(settings, session, groups),
+        ],
+      ),
+    );
+  }
+
+  /// 横屏：设备切换固定在左侧竖栏，右侧只放会话列表。
+  Widget _landscapeBody(
+    BuildContext context,
+    ServerManager manager,
+    SettingsService settings,
+    SessionState session,
+    List<ServerGroup> groups,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _deviceRail(context, settings, groups),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: manager.refreshAll,
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
+              children: [
+                const SizedBox(height: IosTheme.spaceS),
+                _recentBlock(settings, session, groups),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _deviceRail(
+    BuildContext context,
+    SettingsService settings,
+    List<ServerGroup> groups,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: 260,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0C0C0D) : Colors.white,
+        border: Border(
+          right: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        right: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ConsoleSectionHeader(
+              icon: Icons.devices_other,
+              iconColor: IosTheme.iosBlue,
+              title: '设备',
+              count: groups.length,
+            ),
+            Expanded(
+              child: ConsoleDevices(
+                groups: groups,
+                activeServerId: settings.activeServerId,
+                axis: Axis.vertical,
+                onTapDevice: (serverId) =>
+                    _onTapDevice(context, groups, serverId),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _recentBlock(
+    SettingsService settings,
+    SessionState session,
+    List<ServerGroup> groups,
+  ) {
     // 跨机器混排：所有机器 3 小时窗口内的会话放在同一张卡片里，
     // 按最近活动倒序；设备归属由每行的徽章表达。
     final recent = collectRecentSessions(groups, window: _window);
@@ -116,53 +234,36 @@ class ConsoleScreen extends StatelessWidget {
       return unviewedKeys.contains(settings.seenKey(entry.serverId, id));
     });
 
-    return RefreshIndicator(
-      onRefresh: manager.refreshAll,
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
-        children: [
-          const SizedBox(height: IosTheme.spaceS),
-          ConsoleDevices(
-            groups: groups,
-            // 高亮只看「哪台是当前机器」，与连没连上无关。
-            // 之前写成 session.connected ? activeServerId : null，
-            // 一断线就全不亮，看着像切换没生效。
-            activeServerId: settings.activeServerId,
-            onTapDevice: (serverId) => _onTapDevice(context, groups, serverId),
-          ),
-          const SizedBox(height: IosTheme.spaceS),
-          ConsoleSectionHeader(
-            icon: Icons.forum_outlined,
-            iconColor: IosTheme.iosBlue,
-            title: '最近 3 小时',
-            count: recent.length,
-            badge: hasRecentUnviewed,
-            action: hasUnviewed
-                ? TextButton(
-                    // 清「全部未读」，而不是只清这个 3 小时区块里的。
-                    //
-                    // 顶部的未读计数走 server_manager.unviewedCount →
-                    // _filter(unviewed:)，那里**没有时间窗口**、是全量的。
-                    // 之前这里只传 3 小时窗口内的 key，两者 scope 不一致：
-                    // 超窗的未读永远清不掉，数字只增不减（用户看到 103）。
-                    onPressed: () => settings.markAllSeen(
-                      settings.unviewedIds.toList(growable: false),
-                    ),
-                    child: const Text('全部已读'),
-                  )
-                : null,
-          ),
-          ConsoleRecentList(
-            entries: recent,
-            currentSessionId: session.sessionId,
-            activeServerId: settings.activeServerId,
-            unviewedKeys: unviewedKeys,
-            unviewedKeyBuilder: settings.seenKey,
-            pendingKindOf: session.pendingKindOf,
-            onOpenSession: onOpenSession,
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ConsoleSectionHeader(
+          icon: Icons.forum_outlined,
+          iconColor: IosTheme.iosBlue,
+          title: '最近 3 小时',
+          count: recent.length,
+          badge: hasRecentUnviewed,
+          action: hasUnviewed
+              ? TextButton(
+                  // 清「全部未读」，而不是只清这个 3 小时区块里的。
+                  // 顶部未读计数是全量的，这里必须用同一个 scope。
+                  onPressed: () => settings.markAllSeen(
+                    settings.unviewedIds.toList(growable: false),
+                  ),
+                  child: const Text('全部已读'),
+                )
+              : null,
+        ),
+        ConsoleRecentList(
+          entries: recent,
+          currentSessionId: session.sessionId,
+          activeServerId: settings.activeServerId,
+          unviewedKeys: unviewedKeys,
+          unviewedKeyBuilder: settings.seenKey,
+          pendingKindOf: session.pendingKindOf,
+          onOpenSession: onOpenSession,
+        ),
+      ],
     );
   }
 

@@ -18,6 +18,9 @@ class ConsoleMachineChip extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
+  /// 纵向栏里宽度是固定的，标题必须可收缩，不能把统计挤出边界
+  final bool fillWidth;
+
   const ConsoleMachineChip({
     super.key,
     required this.title,
@@ -28,6 +31,7 @@ class ConsoleMachineChip extends StatelessWidget {
     required this.active,
     this.error,
     this.onTap,
+    this.fillWidth = false,
   });
 
   IconData get _icon {
@@ -59,7 +63,7 @@ class ConsoleMachineChip extends StatelessWidget {
             ? Colors.white.withValues(alpha: 0.08)
             : Colors.black.withValues(alpha: 0.06));
     final radius = BorderRadius.circular(IosTheme.radiusChip);
-
+    final titleWidget = DeviceChipTitle(title: title, active: active);
     return Semantics(
       button: true,
       selected: active,
@@ -99,19 +103,7 @@ class ConsoleMachineChip extends StatelessWidget {
                       child: Icon(_icon, size: 17, color: statusColor),
                     ),
                     const SizedBox(width: IosTheme.spaceS),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 132),
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight:
-                              active ? FontWeight.w600 : FontWeight.w500,
-                        ),
-                      ),
-                    ),
+                    fillWidth ? Expanded(child: titleWidget) : titleWidget,
                     if (running > 0) ...[
                       const SizedBox(width: IosTheme.spaceS),
                       DeviceMiniStat(
@@ -147,16 +139,33 @@ class ConsoleDevices extends StatelessWidget {
   /// 当前正在对话的 PC（来自权威状态源），null 表示未连接
   final String? activeServerId;
 
+  /// 竖屏用横向胶囊条，横屏用左侧纵向列表
+  final Axis axis;
+
   const ConsoleDevices({
     super.key,
     required this.groups,
     required this.onTapDevice,
     this.activeServerId,
+    this.axis = Axis.horizontal,
   });
 
   @override
   Widget build(BuildContext context) {
     if (groups.isEmpty) return const SizedBox.shrink();
+
+    if (axis == Axis.vertical) {
+      return ListView.separated(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(
+          horizontal: IosTheme.spaceL,
+          vertical: IosTheme.spaceS,
+        ),
+        itemCount: groups.length,
+        separatorBuilder: (_, __) => const SizedBox(height: IosTheme.spaceS),
+        itemBuilder: _chip,
+      );
+    }
 
     return SizedBox(
       height: 48,
@@ -166,23 +175,26 @@ class ConsoleDevices extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
         itemCount: groups.length,
         separatorBuilder: (_, __) => const SizedBox(width: IosTheme.spaceS),
-        itemBuilder: (context, i) {
-          final group = groups[i];
-          final name = group.server.name;
-          final host = group.server.host;
-          return ConsoleMachineChip(
-            // 别名优先，空名退回地址（防御旧数据）
-            title: name.isNotEmpty ? name : (host.isNotEmpty ? host : 'PC'),
-            online: group.monitor.online,
-            needsAuth: group.server.unpaired,
-            running: group.running.length,
-            unviewed: group.unviewed.length,
-            error: group.monitor.error,
-            active: group.server.id == activeServerId,
-            onTap: () => onTapDevice(group.server.id),
-          );
-        },
+        itemBuilder: _chip,
       ),
+    );
+  }
+
+  Widget _chip(BuildContext context, int i) {
+    final group = groups[i];
+    final name = group.server.name;
+    final host = group.server.host;
+    return ConsoleMachineChip(
+      // 别名优先，空名退回地址（防御旧数据）
+      title: name.isNotEmpty ? name : (host.isNotEmpty ? host : 'PC'),
+      online: group.monitor.online,
+      needsAuth: group.server.unpaired,
+      running: group.running.length,
+      unviewed: group.unviewed.length,
+      error: group.monitor.error,
+      active: group.server.id == activeServerId,
+      fillWidth: axis == Axis.vertical,
+      onTap: () => onTapDevice(group.server.id),
     );
   }
 }

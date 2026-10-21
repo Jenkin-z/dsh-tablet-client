@@ -74,6 +74,34 @@ class DeviceMiniStat extends StatelessWidget {
   }
 }
 
+/// 设备胶囊里的标题：长别名省略，纵向栏里可被 Expanded 收缩
+class DeviceChipTitle extends StatelessWidget {
+  final String title;
+  final bool active;
+
+  const DeviceChipTitle({
+    super.key,
+    required this.title,
+    required this.active,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 132),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
 /// 「当前」徽章
 class DeviceActiveBadge extends StatelessWidget {
   const DeviceActiveBadge({super.key});

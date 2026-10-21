@@ -4,6 +4,7 @@ import '../services/dsh/dsh_auth.dart';
 import '../services/dsh/lan_pair_auth.dart';
 import '../services/opencode/opencode_target.dart';
 import '../theme/ios_theme.dart';
+import '../utils/qr_invalid_guard.dart';
 
 /// 扫码页面向的链接类型（决定格式校验与提示文案）
 enum QrScanExpect {
@@ -30,11 +31,10 @@ class QrScanScreen extends StatefulWidget {
 class _QrScanScreenState extends State<QrScanScreen> {
   MobileScannerController? _controller;
 
-  /// 无效码冷却：相机每帧都会重复识别同一张二维码，
-  /// 不去重的话 SnackBar 会连环轰炸（曾经的线上体验问题）。
-  String? _lastInvalidRaw;
-  DateTime? _lastInvalidAt;
-  static const _invalidCooldown = Duration(seconds: 3);
+  /// 无效码提示节流：同一条内容连续识别到第 2 次才提示，
+  /// 避免「二维码只进了一半」这种逐帧变化的误读把用户吓一跳
+  /// （曾经出现「绑定成功却先弹了失败提示」）。
+  final QrInvalidGuard _guard = QrInvalidGuard();
 
   @override
   void initState() {
@@ -68,7 +68,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
   String get _invalidHint => switch (widget.expect) {
         QrScanExpect.dshLink => '未识别到有效链接，请扫描 DSH 启动二维码',
-        QrScanExpect.opencodeLink => '未识别到有效地址，请扫描 opencode 授权二维码或地址二维码',
+        QrScanExpect.opencodeLink => '未识别到有效地址，请扫描 opencode pair 打印的配对二维码',
       };
 
   void _onDetect(BarcodeCapture capture) {
@@ -82,18 +82,12 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
   void _handleResult(String raw) {
     if (_isValid(raw)) {
+      _guard.reset();
       Navigator.of(context).pop(raw);
       return;
     }
-    // 无效码冷却：同一条内容 3 秒内只提示一次，换内容立即提示
-    final now = DateTime.now();
-    final last = _lastInvalidAt;
-    final same = _lastInvalidRaw == raw;
-    if (same && last != null && now.difference(last) < _invalidCooldown) {
-      return;
-    }
-    _lastInvalidRaw = raw;
-    _lastInvalidAt = now;
+    // 误读（内容每帧都变）不提示；稳定扫到但认不出才提示一次
+    if (!_guard.shouldReport(raw)) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(

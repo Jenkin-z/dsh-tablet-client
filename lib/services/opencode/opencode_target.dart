@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 解析出的 opencode 目标
 class OpenCodeTarget {
   /// http(s)://host[:port]，作为 AgentServer.url（权威基址）
@@ -18,14 +20,15 @@ class OpenCodeTarget {
   });
 }
 
-/// 解析用户输入：完整授权链接 / 普通 URL / 裸 host:port
+/// 解析用户输入：完整授权链接 / 普通 URL / 裸 host:port / 配对二维码 JSON
 ///
 /// 支持任意 IP / 主机名 / IPv6 / 尾斜杠 / 带路径——裸输入统一补 http://
 /// 交给 Uri 解析，不限定点分十进制格式：
-/// 1. 授权链接：`opencode pair --remote` 输出的
-///    `https://<隧道域名>/auth/connect/<code>`（码 300s 有效）；
-/// 2. 普通 URL：`http://<ip>:4096`（可带路径，只取 scheme+host+port）；
-/// 3. 裸 host:port：`0.0.0.0:4096` / `myhost` / `[::1]:4096`（默认 4096）。
+/// 1. 配对二维码：`opencode pair` 打印的二维码内容是 JSON
+///    `{"code":"<码>","urls":["<基址>"]}`（实测 opencode 2.1.2）；
+/// 2. 授权链接：`https://<隧道域名>/auth/connect/<code>`（码 300s 有效）；
+/// 3. 普通 URL：`http://<ip>:4096`（可带路径，只取 scheme+host+port）；
+/// 4. 裸 host:port：`0.0.0.0:4096` / `myhost` / `[::1]:4096`（默认 4096）。
 ///
 /// 认不出的输入返回 null（调用方给错误提示，不猜）。
 ///
@@ -34,10 +37,71 @@ class OpenCodeTarget {
 OpenCodeTarget? parseOpenCodeTarget(String raw) {
   final t = raw.trim();
   if (t.isEmpty) return null;
+  // 配对二维码是 JSON 载荷（不是链接），走单独分支
+  if (t.startsWith('{')) return _parsePairPayload(t);
   final direct = _parseSingle(t);
   if (direct != null) return direct;
   final url = _firstUrl(t);
   return url == null ? null : _parseSingle(url);
+}
+
+/// 解析 `opencode pair` 的二维码载荷：
+/// `{"code":"<授权码>","urls":["<基址>","..."]}`
+///
+/// 基址在 `urls` 里（可多条，含 /auth/connect 路径时取 scheme+host+port）。
+/// 认不出的形状返回 null。
+OpenCodeTarget? _parsePairPayload(String t) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(t);
+  } catch (_) {
+    return null;
+  }
+  if (decoded is! Map) return null;
+  final code = decoded['code'];
+  if (code is! String || code.trim().isEmpty) return null;
+  final urls = <String>[];
+  final rawUrls = decoded['urls'];
+  if (rawUrls is List) {
+    for (final u in rawUrls) {
+      if (u is String && u.trim().isNotEmpty) urls.add(u.trim());
+    }
+  }
+  final single = decoded['url'];
+  if (single is String && single.trim().isNotEmpty) urls.add(single.trim());
+  if (urls.isEmpty) return null;
+  final base = _pickBaseUrl(urls);
+  if (base == null) return null;
+  return OpenCodeTarget(
+    baseUrl: base.baseUrl,
+    host: base.host,
+    port: base.port,
+    pairCode: code.trim(),
+  );
+}
+
+/// 多条基址里挑一条平板能连的：优先 https 隧道，其次非回环地址。
+OpenCodeTarget? _pickBaseUrl(List<String> urls) {
+  final parsed = urls.map(_parseSingle).whereType<OpenCodeTarget>().toList();
+  if (parsed.isEmpty) return null;
+  for (final p in parsed) {
+    if (p.baseUrl.startsWith('https://') && !isLoopbackHost(p.host)) {
+      return p;
+    }
+  }
+  for (final p in parsed) {
+    if (!isLoopbackHost(p.host)) return p;
+  }
+  return parsed.first;
+}
+
+/// 回环地址：扫到也连不上（那指的是 PC 自己，不是平板）
+bool isLoopbackHost(String host) {
+  final h = host.toLowerCase();
+  return h == 'localhost' ||
+      h == '::1' ||
+      h == '0.0.0.0' ||
+      h.startsWith('127.');
 }
 
 /// 正文里第一个可用 URL：优先 https——多行时本地 `http://127.0.0.1`

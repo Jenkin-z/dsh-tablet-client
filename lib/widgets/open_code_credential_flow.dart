@@ -72,5 +72,12 @@ Future<OpenCodeTarget?> scanOpenCodeTarget(
     onError('扫到的内容不是有效的 opencode 地址');
     return null;
   }
+  // 二维码里是 PC 自己的回环地址时，平板永远连不上——说清楚怎么改
+  if (isLoopbackHost(target.host)) {
+    onError('二维码里是本机地址（${target.host}），平板连不上。\n'
+        '请在 PC 上先执行 opencode service set hostname 0.0.0.0，\n'
+        '再用 opencode pair --url http://<PC内网IP>:<端口> 重新生成');
+    return null;
+  }
   return target;
 }

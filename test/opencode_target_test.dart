@@ -94,6 +94,47 @@ void main() {
     });
   });
 
+  group('配对二维码 JSON 载荷', () {
+    test('opencode pair 的二维码：code + urls → 抽出授权码与基址', () {
+      final t = parseOpenCodeTarget(
+          '{"code":"P_6LkN9iefWLo9Zrgwe1fw","urls":["https://d6e5944568f12242.stv5efx6dknj.opentunnel.xyz"]}');
+      expect(t, isNotNull);
+      expect(t!.pairCode, 'P_6LkN9iefWLo9Zrgwe1fw');
+      expect(t.baseUrl, 'https://d6e5944568f12242.stv5efx6dknj.opentunnel.xyz');
+      expect(t.port, 443);
+    });
+
+    test('urls 带端口 → 保留端口', () {
+      final t = parseOpenCodeTarget(
+          '{"code":"abc","urls":["http://192.168.31.197:45278"]}');
+      expect(t!.baseUrl, 'http://192.168.31.197:45278');
+      expect(t.host, '192.168.31.197');
+      expect(t.port, 45278);
+      expect(t.pairCode, 'abc');
+    });
+
+    test('urls 多条 → 优先 https 隧道地址', () {
+      final t = parseOpenCodeTarget(
+          '{"code":"abc","urls":["http://127.0.0.1:45278","https://tunnel.example.com"]}');
+      expect(t!.baseUrl, 'https://tunnel.example.com');
+      expect(t.pairCode, 'abc');
+    });
+
+    test('只有回环地址 → 仍解析出目标（由调用方提示换地址）', () {
+      final t = parseOpenCodeTarget(
+          '{"code":"abc","urls":["http://127.0.0.1:45278"]}');
+      expect(t!.baseUrl, 'http://127.0.0.1:45278');
+      expect(isLoopbackHost(t.host), isTrue);
+    });
+
+    test('缺 code / 缺 urls / 坏 JSON → null', () {
+      expect(parseOpenCodeTarget('{"urls":["https://a.example.com"]}'), isNull);
+      expect(parseOpenCodeTarget('{"code":"abc"}'), isNull);
+      expect(parseOpenCodeTarget('{"code":"abc","urls":[]}'), isNull);
+      expect(parseOpenCodeTarget('{坏 json'), isNull);
+    });
+  });
+
   group('认不出的输入', () {
     test('空 / 纯空格 → null', () {
       expect(parseOpenCodeTarget(''), isNull);

@@ -96,12 +96,12 @@ class ChatController extends ChangeNotifier {
     // 无效（曾经授权成功却永远连不上就是这个坑）。建好后刷新列表，
     // 有会话就自动打开最近一条；真没有再提示（此时侧栏新建也可用了）。
     var sessionId = settings.sessionId;
-    var backendReady = false;
+    var listed = false; // 本次 boot 是否已经拉过列表
     if (sessionId == null || sessionId.isEmpty) {
       await _backend?.dispose();
       _backend = _createBackend(srv);
-      backendReady = true;
       await _refreshSessions();
+      listed = true;
       final candidates = state.sessions.toList();
       final latest = candidates.isEmpty
           ? null
@@ -124,13 +124,18 @@ class ChatController extends ChangeNotifier {
 
     await _markCurrentSeen(srv.id, sessionId);
 
-    if (!backendReady) {
+    if (!listed) {
       await _backend?.dispose();
       _backend = _createBackend(srv);
     }
 
-    await _refreshSessions();
-    await _backend!.open(sessionId);
+    // 列表与「连接+历史」互不依赖，并行跑，切机器进对话页少等一段串行往返；
+    // listed 分支刚拉过列表，不重复拉（原版这里会拉两遍）
+    if (listed) {
+      await _backend!.open(sessionId);
+    } else {
+      await Future.wait([_refreshSessions(), _backend!.open(sessionId)]);
+    }
   }
 
   AgentBackend _createBackend(AgentServer srv) {
@@ -215,9 +220,9 @@ class ChatController extends ChangeNotifier {
 
   Future<void> createNewSession({String? cwd}) async {
     final backend = _backend;
-    // 不再要求 state.connected：opencode 的 createSession 是纯 REST，
-    // 「授权成功但还没会话」时也必须能从这里起步。
-    // DSH 未连上时由 backend 自己抛 StateError，下面统一显示。
+    // 不再要求 state.connected：两种后端的 API 客户端都是构造即就绪的
+    // 纯 REST 能力，「授权成功但还没会话」时必须能从这里起步；
+    // 失败（连不上 / 后端拒绝）由下面统一显示。
     if (backend == null) {
       state.setConnectionError('后端未就绪：请先在设置里添加并选择一台 PC。');
       return;

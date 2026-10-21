@@ -110,7 +110,8 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
       return;
     }
     if (target.pairCode != null) {
-      _link.text = raw.trim();
+      // 输入框只放规整后的授权链接（扫码原文可能带说明文字或多行）
+      _link.text = '${target.baseUrl}/auth/connect/${target.pairCode}';
       setState(() {
         _linkMode = true;
         _error = null;

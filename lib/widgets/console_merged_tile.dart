@@ -3,7 +3,7 @@ import '../services/server_manager.dart';
 import '../theme/ios_theme.dart';
 import '../utils/session_format.dart';
 import 'console_animations.dart';
-import 'console_devices.dart';
+import 'console_device_chip.dart';
 
 /// 合并会话列表条目：按服务器分组，只显示窗口期内活跃的会话
 ///

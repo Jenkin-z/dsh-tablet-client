@@ -28,9 +28,36 @@ class OpenCodeTarget {
 /// 3. 裸 host:port：`0.0.0.0:4096` / `myhost` / `[::1]:4096`（默认 4096）。
 ///
 /// 认不出的输入返回 null（调用方给错误提示，不猜）。
+///
+/// 扫码拿到的原文常带说明文字或多行（`opencode pair` 会把本地和隧道两条
+/// 链接一起打印），整串解析不成立时退化为「取正文里的 URL」。
 OpenCodeTarget? parseOpenCodeTarget(String raw) {
   final t = raw.trim();
   if (t.isEmpty) return null;
+  final direct = _parseSingle(t);
+  if (direct != null) return direct;
+  final url = _firstUrl(t);
+  return url == null ? null : _parseSingle(url);
+}
+
+/// 正文里第一个可用 URL：优先 https——多行时本地 `http://127.0.0.1`
+/// 排在前面，平板只有隧道地址连得上
+String? _firstUrl(String text) {
+  String? plain;
+  for (final m in RegExp(r'https?://\S+').allMatches(text)) {
+    // 正文里 URL 后可能跟标点
+    final url = m.group(0)!.replaceFirst(RegExp(r'[.,;:]+$'), '');
+    if (url.startsWith('https://')) return url;
+    plain ??= url;
+  }
+  return plain;
+}
+
+/// 整串当作单个 URL / host:port 解析。
+/// 含换行的「整串」其实是多段文本，直解只会解出乱码
+/// （曾把两行链接解成 `baseUrl=http://http`），拒绝后交给 [_firstUrl]。
+OpenCodeTarget? _parseSingle(String t) {
+  if (t.contains('\n') || t.contains('\r')) return null;
   // 输入分派：`word://` 是完整 URL；`word:数字` 是被误认成 scheme 的
   // host:port（如 myhost:4096/x）；其余裸输入统一补 http:// 交给 Uri
   final sm = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$').firstMatch(t);

@@ -19,15 +19,17 @@ void main() {
     parts = File('lib/widgets/device_row_parts.dart').readAsStringSync();
   });
 
-  group('地址只显示 IP，不带端口', () {
-    test('ConsoleDevices 传的是 host，不再拼 :port', () {
-      expect(devices.contains('hostLabel: groups[i].server.host'), isTrue);
-      // 直接看那一行里有没有出现 port，避免字符串转义的坑
-      final idx = devices.indexOf('hostLabel:');
-      expect(idx >= 0, isTrue);
-      final line = devices.substring(idx, devices.indexOf('\n', idx));
-      expect(line.contains('port'), isFalse,
-          reason: '地址行不该再拼端口：$line');
+  group('地址不带端口', () {
+    test('ConsoleDevices 从不拼 :port', () {
+      // 后来的改动把主标题从 host 换成了别名（opencode 隧道条目显示
+      // host 会像一串 id），但「不拼端口」这条一直成立。
+      final start = devices.indexOf('ConsoleDeviceCard(');
+      expect(start >= 0, isTrue);
+      final call = devices.substring(start);
+      expect(call.contains('server.port'), isFalse,
+          reason: '设备行不该再拼端口');
+      expect(devices.contains('groups[i].server.host'), isTrue,
+          reason: '别名缺失时要退回地址');
     });
   });
 
@@ -63,15 +65,15 @@ void main() {
       expect(devices.contains('DeviceMiniStat'), isTrue);
     });
 
-    test('设备行不再接收 name 参数（地址就是唯一标识）', () {
-      // ConsoleDeviceChip（会话里的设备徽章）仍需要 name，所以只检查
-      // ConsoleDeviceCard 这一段里没有 name 字段。
+    test('主标题是别名，缺别名时退回地址', () {
+      // ConsoleDeviceChip（会话里的设备徽章）已拆到独立文件，不再有
+      // name 字段冲突；设备行用的是 title = name 或 host。
       final start = devices.indexOf('class ConsoleDeviceCard');
-      final end = devices.indexOf('class ConsoleDeviceChip');
-      expect(start >= 0 && end > start, isTrue);
-      final card = devices.substring(start, end);
-      expect(card.contains('this.name'), isFalse);
-      expect(card.contains('String name'), isFalse);
+      expect(start >= 0, isTrue);
+      final card = devices.substring(start);
+      expect(card.contains('this.title'), isTrue);
+      expect(card.contains('title: groups[i].server.name.isEmpty'), isTrue,
+          reason: '防御旧数据：空名退回地址');
     });
 
     test('小件已拆到 device_row_parts.dart，避免文件超限', () {

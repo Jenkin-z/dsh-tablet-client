@@ -55,7 +55,17 @@ class AuthGrant {
 class NativeAuth {
   static const pairPort = 8899;
   static const _desktopPort = 19387;
-  static final _cookieRe = RegExp(r'(dsh-auth-[^=;\s]+)=([^;\s,]+)');
+
+  /// DSH 会话 cookie 名的正则片段（名字由 DSH 按 authority 哈希决定）
+  static const sessionCookieName = r'dsh-auth-[^=;\s]+';
+
+  /// 从 Set-Cookie 头里提取名字匹配 [namePattern] 的 cookie，返回 "name=value"；
+  /// 找不到返回 null。DSH 会话与 lan-pair 设备 cookie 共用这一个方法。
+  static String? cookieOf(String? setCookie, {required String namePattern}) {
+    if (setCookie == null || setCookie.isEmpty) return null;
+    final m = RegExp('($namePattern)=[^;,\\s]+').firstMatch(setCookie);
+    return m?.group(0);
+  }
 
   /// 统一入口：带 token 走旧链路，指向 8899 走配对页
   static Future<AuthGrant> authorize(PairTarget target) async {
@@ -99,8 +109,8 @@ class NativeAuth {
               : '配对页返回异常（HTTP ${resp.statusCode}）',
         );
       }
-      final pair = _cookieRe.firstMatch(setCookie);
-      if (pair == null) {
+      final cookie = cookieOf(setCookie, namePattern: sessionCookieName);
+      if (cookie == null) {
         throw const DshAuthException(
           status: 500,
           unpaired: true,
@@ -113,7 +123,7 @@ class NativeAuth {
       return AuthGrant(
         host: host,
         port: dshPort,
-        cookie: '${pair.group(1)}=${pair.group(2)}',
+        cookie: cookie,
       );
     } on DshAuthException {
       rethrow;
@@ -128,7 +138,8 @@ class NativeAuth {
     }
   }
 
-  static PairTarget? parse(String raw) {
+  /// [defaultPort]：输入里没写端口时采用（lan-pair 链路传 19387）
+  static PairTarget? parse(String raw, {int defaultPort = 3080}) {
     final t = raw.trim();
     if (t.isEmpty) return null;
     // 输入分派：`word://` 是完整 URL（scheme 白名单 http/https）；
@@ -155,7 +166,7 @@ class NativeAuth {
     }
     int port;
     try {
-      port = uri.hasPort ? uri.port : 3080;
+      port = uri.hasPort ? uri.port : defaultPort;
     } catch (_) {
       return null; // 端口不是数字 / 溢出
     }
@@ -193,15 +204,15 @@ class NativeAuth {
               'DSH 重启后令牌会变，请用最新一次启动输出的令牌。',
         );
       }
-      final pair = _cookieRe.firstMatch(setCookie);
-      if (pair == null) {
+      final cookie = cookieOf(setCookie, namePattern: sessionCookieName);
+      if (cookie == null) {
         throw const DshAuthException(
           status: 500,
           unpaired: true,
           message: '授权响应里没有找到 dsh-auth cookie',
         );
       }
-      return '${pair.group(1)}=${pair.group(2)}';
+      return cookie;
     } on DshAuthException {
       rethrow;
     } catch (e) {

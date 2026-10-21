@@ -192,12 +192,13 @@ class OpenCodeMapper {
     return buf.toString();
   }
 
-  /// Session.Info → 归一化会话 map（侧栏/控制台/SessionMonitor 共用）
-  ///
-  /// - `projections.values.title` 与 DSH 形状一致，sessionTitleOf 直接可用；
-  /// - `running` 来自 /api/session/active 的键集合；
-  /// - `blank`：建了没用过的空会话（created == updated）等价 DSH blank，
-  ///   只保留当前那一个（isUserFacingSession 规则不变）。
+  /// Session.Info → 归一化会话 map（侧栏/控制台/SessionMonitor 共用）：
+  /// `projections.values.title` 与 DSH 形状一致，sessionTitleOf 直接可用；
+  /// `cwd` = opencode v2 的 `location.directory`（顶层没有 `directory`，
+  /// 那是 v1 SDK 字段，读错会全落「未分组」）——与 DSH 会话 cwd 同义，
+  /// 侧栏按它分组、列表按它显示目录名；`running` 来自 /api/session/active；
+  /// `blank` = created==updated 的空会话（等价 DSH blank，见
+  /// isUserFacingSession 的保留规则）。
   static Map<String, dynamic> normalizeSession(
     Map<String, dynamic> info, {
     Set<String> activeIds = const {},
@@ -207,8 +208,10 @@ class OpenCodeMapper {
     final created = time is Map ? (time['created'] as num?)?.toInt() ?? 0 : 0;
     final updated = time is Map ? (time['updated'] as num?)?.toInt() ?? created : created;
     final title = info['title'] as String?;
+    final location = info['location'];
     return {
       'sessionId': id,
+      'cwd': location is Map ? location['directory'] as String? ?? '' : '',
       'projections': {
         'values': {if (title != null) 'title': title},
       },

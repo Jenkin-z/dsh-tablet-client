@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/dsh/dsh_auth.dart';
+import '../services/dsh/lan_pair_auth.dart';
 import '../services/opencode/opencode_target.dart';
 import '../theme/ios_theme.dart';
 
@@ -51,16 +52,19 @@ class _QrScanScreenState extends State<QrScanScreen> {
   }
 
   bool _isValid(String raw) => switch (widget.expect) {
-        QrScanExpect.dshLink => () {
-            final t = NativeAuth.parse(raw);
-            return t != null &&
-                (t.isPairServer ||
-                    (t.token != null && t.token!.isNotEmpty));
-          }(),
+        // lan-pair 配对二维码（http://IP:19387/p/<码>）直接放行
+        QrScanExpect.dshLink =>
+          LanPairAuth.parsePairLink(raw) != null || _isDshAuthLink(raw),
         // 授权链接（含 /auth/connect/<code>）或局域网地址二维码都收，
         // 由调用方按内容决定填哪个模式
         QrScanExpect.opencodeLink => parseOpenCodeTarget(raw) != null,
       };
+
+  static bool _isDshAuthLink(String raw) {
+    final t = NativeAuth.parse(raw);
+    return t != null &&
+        (t.isPairServer || (t.token != null && t.token!.isNotEmpty));
+  }
 
   String get _invalidHint => switch (widget.expect) {
         QrScanExpect.dshLink => '未识别到有效链接，请扫描 DSH 启动二维码',

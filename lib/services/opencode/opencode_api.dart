@@ -124,9 +124,12 @@ class OpenCodeApi {
   }
 
   Future<Map<String, dynamic>> createSession({
+    String? cwd,
     List<Map<String, dynamic>>? permissions,
   }) async {
     final data = await _post('/api/session', body: {
+      // location 决定会话落进哪个工作区；不传 = 服务端默认目录，分组就错了
+      if (cwd != null && cwd.isNotEmpty) 'location': {'directory': cwd},
       if (permissions != null) 'permissions': permissions,
     });
     final info = data['data'];

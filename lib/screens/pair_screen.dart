@@ -3,17 +3,22 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/agent_server.dart';
 import '../services/dsh/dsh_auth.dart';
+import '../services/dsh/lan_pair_auth.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
+import '../widgets/pair_info_card.dart';
 import 'qr_scan_screen.dart';
 
 /// 用 DSH 启动令牌换取 browser-session cookie（约 30 天，DSH 重启仍有效）
 ///
-/// 三条路：
+/// 五条路：
 /// 1. 自动：PC 运行 tool/publish_launch_token.ps1 把令牌发到 8099，这里一键拉取
 /// 2. 手动：粘贴 dsh web 启动输出的完整链接（http://IP:3080/?token=r_...）
 /// 3. 配对页：PC 双击「手机授权.bat」，从 IP:8899 领自签 cookie（桌面端 19387）
+/// 4. 扫码：启动令牌链接 / 8899 配对页 / lan-pair 的 /p/<码> 链接
+/// 5. 配对码：dsh-lan-pair 闸门（默认 19387），输 PC 上显示的 4 位配对码；
+///    已有设备 cookie 时打开本页自动静默续期，不用再要配对码
 class PairScreen extends StatefulWidget {
   final String? existingServerId;
   const PairScreen({super.key, this.existingServerId});
@@ -24,13 +29,69 @@ class PairScreen extends StatefulWidget {
 
 class _PairScreenState extends State<PairScreen> {
   final _paste = TextEditingController();
+  final _code = TextEditingController();
+  final _name = TextEditingController();
   bool _busy = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // 下一拍再跑，避开 initState 里直接 setState
+    Future.microtask(_initExistingServer);
+  }
+
+  @override
   void dispose() {
     _paste.dispose();
+    _code.dispose();
+    _name.dispose();
     super.dispose();
+  }
+
+  /// 重授权入口的进场动作：把现有别名预填进输入框；
+  /// 设备 cookie 还在就静默续期（只换 DSH 会话，成功直接返回），
+  /// 失败（设备被吊销等）落回常规界面输配对码
+  Future<void> _initExistingServer() async {
+    final id = widget.existingServerId;
+    if (id == null || !mounted) return;
+    final servers = context.read<SettingsService>().servers;
+    final matches = servers.where((s) => s.id == id);
+    if (matches.isEmpty) return;
+    final server = matches.first;
+    // 没有别名（name == host）就不填，留 hint；保存时留空按地址处理
+    if (server.name != server.host) _name.text = server.name;
+    final device = LanPairAuth.deviceCookieOf(server.cookie);
+    if (device == null) return; // 旧授权方式，没有设备 cookie 可续
+    setState(() => _busy = true);
+    try {
+      final g = await LanPairAuth.renew(
+        host: server.host,
+        port: server.port,
+        deviceCookie: device,
+      );
+      await _finish(g.host, g.port, g.cookie);
+    } catch (_) {
+      // 续期失败不拦人：回常规界面重新授权（多半是要重输配对码）
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// dsh-lan-pair 配对码授权（闸门默认 19387）
+  Future<void> _lanPairAuthorize() async {
+    if (_busy) return;
+    final target = LanPairAuth.parseAddress(_paste.text);
+    if (target == null) {
+      setState(() => _error =
+          '无法识别地址。填 PC 的局域网 IP，可带端口：如 192.168.10.217、192.168.10.217:19388');
+      return;
+    }
+    final code = _code.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = '请输入配对码（PC 管理页 /__gate/admin 或 DSH 面板上显示的数字）');
+      return;
+    }
+    await _run(() => LanPairAuth.authorizeWithCode(target, code));
   }
 
   Future<void> _autoAuthorize() async {
@@ -118,6 +179,11 @@ class _PairScreenState extends State<PairScreen> {
       MaterialPageRoute(builder: (_) => const QrScanScreen()),
     );
     if (raw == null || !mounted) return;
+    // lan-pair 配对二维码（http://IP:19387/p/<码>）：兑换即配对
+    if (LanPairAuth.parsePairLink(raw) != null) {
+      await _run(() => LanPairAuth.authorizeFromQr(raw));
+      return;
+    }
     final target = NativeAuth.parse(raw);
     if (target == null ||
         !(target.isPairServer ||
@@ -136,9 +202,13 @@ class _PairScreenState extends State<PairScreen> {
         (existingId == null || s.id == existingId));
     final id = existingId ?? (same.isEmpty ? const Uuid().v4() : same.first.id);
     final prev = settings.servers.where((s) => s.id == id);
+    // 别名：输入框填了就覆盖；留空沿用旧名（没有旧条目才退回地址），
+    // 这样重新配对一次不会把已有别名冲掉
+    final alias = _name.text.trim();
+    final keepName = prev.isEmpty ? host : prev.first.name;
     await settings.upsertServer(AgentServer(
       id: id,
-      name: prev.isEmpty ? host : prev.first.name,
+      name: alias.isEmpty ? keepName : alias,
       host: host,
       port: port,
       cookie: cookie,
@@ -150,6 +220,22 @@ class _PairScreenState extends State<PairScreen> {
     if (!mounted) return;
     Navigator.of(context).pop(true);
   }
+
+  /// 输入框公共样式（地址 / 配对码 / 名称共用，别复制三份）
+  InputDecoration _field(String hint, bool isDark) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: IosTheme.iosGray),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusInput),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: IosTheme.spaceL,
+          vertical: IosTheme.spaceM,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -190,23 +276,21 @@ class _PairScreenState extends State<PairScreen> {
                 TextField(
                   controller: _paste,
                   style: const TextStyle(fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: 'IP 或主机名:端口，如 192.168.10.171:3080',
-                    hintStyle: TextStyle(color: IosTheme.iosGray),
-                    filled: true,
-                    fillColor: isDark
-                        ? const Color(0xFF2C2C2E)
-                        : const Color(0xFFF2F2F7),
-                    border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(IosTheme.radiusInput),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: IosTheme.spaceL,
-                      vertical: IosTheme.spaceM,
-                    ),
-                  ),
+                  decoration:
+                      _field('IP 或主机名:端口，如 192.168.10.171:3080', isDark),
+                ),
+                const SizedBox(height: IosTheme.spaceL),
+                TextField(
+                  controller: _code,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(fontSize: 16, letterSpacing: 4),
+                  decoration: _field('配对码：PC 管理页 / 面板上显示的 4 位数字', isDark),
+                ),
+                const SizedBox(height: IosTheme.spaceL),
+                TextField(
+                  controller: _name,
+                  style: const TextStyle(fontSize: 16),
+                  decoration: _field('名称（可选）：首页显示的别名，留空用地址', isDark),
                 ),
                 const SizedBox(height: IosTheme.spaceL),
                 // 按钮区域
@@ -252,6 +336,15 @@ class _PairScreenState extends State<PairScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: IosTheme.spaceM),
+                SizedBox(
+                  width: double.infinity,
+                  child: IosButton(
+                    label: '配对码授权',
+                    icon: Icons.pin,
+                    onPressed: _busy ? null : _lanPairAuthorize,
+                  ),
+                ),
                 if (_busy) ...[
                   const SizedBox(height: IosTheme.spaceL),
                   const Center(
@@ -296,68 +389,9 @@ class _PairScreenState extends State<PairScreen> {
           ],
           // 说明区域
           const SizedBox(height: IosTheme.spaceXXL),
-          Container(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-              borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-              boxShadow: IosTheme.shadowS,
-            ),
-            padding: const EdgeInsets.all(IosTheme.spaceL),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '说明',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: IosTheme.spaceM),
-                _infoRow(
-                  icon: Icons.link,
-                  text: '启动令牌在 PC 上 dsh web 启动输出的网址里（?token=r_...），每个 DSH 进程一份，重启后会变',
-                ),
-                const SizedBox(height: IosTheme.spaceS),
-                _infoRow(
-                  icon: Icons.schedule,
-                  text: '换到的授权默认 30 天有效，DSH 重启不用重新授权',
-                ),
-                const SizedBox(height: IosTheme.spaceS),
-                _infoRow(
-                  icon: Icons.auto_fix_high,
-                  text: '自动方式：在 PC 上运行 tool\\publish_launch_token.ps1，令牌会发到 8099 下载服务，平板一键拉取',
-                ),
-                const SizedBox(height: IosTheme.spaceS),
-                _infoRow(
-                  icon: Icons.phonelink_lock,
-                  text: '配对页方式（桌面端 19387）：PC 双击「手机授权.bat」，这里填 PC 局域网 IP 后点「配对页授权」，授权完即可关掉 PC 上的窗口；换网段需重新授权',
-                ),
-              ],
-            ),
-          ),
+          const PairInfoCard(),
         ],
       ),
-    );
-  }
-
-  Widget _infoRow({required IconData icon, required String text}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: IosTheme.iosGray),
-        const SizedBox(width: IosTheme.spaceS),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              color: IosTheme.iosGray,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -16,15 +16,21 @@ import 'model_catalog.dart';
 /// - 运行状态 → dispatcher.onSessionStatus（内部转 ServerManager）
 class DshBackend implements AgentBackend {
   final BackendContext ctx;
-  DshApi? _api;
-  ModelService? _models;
+
+  /// API 客户端只取决于服务器配置，构造即就绪：会话列表不必等 open()，
+  /// 切机器时「拉列表」才能与「连 WS」并行
+  late final DshApi _api;
+  late final ModelService _models;
   MuxStream? _mux;
 
   /// mux 实际连着的会话（权威值）
   String? _muxSessionId;
   Timer? _readyTimeout;
 
-  DshBackend(this.ctx);
+  DshBackend(this.ctx) {
+    _api = DshApi(baseUrl: ctx.server.httpUrl, cookie: ctx.server.cookie);
+    _models = ModelService(_api);
+  }
 
   @override
   bool get connected => ctx.state.connected;
@@ -48,9 +54,6 @@ class DshBackend implements AgentBackend {
       ctx.state.setConnected(false);
       return;
     }
-
-    _api = DshApi(baseUrl: srv.httpUrl, cookie: srv.cookie);
-    _models = ModelService(_api!);
 
     _muxSessionId = sessionId;
     ctx.state.setConnecting(true);
@@ -138,36 +141,21 @@ class DshBackend implements AgentBackend {
   // ── 会话操作 ────────────────────────────────────
 
   @override
-  Future<List<Map<String, dynamic>>> listSessions() async {
-    final api = _api;
-    if (api == null) return [];
-    return api.listSessions();
-  }
+  Future<List<Map<String, dynamic>>> listSessions() => _api.listSessions();
 
   @override
-  Future<String> createSession({String? cwd}) async {
-    final api = _api;
-    if (api == null) throw StateError('未连接，无法新建会话');
-    return api.createSession(cwd: cwd);
-  }
+  Future<String> createSession({String? cwd}) => _api.createSession(cwd: cwd);
 
   @override
   Future<void> sendPrompt({
     required String sessionId,
     required String text,
     required String requestId,
-  }) async {
-    final api = _api;
-    if (api == null) throw StateError('未连接，消息已保留');
-    await api.sendPrompt(sessionId, text, requestId: requestId);
-  }
+  }) =>
+      _api.sendPrompt(sessionId, text, requestId: requestId);
 
   @override
-  Future<void> cancel(String sessionId) async {
-    final api = _api;
-    if (api == null) throw StateError('未连接，无法停止');
-    await api.cancelSession(sessionId);
-  }
+  Future<void> cancel(String sessionId) => _api.cancelSession(sessionId);
 
   // ── 审批 / 提问 ─────────────────────────────────
 

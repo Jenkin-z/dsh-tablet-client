@@ -36,7 +36,10 @@ class OpenCodeApi {
   /// Basic 密码（配对令牌或服务密码）
   final String? password;
 
-  const OpenCodeApi({required this.baseUrl, this.password});
+  /// 可注入的 HTTP 客户端（单测用；不传就走 http 顶层函数）
+  final http.Client? client;
+
+  const OpenCodeApi({required this.baseUrl, this.password, this.client});
 
   static const _user = 'opencode';
 
@@ -77,9 +80,11 @@ class OpenCodeApi {
     Map<String, String>? query,
     Duration? timeout,
   }) async {
-    final resp = await http
-        .get(_u(path, query), headers: _headers)
-        .timeout(timeout ?? httpTimeout);
+    final uri = _u(path, query);
+    final c = client;
+    final resp = c != null
+        ? await c.get(uri, headers: _headers).timeout(timeout ?? httpTimeout)
+        : await http.get(uri, headers: _headers).timeout(timeout ?? httpTimeout);
     return _unwrap(resp);
   }
 
@@ -88,13 +93,16 @@ class OpenCodeApi {
     Map<String, dynamic>? body,
     Duration? timeout,
   }) async {
-    final resp = await http
-        .post(
-          _u(path),
-          headers: _headers,
-          body: body == null ? null : jsonEncode(body),
-        )
-        .timeout(timeout ?? httpTimeout);
+    final uri = _u(path);
+    final encoded = body == null ? null : jsonEncode(body);
+    final c = client;
+    final resp = c != null
+        ? await c
+            .post(uri, headers: _headers, body: encoded)
+            .timeout(timeout ?? httpTimeout)
+        : await http
+            .post(uri, headers: _headers, body: encoded)
+            .timeout(timeout ?? httpTimeout);
     return _unwrap(resp);
   }
 
@@ -156,6 +164,20 @@ class OpenCodeApi {
     return items is List
         ? items.whereType<Map<String, dynamic>>().toList()
         : [];
+  }
+
+  /// **最近**一页消息（按时间升序返回）
+  ///
+  /// opencode 的 `order=asc` 是从**会话开头**往后取：会话一长（几百条），
+  /// 平板就永远显示开头那批旧消息——电脑端明明在聊今天的，平板停在昨天。
+  /// （摘要那条路早就踩过这个坑，见 session_source.dart。）
+  ///
+  /// 这里用 `order=desc` 取最新一页，再翻回升序交给上层渲染。
+  Future<List<Map<String, dynamic>>> recentMessages(String sessionId,
+      {int limit = 200, Duration? timeout}) async {
+    final desc = await messages(sessionId,
+        limit: limit, order: 'desc', timeout: timeout);
+    return desc.reversed.toList();
   }
 
   /// 发送提示；返回服务端分配的 inbox 消息 id（回执对账用）

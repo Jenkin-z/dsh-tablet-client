@@ -62,12 +62,20 @@ class OpenCodeMapper {
   const OpenCodeMapper._();
 
   /// SSE 事件分发。未列举的事件类型（usage/step/project/model…）安全忽略。
+  ///
+  /// [isCurrent] 传了就按会话过滤：opencode 的 `/api/event` 是**全局**流，
+  /// 别的会话（别的项目/目录）的文本、工具事件也会推过来，不挡掉就会
+  /// 直接串进当前对话——平板上会看到别的会话的半截回复。
   static void mapEvent({
     required String type,
     required Map<String, dynamic> data,
     required OpenCodeEventSink sink,
+    bool Function(String sessionId)? isCurrent,
   }) {
     final sid = data['sessionID'] as String? ?? '';
+    if (isCurrent != null && _isSessionScoped(type) && !isCurrent(sid)) {
+      return; // 不是当前会话的内容，丢掉
+    }
     switch (type) {
       // ── 文本流（打字机） ──
       case 'session.text.delta':
@@ -150,6 +158,17 @@ class OpenCodeMapper {
         break;
     }
   }
+
+  /// 会话内容类事件：带 sessionID，且内容属于某一个会话
+  ///
+  /// 这类事件必须按会话过滤；执行态（execution.*）与元数据
+  /// （created/renamed）另有归属判定，不在这里挡。
+  static bool _isSessionScoped(String type) =>
+      type.startsWith('session.text.') ||
+      type.startsWith('session.tool.') ||
+      type.startsWith('session.reasoning.') ||
+      type.startsWith('session.inbox.') ||
+      type.startsWith('form.');
 
   /// `GET /api/session/{id}/message` 的 data[] → ChatMessage（调用方传 asc 序）
   ///

@@ -57,6 +57,8 @@ class OpenCodeWiring {
     OpenCodeMapper.mapEvent(
       type: type,
       data: data,
+      // 全局事件流带着别的会话的内容，按会话过滤掉
+      isCurrent: isCurrent,
       sink: OpenCodeEventSink(
         onTextDelta: ctx.dispatcher.onTextDelta,
         onAssistantFinal: (text) => ctx.dispatcher.onAssistantFinal(text, false),

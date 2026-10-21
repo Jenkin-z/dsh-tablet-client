@@ -72,7 +72,8 @@ class OpenCodeBackend implements AgentBackend {
 
     // 历史/信息/对账三路互不依赖，全部并行发起（隧道上每个串行等待都是一轮往返）；
     // pollF 的错误监听创建时就挂上（晚于完成会算未处理异常），最后原样上抛。
-    final historyF = api.messages(sessionId);
+    // 历史要**最近**一页：asc 会从会话开头取，长会话下平板永远停在旧消息上。
+    final historyF = api.recentMessages(sessionId);
     final infoF = api.sessionInfo(sessionId);
     Object? pollErr; StackTrace? pollSt;
     final pollF = _reconciler

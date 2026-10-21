@@ -5,12 +5,6 @@ part of 'mux_stream.dart';
 /// 从 session/follow 的 journal event 中提取并分发到对应回调。
 /// 独立文件以便维护，与 MuxStream 共享私有作用域。
 
-/// 从 assistant/message 的 message 字段提取纯文本
-String _extractAssistantText(dynamic message) {
-  if (message is! Map<String, dynamic>) return '';
-  return extractContentBlocks(message['content']);
-}
-
 /// 从 turn/end 的 reason 字段提取错误信息（如有）
 String? _extractTurnError(dynamic data) {
   if (data is! Map<String, dynamic>) return null;
@@ -31,26 +25,33 @@ void _handleSessionEvent(
     Map<String, dynamic> data) {
   switch (type) {
     case 'user/message':
-      final text = extractContentBlocks(data['content'], lastOnly: true);
-      String? rpcId;
+      // 与 Web 端一致：只有 source.kind == user 才是真人输入；
+      // runtime-context / skill-catalog / time-context 等注入上下文不上屏。
+      if (!isHumanUserMessage(data) || !isAppendSurface(event)) break;
       final source = data['source'];
-      if (source is Map<String, dynamic>) {
-        rpcId = source['rpcId'] as String?;
-      }
+      final text = extractContentBlocks(data['content'], lastOnly: true);
+      final rpcId = source['rpcId'] as String?;
+      final messageId = data['id'] as String?;
       final seq = '${event['seq'] ?? ''}';
-      if (text.isNotEmpty) self.onUserMessage?.call(text, rpcId, seq);
+      if (text.isNotEmpty) {
+        self.onUserMessage?.call(text, rpcId, seq, messageId);
+      }
       break;
     case 'assistant/message':
-      // 定稿：整条替换，并结束打字机态（避免与 assistant-stream 双份渲染）
-      final text = _extractAssistantText(data['message']);
+      // 定稿：整条替换，并结束打字机态（避免与 assistant-stream 双份渲染）。
+      // 带 tool-call 的消息是过程步骤，dispatcher 会丢弃当前过程气泡。
+      if (!isAppendSurface(event)) break;
+      final message = data['message'];
+      final content = message is Map ? message['content'] : null;
+      final text = extractAssistantReply(message);
+      final hasToolCall = hasToolCallBlock(content);
       final interrupted = data['interrupted'] == true;
-      self.onAssistantMessage?.call(text);
-      self.onAssistantFinal?.call(text, interrupted);
+      self.onAssistantFinal
+          ?.call(text, interrupted, hasToolCall: hasToolCall);
       break;
     case 'assistant/attempt':
-      // 未定稿的尝试记录：只在没有 assistant/message 时兜底
-      final text = _extractAssistantText(data['message']);
-      if (text.isNotEmpty) self.onAssistantMessage?.call(text);
+      // 尝试记录只有 stream，没有可展示的 message；最终回答由
+      // assistant/message 落盘，这里不再兜底，避免过程文本重复上屏。
       break;
     case 'turn/start':
       // 权威的「开始工作」信号：turn/end 置空闲后，新一轮由它重新武装，

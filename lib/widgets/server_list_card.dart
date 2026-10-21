@@ -6,6 +6,7 @@ import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import 'add_opencode_dialog.dart';
+import 'rename_server_dialog.dart';
 
 /// 设置页：后端列表（DSH PC + opencode）+ 添加/授权入口 —— iOS 风格
 ///
@@ -74,6 +75,20 @@ class ServerListCard extends StatelessWidget {
     );
   }
 
+  /// 改名只更新设置里的展示名，连接配置与当前会话保持不变。
+  Future<void> _rename(
+    BuildContext context,
+    SettingsService settings,
+    AgentServer server,
+  ) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => RenameServerDialog(initialName: server.name),
+    );
+    if (name == null || !context.mounted) return;
+    await settings.renameServer(server.id, name);
+  }
+
   Widget _tile(
     BuildContext context,
     SettingsService settings,
@@ -140,6 +155,15 @@ class ServerListCard extends StatelessWidget {
                 }
               },
             ),
+          IconButton(
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: IosTheme.iosBlue,
+              size: 20,
+            ),
+            tooltip: '重命名',
+            onPressed: () => _rename(context, settings, s),
+          ),
           IconButton(
             icon: Icon(
               Icons.delete_outline,

@@ -96,6 +96,13 @@ mixin SettingsServers on _SettingsCore {
     notifyListeners();
   }
 
+  /// 修改设备显示名（不影响连接指纹，不会触发重连）
+  Future<void> renameServer(String id, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    await patchServer(id, (s) => s.copyWith(name: trimmed));
+  }
+
   Future<void> setServer(String host, int port) async {
     final a = active;
     if (a == null) {

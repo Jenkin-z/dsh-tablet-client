@@ -10,6 +10,10 @@ class ChatMessage {
   /// 收到确认后，本地这条会被撤掉或转为确认态。
   final bool pending;
 
+  /// 后端 durable 用户消息的 rpcId（仅用户消息）。
+  /// 历史装载后仍能按它与本地乐观气泡对账，避免重连时出现两条。
+  final String? rpcId;
+
   ChatMessage({
     required this.id,
     required this.role,
@@ -17,6 +21,7 @@ class ChatMessage {
     DateTime? timestamp,
     this.isStreaming = false,
     this.pending = false,
+    this.rpcId,
   }) : timestamp = timestamp ?? DateTime.now();
 
   ChatMessage copyWith({
@@ -24,6 +29,7 @@ class ChatMessage {
     String? content,
     bool? isStreaming,
     bool? pending,
+    String? rpcId,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -32,6 +38,7 @@ class ChatMessage {
       timestamp: timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
       pending: pending ?? this.pending,
+      rpcId: rpcId ?? this.rpcId,
     );
   }
 }

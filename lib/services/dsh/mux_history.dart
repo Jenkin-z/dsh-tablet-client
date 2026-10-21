@@ -3,10 +3,35 @@ library;
 
 import 'dart:convert';
 
+part 'mux_history_messages.dart';
+
 /// 从 assistant/message 的 message 字段提取纯文本
 String extractAssistantText(dynamic message) {
   if (message is! Map<String, dynamic>) return '';
   return extractContentBlocks(message['content']);
+}
+
+/// content 是否包含 tool-call 块
+///
+/// 带 tool-call 的 assistant 消息是过程步骤（Web 端折叠在过程区），
+/// 不是最终回复；历史与实时路径都必须用同一规则判断。
+bool hasToolCallBlock(dynamic content) {
+  if (content is! List) return false;
+  for (final part in content) {
+    if (part is Map && part['type'] == 'tool-call') return true;
+  }
+  return false;
+}
+
+/// 从 assistant/message 提取“最终回答”文本
+///
+/// - reasoning / tool 块不会被 [extractContentBlocks] 拼入；
+/// - 只要 content 里出现 tool-call，整条消息都按过程处理，返回空串。
+String extractAssistantReply(dynamic message) {
+  if (message is! Map<String, dynamic>) return '';
+  final content = message['content'];
+  if (hasToolCallBlock(content)) return '';
+  return extractContentBlocks(content);
 }
 
 String extractContentBlocks(dynamic content, {bool lastOnly = false}) {
@@ -158,32 +183,6 @@ List<ToolViewRecord> parseHistoryViews(List<dynamic> entries) {
       data: event['data'],
     );
     if (rec != null) out.add(rec);
-  }
-  return out;
-}
-
-/// entry: { event: { type, seq, time, data }, view? }
-List<({String role, String text, String id})> parseHistory(
-    List<dynamic> entries) {
-  final out = <({String role, String text, String id})>[];
-  for (final entry in entries) {
-    if (entry is! Map<String, dynamic>) continue;
-    final event = entry['event'];
-    if (event is! Map<String, dynamic>) continue;
-    final type = event['type'] as String? ?? '';
-    final seq = '${event['seq'] ?? ''}';
-    final data = event['data'];
-    if (data is! Map<String, dynamic>) continue;
-
-    if (type == 'user/message') {
-      final text = extractContentBlocks(data['content'], lastOnly: true);
-      if (text.isNotEmpty) out.add((role: 'user', text: text, id: 'u$seq'));
-    } else if (type == 'assistant/message') {
-      final text = extractAssistantText(data['message']);
-      if (text.isNotEmpty) {
-        out.add((role: 'assistant', text: text, id: 'a$seq'));
-      }
-    }
   }
   return out;
 }

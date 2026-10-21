@@ -10,6 +10,11 @@ part of 'event_dispatcher.dart';
 
 mixin EventDispatcherTurnSession on _EventDispatcherCore {
   void onToolCall(String toolName, [String? arguments]) {
+    // 工具调用前的 assistant 文本是过程内容（Web 端折叠进过程区），
+    // 不能留在消息流里和最终回答并排显示。
+    _clearDelta();
+    if (!_turnClosed) _dropCurrentAssistant();
+    state.setAssistantStreaming(false);
     // 参数是未解析的 JSON 字符串，抽一个能看懂的摘要放进状态栏
     state.setActiveTool(_toolSummary(toolName, arguments));
     state.setAgentRunning(true);
@@ -64,11 +69,15 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
   /// 把 running 从 false 拉回 true —— 这里用 journal 的 `turn/start` 兜底。
   void onTurnStart() {
     _turnClosed = false;
+    _clearDelta();
+    // 新 turn 的 assistant 气泡必须重新建；上一轮最终回答保留在历史里。
+    _currentAssistantId = null;
     state.setAgentRunning(true);
   }
 
   void onTurnEnd() {
     _turnClosed = true;
+    _clearDelta();
     // 只清当前会话的待办：别的会话的审批/提问不该被本轮结束牵连
     final sid = state.sessionId;
     for (final a in state.approvals.where((a) => a.sessionId == sid).toList()) {
@@ -86,7 +95,10 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     state.setActiveTool(null);
     state.setLastTurnEnd(DateTime.now());
 
-    final idx = _messages.indexWhere((m) => m.isStreaming);
+    var idx = _currentAssistantId == null
+        ? -1
+        : _messages.indexWhere((m) => m.id == _currentAssistantId);
+    if (idx < 0) idx = _messages.indexWhere((m) => m.isStreaming);
     if (idx >= 0) {
       _messages[idx] = _messages[idx].copyWith(isStreaming: false);
     }

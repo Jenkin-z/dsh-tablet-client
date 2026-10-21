@@ -47,6 +47,9 @@ extension on MuxStream {
       return;
     }
     _lastChunkIndex = (attempt['nextIndex'] as num?)?.toInt();
+    // 重连时可能还停在上一轮的 _turnClosed；先按新尝试重置，
+    // 否则基线文本会被当成迟到 chunk 丢掉。
+    onAssistantStreamStart?.call();
     final stream = attempt['stream'];
     if (stream is List) {
       final text = StringBuffer();
@@ -109,6 +112,9 @@ extension on MuxStream {
       case 'start':
         _assistantRevision = (frameDyn['revision'] as num?)?.toInt();
         _lastChunkIndex = null;
+        // 新一代尝试开始：上一代若还在打字机态，整条丢弃，避免重试后
+        // 旧文本和新文本并排成两条气泡。
+        onAssistantStreamStart?.call();
         break;
 
       case 'chunk':

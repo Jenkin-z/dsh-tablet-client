@@ -40,6 +40,30 @@ abstract class _EventDispatcherCore {
   Timer? _deltaFlushTimer;
   final List<ChatMessage> _messages = [];
   final Set<String> _seenUserSeq = {};
+  final Set<String> _seenUserIds = {};
+
+  /// 当前 turn 正在展示的 assistant 气泡 id。
+  ///
+  /// 一个 turn 内可能有多个 step（过程文本 + 最终回答），Web 端只把最终
+  /// 回答留在消息流里；这里用同一个 id 就地替换，避免每个 step 新增气泡。
+  String? _currentAssistantId;
+
+  /// 丢弃当前 assistant 气泡（过程步骤 / 重试 / 工具调用前的文本）。
+  void _dropCurrentAssistant() {
+    final id = _currentAssistantId;
+    if (id == null) return;
+    _currentAssistantId = null;
+    final before = _messages.length;
+    _messages.removeWhere((m) => m.id == id);
+    if (_messages.length != before) _bumpMessages();
+  }
+
+  /// 丢弃尚未 flush 的增量：工具调用/换轮后，缓冲里的过程文本不能再上屏。
+  void _clearDelta() {
+    _deltaFlushTimer?.cancel();
+    _deltaFlushTimer = null;
+    _deltaBuffer.clear();
+  }
 
   /// 消息列表版本号。
   ///
@@ -122,13 +146,13 @@ class EventDispatcher extends _EventDispatcherCore
   // ── 重置 ────────────────────────────────────────
 
   void reset() {
-    _deltaBuffer.clear();
-    _deltaFlushTimer?.cancel();
-    _deltaFlushTimer = null;
+    _clearDelta();
     _turnClosed = false;
     _messages.clear();
     _seenUserSeq.clear();
+    _seenUserIds.clear();
     _pendingEcho.clear();
+    _currentAssistantId = null;
     _bumpMessages();
   }
 

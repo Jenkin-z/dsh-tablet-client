@@ -91,9 +91,11 @@ class DshBackend implements AgentBackend {
         dispatcher.applySnapshotProjections(projections);
       }
       ..onTextDelta = dispatcher.onTextDelta
-      ..onAssistantMessage = dispatcher.onAssistantMessage
+      ..onAssistantStreamStart = dispatcher.onAssistantStreamStart
       ..onAssistantFinal = dispatcher.onAssistantFinal
-      ..onUserMessage = dispatcher.onUserMessage
+      ..onUserMessage = (text, rpcId, seq, messageId) {
+        dispatcher.onUserMessage(text, rpcId, seq, messageId);
+      }
       ..onApproval = dispatcher.onApproval
       ..onApprovalResolved = dispatcher.onApprovalResolved
       ..onQuestion = dispatcher.onQuestion

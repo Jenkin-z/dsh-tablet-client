@@ -66,11 +66,18 @@ class MuxStream {
   /// 开窗快照的会话投影（标题、模型等实时元数据）
   void Function(Map<String, dynamic> projections)? onProjections;
   void Function(String delta)? onTextDelta;
-  void Function(String text)? onAssistantMessage;
+
+  /// 一次 assistant 尝试开始（重连基线或 assistant-stream start）：
+  /// dispatcher 用它清掉上一代过程气泡、重置定稿状态。
+  void Function()? onAssistantStreamStart;
 
   /// `assistant/message` 定稿收尾（第二参为「是否被停止」）
-  void Function(String text, bool interrupted)? onAssistantFinal;
-  void Function(String text, String? rpcId, String seq)? onUserMessage;
+  ///
+  /// [hasToolCall] 为真表示这条消息是过程步骤，dispatcher 会丢弃当前气泡。
+  void Function(String text, bool interrupted, {bool hasToolCall})?
+      onAssistantFinal;
+  void Function(String text, String? rpcId, String seq, String? messageId)?
+      onUserMessage;
   void Function({
     required String rpcId,
     required String sessionId,

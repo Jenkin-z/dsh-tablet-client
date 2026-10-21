@@ -286,5 +286,177 @@ void main() {
       ]);
       expect(out, isEmpty);
     });
+
+    test('注入上下文、system 消息与 replacement surface 不上屏', () {
+      final out = parseHistory([
+        {
+          'type': 'event',
+          'event': {
+            'type': 'user/message',
+            'seq': 1,
+            'data': {
+              'id': 'ctx-1',
+              'content': [
+                {'type': 'text', 'text': 'runtime context'}
+              ],
+              'source': {'kind': 'runtime-context'},
+            },
+          },
+        },
+        {
+          'type': 'event',
+          'event': {
+            'type': 'system/message',
+            'seq': 2,
+            'data': {
+              'content': [
+                {'type': 'text', 'text': 'system prompt'}
+              ],
+            },
+          },
+        },
+        {
+          'type': 'event',
+          'event': {
+            'type': 'user/message',
+            'seq': 3,
+            'surfaceOp': 'replacement',
+            'data': {
+              'id': 'ctx-2',
+              'content': [
+                {'type': 'text', 'text': 'model-facing replacement'}
+              ],
+              'source': {'kind': 'user'},
+            },
+          },
+        },
+        {
+          'type': 'event',
+          'event': {
+            'type': 'user/message',
+            'seq': 4,
+            'data': {
+              'id': 'message-1',
+              'content': [
+                {'type': 'text', 'text': '真人输入'}
+              ],
+              'source': {'kind': 'user'},
+            },
+          },
+        },
+      ]);
+      expect(out, hasLength(1));
+      expect(out.single.role, 'user');
+      expect(out.single.text, '真人输入');
+    });
+
+    test('每个 turn 只保留最后 step 的最终回答，过程文本丢弃', () {
+      final out = parseHistory([
+        _userEvent(seq: 1, turn: 1, text: '第一问'),
+        _assistantEvent(
+          seq: 2,
+          turn: 1,
+          step: 1,
+          blocks: [
+            {'type': 'text', 'text': '过程文本'},
+            {'type': 'tool-call', 'name': 'read'},
+          ],
+        ),
+        _assistantEvent(
+          seq: 3,
+          turn: 1,
+          step: 2,
+          blocks: [
+            {'type': 'reasoning', 'text': '思考内容'},
+            {'type': 'text', 'text': '最终回答一'},
+          ],
+        ),
+        _userEvent(seq: 4, turn: 2, text: '第二问'),
+        _assistantEvent(
+          seq: 5,
+          turn: 2,
+          step: 1,
+          blocks: [
+            {'type': 'text', 'text': '只有工具调用'},
+            {'type': 'tool-call', 'name': 'edit'},
+          ],
+        ),
+      ]);
+
+      expect(out.map((m) => m.text).toList(), ['第一问', '最终回答一', '第二问']);
+      expect(out[1].role, 'assistant');
+      expect(out[1].text.contains('过程文本'), isFalse);
+      expect(out[1].text.contains('思考内容'), isFalse);
+    });
+
+    test('保留用户 rpcId，并按 durable message id 去重', () {
+      final out = parseHistory([
+        _userEvent(
+          seq: 1,
+          turn: 1,
+          text: '同一条消息',
+          id: 'message-1',
+          rpcId: 'rpc-1',
+        ),
+        _userEvent(
+          seq: 2,
+          turn: 1,
+          text: '同一条消息',
+          id: 'message-1',
+          rpcId: 'rpc-1',
+        ),
+      ]);
+      expect(out, hasLength(1));
+      expect(out.single.rpcId, 'rpc-1');
+    });
   });
+}
+
+Map<String, dynamic> _userEvent({
+  required int seq,
+  required int turn,
+  required String text,
+  String? id,
+  String? rpcId,
+}) {
+  return {
+    'type': 'event',
+    'event': {
+      'type': 'user/message',
+      'seq': seq,
+      'data': {
+        'id': id ?? 'message-$seq',
+        'content': [
+          {'type': 'text', 'text': text}
+        ],
+        'source': {
+          'kind': 'user',
+          if (rpcId != null) 'rpcId': rpcId,
+        },
+      },
+    },
+  };
+}
+
+Map<String, dynamic> _assistantEvent({
+  required int seq,
+  required int turn,
+  required int step,
+  required List<Map<String, dynamic>> blocks,
+}) {
+  return {
+    'type': 'event',
+    'event': {
+      'type': 'assistant/message',
+      'seq': seq,
+      'data': {
+        'turn': turn,
+        'step': step,
+        'message': {
+          'role': 'assistant',
+          'content': blocks,
+        },
+      },
+    },
+  };
 }

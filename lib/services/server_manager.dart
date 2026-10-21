@@ -38,7 +38,14 @@ class ServerManager extends ChangeNotifier {
     settings.addListener(_onSettingsChanged);
   }
 
-  void _onSettingsChanged() => notifyListeners();
+  void _onSettingsChanged() {
+    // 改名等元数据变化要立刻同步给已有 monitor，否则下一次完成通知
+    // 还会用旧设备名（_syncMonitors 只在轮询时跑）。
+    for (final s in settings.servers) {
+      _monitors[s.id]?.updateServer(s);
+    }
+    notifyListeners();
+  }
 
   void start() {
     if (_started) return;

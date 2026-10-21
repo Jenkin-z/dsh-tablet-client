@@ -29,10 +29,9 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       toolName: toolName,
       reason: reason,
     ));
-    _touchActivity();
     SoundService.approval();
+    // 不传 id：多个审批同时到达时，各自保留一条通知，不能互相覆盖。
     NotificationService.show(
-      id: 30000,
       title: '需要确认',
       body: '工具 $toolName 需要确认',
     );
@@ -53,12 +52,10 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       sessionId: sessionId,
       questions: questions,
     ));
-    _touchActivity();
     SoundService.question();
     // 切到后台时提问也要弹通知，否则最小化时看不到提问
     if (!AppVisibility.foreground) {
       NotificationService.show(
-        id: 30001,
         title: 'DSH 向你提问',
         body: questions.map((q) => q['question']).whereType<String>().join(' '),
       );
@@ -83,11 +80,9 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
   /// 表单待回答（opencode 轮询对账发现 pending form 时调用）
   void onForm(PendingForm form) {
     state.addForm(form);
-    _touchActivity();
     SoundService.question();
     if (!AppVisibility.foreground) {
       NotificationService.show(
-        id: 30002,
         title: 'opencode 表单待填写',
         body: form.title,
       );

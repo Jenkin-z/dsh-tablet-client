@@ -43,7 +43,7 @@ void main() {
     });
   });
 
-  group('控制台：点设备卡不得按 running 分叉', () {
+  group('控制台：点设备条不得按 running 分叉', () {
     late String src;
 
     setUpAll(() {
@@ -52,22 +52,25 @@ void main() {
       src = readSourceWithParts('lib/screens/console_screen.dart');
     });
 
-    test('设备卡点击回调里不出现 running.isNotEmpty 分支', () {
+    /// 点击逻辑已提取到 _onTapDevice，避免 build 里塞业务分支。
+    String deviceTapBody() {
+      final idx = src.indexOf('void _onTapDevice(');
+      expect(idx >= 0, isTrue, reason: '找不到设备条点击处理');
+      return src.substring(idx, (idx + 700).clamp(0, src.length));
+    }
+
+    test('设备条点击处理里不出现 running.isNotEmpty 分支', () {
       // 反例（已删除）：
       //   if (group.running.isNotEmpty) { onOpenSession(...) } else { onSwitchServer(...) }
       // 同一个手势两种结果，用户感受就是「有时进对话有时不进」
-      final idx = src.indexOf('onTapDevice:');
-      expect(idx >= 0, isTrue, reason: '找不到设备卡点击回调');
-      final window = src.substring(idx, (idx + 700).clamp(0, src.length));
+      final window = deviceTapBody();
       expect(window.contains('running.isNotEmpty'), isFalse,
-          reason: '设备卡点击不能依赖 running 状态分叉');
-      expect(window.contains('onSwitchServer'), isTrue,
-          reason: '点设备卡必须切机器');
+          reason: '设备条点击不能依赖 running 状态分叉');
+      expect(window.contains('onSwitchServer'), isTrue, reason: '点设备条必须切机器');
     });
 
     test('未配对机器仍然引导去配对页', () {
-      final idx = src.indexOf('onTapDevice:');
-      final window = src.substring(idx, (idx + 700).clamp(0, src.length));
+      final window = deviceTapBody();
       expect(window.contains('unpaired'), isTrue);
       expect(window.contains('PairScreen'), isTrue);
     });
@@ -86,8 +89,7 @@ void main() {
       final idx = shell.indexOf('Future<void> _openSession');
       expect(idx >= 0, isTrue);
       final window = shell.substring(idx, (idx + 900).clamp(0, shell.length));
-      expect(window.contains('machineChanged'), isTrue,
-          reason: '必须显式区分机器是否变了');
+      expect(window.contains('machineChanged'), isTrue, reason: '必须显式区分机器是否变了');
       // 只有「同机器」那条分支才允许发路由
       expect(window.contains('if (!machineChanged)'), isTrue,
           reason: '跨机器靠 ChatScreen key 重建，不该再发路由请求');

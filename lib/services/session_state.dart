@@ -180,6 +180,8 @@ class SessionState extends _SessionStateCore
     _sessionsError = null;
     _sessionId = null;
     _sessionTitle = 'DSH Agent';
+    // 换后端时必须清掉：否则新机器会短暂显示上一台的模型名
+    _modelSelection = null;
     _agentRunning = false;
     _assistantStreaming = false;
     _lastTurnEnd = null;

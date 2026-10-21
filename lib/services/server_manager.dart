@@ -29,6 +29,8 @@ class ServerManager extends ChangeNotifier {
   final Map<String, SessionMonitor> _monitors = {};
   Timer? _timer;
   bool _started = false;
+  bool _refreshing = false;
+  bool _disposed = false;
   DateTime? lastRefresh;
   List<ServerGroup>? _cachedGroups;
 
@@ -36,10 +38,7 @@ class ServerManager extends ChangeNotifier {
     settings.addListener(_onSettingsChanged);
   }
 
-  void _onSettingsChanged() {
-    _cachedGroups = null;
-    super.notifyListeners();
-  }
+  void _onSettingsChanged() => notifyListeners();
 
   void start() {
     if (_started) return;
@@ -56,6 +55,7 @@ class ServerManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     settings.removeListener(_onSettingsChanged);
     _timer?.cancel();
     super.dispose();
@@ -89,18 +89,29 @@ class ServerManager extends ChangeNotifier {
 
   @override
   void notifyListeners() {
+    if (_disposed) return;
     _cachedGroups = null;
     super.notifyListeners();
   }
 
   Future<void> refreshAll() async {
-    if (!_started) return;
-    _syncMonitors();
-    await Future.wait(_monitors.values.map((m) => m.refresh()));
-    lastRefresh = DateTime.now();
-    // 设备卡的结论同样要体现在顶部的状态点上
-    _reportActiveHealth();
-    notifyListeners();
+    if (!_started || _disposed || _refreshing) return;
+    _refreshing = true;
+    try {
+      _syncMonitors();
+      await Future.wait(_monitors.values.map((m) => m.refresh()));
+      // 刷新期间可能已经 stop/dispose，别在销毁后再通知。
+      if (!_started || _disposed) return;
+      lastRefresh = DateTime.now();
+      // 设备卡的结论同样要体现在顶部的状态点上
+      _reportActiveHealth();
+      notifyListeners();
+    } catch (_) {
+      // 各 monitor 已把失败写进自己的 online/error；这里只保证
+      // 定时器不会因为某一次意外异常而中断。
+    } finally {
+      _refreshing = false;
+    }
   }
 
   void _syncMonitors() {
@@ -110,10 +121,8 @@ class ServerManager extends ChangeNotifier {
       final existing = _monitors[s.id];
       if (existing == null) {
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
-      } else if (existing.server.kind != s.kind ||
-          existing.server.httpUrl != s.httpUrl ||
-          existing.server.cookie != s.cookie ||
-          existing.server.token != s.token) {
+      } else if (existing.server.connectionRevision !=
+          s.connectionRevision) {
         _monitors[s.id] = SessionMonitor(settings: settings, server: s);
       } else {
         existing.updateServer(s);

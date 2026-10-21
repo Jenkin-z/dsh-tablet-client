@@ -5,7 +5,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
-  static int _autoId = 0;
+  static int _nextNotificationId = 0;
+
+  /// 进程内唯一的通知 id。
+  ///
+  /// 审批、提问、表单、会话完成都可能同时到达；如果各自用固定 id，
+  /// 后来的通知会把前一条直接覆盖掉。统一从这里分配，互不干扰。
+  static int nextId() => _nextNotificationId++;
 
   /// 事件通知通道 ID（v2：通道声音一旦创建无法修改，换 ID 强制重建）
   static const _channelId = 'dshm_events_v2';
@@ -54,7 +60,7 @@ class NotificationService {
     required String body,
   }) async {
     if (!_initialized) return;
-    final nid = id ?? _autoId++;
+    final nid = id ?? nextId();
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,

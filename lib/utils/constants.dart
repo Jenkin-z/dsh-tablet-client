@@ -6,12 +6,22 @@ const Duration httpTimeout = Duration(seconds: 30);
 const Duration cancelTimeout = Duration(seconds: 5);
 const Duration eventResultTimeout = Duration(seconds: 15);
 const Duration pollInterval = Duration(seconds: 8);
+
+/// 单次轮询请求上限。
+///
+/// 轮询本身 8 秒一次；如果请求能挂 30 秒，定时器就会叠出多次并发。
+/// 单飞会挡住重叠，这个超时负责让一次卡住的轮询尽快收敛。
+const Duration pollRequestTimeout = Duration(seconds: 10);
 const Duration updateCheckTimeout = Duration(seconds: 8);
+
+/// 完成通知摘要拉取上限：超过就用兜底文案，避免通知迟到。
+const Duration completionSummaryTimeout = Duration(seconds: 3);
 
 // ── 重连（借鉴 DSH 官方 RemoteStreamMuxClient）────
 const int reconnectFastLimit = 5;
 const int reconnectFastDelaySec = 3;
 const int reconnectSlowDelaySec = 30;
+
 /// 物理连接重连最大延迟（指数退避上限）
 const int reconnectMaxDelaySec = 60;
 

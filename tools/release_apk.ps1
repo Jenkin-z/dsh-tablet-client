@@ -1,6 +1,6 @@
 # 一键发布平板包：打 release → 拷 dsh-agent.apk → 写 version.json
-# 用法：.\tool\release_apk.ps1 -Changelog "更新说明"
-# 必须用 pwsh 7 运行（powershell 5.1 会把中文解码坏）：pwsh -File .\tool\release_apk.ps1
+# 用法：.\tools\release_apk.ps1 -Changelog "更新说明"
+# 必须用 pwsh 7 运行（powershell 5.1 会把中文解码坏）：pwsh -File .\tools\release_apk.ps1
 # 注意：先在 pubspec.yaml 里把 version 升上去（versionCode 必须递增，App 才会认出新版）
 param(
   [string]$Changelog = "常规更新",
@@ -9,7 +9,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$flutter = 'E:\software\flutter_windows_3.47.2-stable\bin\flutter.bat'
+# 优先用 PATH 里的 flutter；没有则回退到本机默认安装位置
+$flutter = (Get-Command flutter -ErrorAction SilentlyContinue)?.Source
+if (-not $flutter) { $flutter = 'D:\software\flutter_windows_3.44.8\bin\flutter.bat' }
+if (-not (Test-Path $flutter)) {
+  throw "找不到 flutter：请把 Flutter 加入 PATH，或修改脚本里的兜底路径（当前：$flutter）"
+}
 $outDir = Join-Path $root 'build\app\outputs\flutter-apk'
 $apk = Join-Path $outDir 'app-release.apk'
 $served = Join-Path $outDir 'dsh-agent.apk'

@@ -8,7 +8,8 @@ part of 'event_dispatcher.dart';
 mixin EventDispatcherStreaming on _EventDispatcherCore {
   /// 文本增量到达：缓冲 120ms 后统一 flush，减少 notify 频率。
   void onTextDelta(String delta) {
-    _touchActivity();
+    // 不要在这里碰全局状态：chunk 是最高频的事件，任何 notify 都会让
+    // 整个页面树跟着重绘。增量只进缓冲区，由消息版本号驱动局部刷新。
     _deltaBuffer.write(delta);
     _deltaFlushTimer ??= Timer(const Duration(milliseconds: 120), _flushDelta);
   }
@@ -39,7 +40,7 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
         isStreaming: true,
       ));
     }
-    state.notify();
+    _bumpMessages();
     onScrollToBottom?.call();
   }
 
@@ -62,7 +63,6 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
   }
 
   void onAssistantMessage(String text) {
-    _touchActivity();
     _deltaFlushTimer?.cancel();
     _deltaFlushTimer = null;
     _deltaBuffer.clear();
@@ -90,7 +90,7 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
         ));
       }
     }
-    state.notify();
+    _bumpMessages();
     onScrollToBottom?.call();
   }
 }

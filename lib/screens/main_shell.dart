@@ -113,7 +113,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             onOpenSession: _openSession,
             onSwitchServer: _switchServer,
           ),
-          ChatScreen(key: ValueKey(settings.activeServerId)),
+          // key 同时跟连接配置指纹走：同一台 PC 重新配对（id 不变、
+          // cookie/token 变了）也要重建 ChatScreen，否则会继续用旧后端。
+          ChatScreen(
+            key: ValueKey(
+              '${settings.activeServerId}/${settings.active?.connectionRevision}',
+            ),
+          ),
           const SettingsScreen(),
         ],
       ),

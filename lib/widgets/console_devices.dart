@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
-import '../theme/ios_theme.dart';
 import '../services/server_manager.dart';
+import '../theme/ios_theme.dart';
 import 'device_row_parts.dart';
 
-/// 顶部设备行：一台 PC 一行 —— iOS 风格
+/// 顶部机器选择条：横向滚动的紧凑胶囊
 ///
-/// 布局按用户要求压成单行：
-/// `[图标] [别名]  ...  [运行数] [未读数] [当前] [状态图标]`
-///
-/// 在线状态**只由右侧图标表达**（绿勾 = 在线，红斜线 = 离线），
-/// 不再占用一行文字，卡片因此比原来矮一半。
-class ConsoleDeviceCard extends StatelessWidget {
-  /// 主标题：**服务器别名**（`AgentServer.name`，空则退回地址）。
-  /// 曾经直接显示 host —— opencode 隧道条目会露出一串隧道域名，
-  /// 看着像 id，用户明确要求显示别名。
+/// 旧版一台机器一张全宽卡片，三台机器就吃掉半屏；现在整条只有 44 高，
+/// 名称、在线状态、运行/未读数都在同一行。点击仍然只切当前机器，
+/// 不按有没有运行中的会话分叉。
+class ConsoleMachineChip extends StatelessWidget {
   final String title;
   final bool online;
   final bool needsAuth;
@@ -23,7 +18,7 @@ class ConsoleDeviceCard extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
-  const ConsoleDeviceCard({
+  const ConsoleMachineChip({
     super.key,
     required this.title,
     required this.online,
@@ -35,95 +30,107 @@ class ConsoleDeviceCard extends StatelessWidget {
     this.onTap,
   });
 
+  IconData get _icon {
+    if (needsAuth) return Icons.lock_outline_rounded;
+    if (!online) return Icons.cloud_off_rounded;
+    return Icons.computer_rounded;
+  }
+
+  Color get _statusColor {
+    if (needsAuth) return IosTheme.iosOrange;
+    return online ? IosTheme.iosGreen : IosTheme.iosRed;
+  }
+
+  String get _statusLabel {
+    if (needsAuth) return '需要重新授权';
+    return online ? '在线' : (error ?? '离线');
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusColor = _statusColor;
+    final bg = active
+        ? IosTheme.iosBlue.withValues(alpha: isDark ? 0.22 : 0.10)
+        : (isDark ? const Color(0xFF1C1C1E) : Colors.white);
+    final border = active
+        ? IosTheme.iosBlue.withValues(alpha: 0.55)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06));
+    final radius = BorderRadius.circular(IosTheme.radiusChip);
 
-    // 在线状态用一个图标表达。离线是「红底 + 斜线」，一眼可辨，
-    // 不再需要「在线 / 离线」这行文字。
-    final Color statusColor;
-    if (needsAuth) {
-      statusColor = IosTheme.iosOrange;
-    } else if (online) {
-      statusColor = IosTheme.iosGreen;
-    } else {
-      statusColor = IosTheme.iosRed;
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-        border: active
-            ? Border.all(color: IosTheme.iosBlue, width: 1.5)
-            : null,
-        boxShadow: active
-            ? [
-                BoxShadow(
-                  color: IosTheme.iosBlue.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : IosTheme.shadowS,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: IosTheme.spaceM,
-              vertical: IosTheme.spaceS,
+    return Semantics(
+      button: true,
+      selected: active,
+      label: '$title，$_statusLabel'
+          '${running > 0 ? '，$running 个运行中' : ''}'
+          '${unviewed > 0 ? '，$unviewed 条未读' : ''}',
+      child: Tooltip(
+        message: '$title · $_statusLabel',
+        child: Material(
+          color: bg,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: BorderSide(
+              color: border,
+              width: active ? 1.4 : 0.8,
             ),
-            child: Row(
-              children: [
-                // 左：图标（颜色跟随状态，扫一眼就知道好坏）
-                Icon(Icons.computer, size: 20, color: statusColor),
-                const SizedBox(width: IosTheme.spaceS),
-                // 中：别名（没有别名的条目退回地址显示）
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: IosTheme.spaceM,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(_icon, size: 17, color: statusColor),
                     ),
-                  ),
+                    const SizedBox(width: IosTheme.spaceS),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 132),
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight:
+                              active ? FontWeight.w600 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (running > 0) ...[
+                      const SizedBox(width: IosTheme.spaceS),
+                      DeviceMiniStat(
+                        icon: Icons.play_arrow_rounded,
+                        text: '$running',
+                        color: IosTheme.iosGreen,
+                      ),
+                    ],
+                    if (unviewed > 0) ...[
+                      const SizedBox(width: 6),
+                      DeviceMiniStat(
+                        icon: Icons.mark_as_unread_outlined,
+                        text: '$unviewed',
+                        color: IosTheme.iosOrange,
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: IosTheme.spaceS),
-                // 右：其它信息
-                if (active) ...[
-                  const DeviceActiveBadge(),
-                  const SizedBox(width: IosTheme.spaceS),
-                ],
-                if (online && running > 0) ...[
-                  DeviceMiniStat(
-                    icon: Icons.play_circle_outline,
-                    text: '$running',
-                    color: IosTheme.iosGreen,
-                  ),
-                  const SizedBox(width: IosTheme.spaceS),
-                ],
-                if (online && unviewed > 0) ...[
-                  DeviceMiniStat(
-                    icon: Icons.mark_as_unread_outlined,
-                    text: '$unviewed',
-                    color: IosTheme.iosOrange,
-                  ),
-                  const SizedBox(width: IosTheme.spaceS),
-                ],
-                // 最右：在线状态图标（绿勾 / 红色断开 / 橙色锁）
-                DeviceStatusIcon(
-                  online: online,
-                  needsAuth: needsAuth,
-                  error: error,
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -132,7 +139,7 @@ class ConsoleDeviceCard extends StatelessWidget {
   }
 }
 
-/// 设备列表区域
+/// 设备选择条：横向滚动，避免多台机器把纵向空间吃光
 class ConsoleDevices extends StatelessWidget {
   final List<ServerGroup> groups;
   final void Function(String serverId) onTapDevice;
@@ -149,27 +156,32 @@ class ConsoleDevices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
-      child: Column(
-        children: [
-          for (var i = 0; i < groups.length; i++) ...[
-            if (i > 0) const SizedBox(height: IosTheme.spaceS),
-            ConsoleDeviceCard(
-              // 别名优先，空名退回地址（防御旧数据）
-              title: groups[i].server.name.isEmpty
-                  ? groups[i].server.host
-                  : groups[i].server.name,
-              online: groups[i].monitor.online,
-              needsAuth: groups[i].server.unpaired,
-              running: groups[i].running.length,
-              unviewed: groups[i].unviewed.length,
-              error: groups[i].monitor.error,
-              active: groups[i].server.id == activeServerId,
-              onTap: () => onTapDevice(groups[i].server.id),
-            ),
-          ],
-        ],
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+        itemCount: groups.length,
+        separatorBuilder: (_, __) => const SizedBox(width: IosTheme.spaceS),
+        itemBuilder: (context, i) {
+          final group = groups[i];
+          final name = group.server.name;
+          final host = group.server.host;
+          return ConsoleMachineChip(
+            // 别名优先，空名退回地址（防御旧数据）
+            title: name.isNotEmpty ? name : (host.isNotEmpty ? host : 'PC'),
+            online: group.monitor.online,
+            needsAuth: group.server.unpaired,
+            running: group.running.length,
+            unviewed: group.unviewed.length,
+            error: group.monitor.error,
+            active: group.server.id == activeServerId,
+            onTap: () => onTapDevice(group.server.id),
+          );
+        },
       ),
     );
   }

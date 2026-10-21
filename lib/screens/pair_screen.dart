@@ -196,6 +196,7 @@ class _PairScreenState extends State<PairScreen> {
 
   Future<void> _finish(String host, int port, String cookie) async {
     final settings = context.read<SettingsService>();
+    final manager = context.read<ServerManager>();
     final existingId = widget.existingServerId;
     final same = settings.servers.where((s) =>
         s.host == host && s.port == port &&
@@ -216,7 +217,7 @@ class _PairScreenState extends State<PairScreen> {
       unpaired: false,
     ));
     await settings.setActiveServer(id);
-    await context.read<ServerManager>().refreshAll();
+    await manager.refreshAll();
     if (!mounted) return;
     Navigator.of(context).pop(true);
   }

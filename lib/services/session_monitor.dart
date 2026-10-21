@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import '../models/agent_server.dart';
+import '../utils/constants.dart';
 import '../utils/session_format.dart';
 import 'app_visibility.dart';
 import 'dsh/dsh_auth.dart';
@@ -18,14 +21,16 @@ class SessionMonitor {
   final SettingsService settings;
   AgentServer server;
 
-  /// 通知 id 递增，避免同一条通知互相覆盖
-  int _notifySeq = 0;
-
   /// 上一次轮询时各会话是否在跑，用于识别「刚跑完」的边沿
   final Map<String, bool> _prevRunning = {};
 
-  SessionMonitor({required this.settings, required this.server})
-      : _source = sessionSourceFor(server);
+  SessionMonitor({
+    required this.settings,
+    required this.server,
+    SessionListSource? source,
+    Duration? requestTimeout,
+  })  : _source = source ?? sessionSourceFor(server),
+        _requestTimeout = requestTimeout ?? pollRequestTimeout;
 
   List<Map<String, dynamic>> sessions = [];
   List<Map<String, dynamic>> workspaces = [];
@@ -36,18 +41,27 @@ class SessionMonitor {
   DateTime? lastRefresh;
 
   final SessionListSource _source;
+  final Duration _requestTimeout;
+
+  /// 单飞：上一次轮询没回来时，直接跳过本轮定时器触发。
+  bool _refreshing = false;
 
   String _key(String sessionId) => settings.seenKey(server.id, sessionId);
 
   Future<void> refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
     loading = sessions.isEmpty;
     try {
-      final items = await _source.fetchSessions();
+      final items = await _source
+          .fetchSessions(timeout: _requestTimeout)
+          .timeout(_requestTimeout);
       final current = server.lastSessionId;
       // 先剔除子 Agent 与多余的空会话：前者是任务的中间产物，
       // 后者是「新建对话」的占位。必须在计数和通知之前剔除，
       // 否则「子 Agent 跑完」会弹出「会话已完成」通知，打扰用户。
-      for (final s in items.where((s) => isUserFacingSession(s, currentSessionId: current))) {
+      for (final s in items
+          .where((s) => isUserFacingSession(s, currentSessionId: current))) {
         final id = s['sessionId'] as String? ?? '';
         if (id.isEmpty) continue;
         final key = _key(id);
@@ -61,7 +75,7 @@ class SessionMonitor {
         if (was == true && !running && !watching) {
           // 刚跑完：把时间顶到现在，让它浮到「最近」列表顶部
           s['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-          await _markFinished(key);
+          await _markFinished(key, s);
         } else if (!running &&
             s['blank'] != true &&
             !watching &&
@@ -106,6 +120,7 @@ class SessionMonitor {
       error = '$e';
     } finally {
       loading = false;
+      _refreshing = false;
     }
   }
 
@@ -129,7 +144,7 @@ class SessionMonitor {
     final watching = isCurrent && AppVisibility.foreground;
     if (was == true && !running && !watching) {
       target['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-      _markFinished(_key(sessionId));
+      unawaited(_markFinished(_key(sessionId), target));
     }
     return true;
   }
@@ -137,19 +152,46 @@ class SessionMonitor {
   /// 会话完成：标记未读 + 双通道通知 + 提示音
   ///
   /// 前台看当前会话时不打扰；切到后台后当前会话完成也要通知。
-  Future<void> _markFinished(String key) async {
+  /// 摘要请求在后台跑，不阻塞轮询；拉不到就用兜底文案。
+  Future<void> _markFinished(
+    String key,
+    Map<String, dynamic> session,
+  ) async {
     await settings.addUnviewed(key);
-    try {
-      await NotificationService.show(
-        id: 20000 + _notifySeq++,
-        title: '会话已完成',
-        body: '非当前会话有新结果',
-      );
-    } catch (_) {}
-    KeepAliveService.setStatus('会话已完成: 非当前会话有新结果');
+    KeepAliveService.setStatus('${sessionTitleOf(session)} · 已完成');
     if (settings.soundEnabled && settings.completionSound) {
       SoundService.done(customPath: settings.customSoundPath('done'));
     }
+    unawaited(_notifyFinished(session));
+  }
+
+  Future<void> _notifyFinished(Map<String, dynamic> session) async {
+    String? summary;
+    try {
+      final sessionId = session['sessionId'] as String? ?? '';
+      if (sessionId.isNotEmpty) {
+        summary = await fetchSessionSummary(
+          _source,
+          sessionId,
+          timeout: completionSummaryTimeout,
+        ).timeout(completionSummaryTimeout);
+      }
+    } catch (_) {
+      // 摘要只是锦上添花，拉不到就用兜底文案。
+    }
+    final notice = completionNotice(
+      session: session,
+      serverName: server.name.isEmpty ? server.host : server.name,
+      summary: summary,
+    );
+    try {
+      await NotificationService.show(
+        id: NotificationService.nextId(),
+        title: notice.title,
+        body: notice.body,
+      );
+    } catch (_) {}
+    KeepAliveService.setStatus('${notice.title}: ${notice.body}');
   }
 
   /// 当 server 信息变更时，刷新内部引用

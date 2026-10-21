@@ -83,6 +83,39 @@ void main() {
     });
   });
 
+  group('连接配置指纹', () {
+    test('地址/凭据/类型变化会变，改名/切会话不变', () {
+      const base = AgentServer(
+        id: 'pc1',
+        name: '老电脑',
+        host: '10.0.0.1',
+        cookie: 'c1',
+        lastSessionId: 's1',
+      );
+
+      expect(base.copyWith(name: '新名字').connectionRevision,
+          base.connectionRevision);
+      expect(base.copyWith(lastSessionId: 's2').connectionRevision,
+          base.connectionRevision);
+
+      expect(base.copyWith(cookie: 'c2').connectionRevision,
+          isNot(base.connectionRevision));
+      expect(base.copyWith(host: '10.0.0.2').connectionRevision,
+          isNot(base.connectionRevision));
+      expect(base.copyWith(url: 'https://tunnel.example.com').connectionRevision,
+          isNot(base.connectionRevision));
+      expect(
+        const AgentServer(
+          id: 'pc1',
+          name: 'pc',
+          kind: AgentKind.opencode,
+          token: 't',
+        ).connectionRevision,
+        isNot(base.connectionRevision),
+      );
+    });
+  });
+
   group('序列化往返', () {
     test('toJson/fromJson 保留 kind/url/token', () {
       const s = AgentServer(

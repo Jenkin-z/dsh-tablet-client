@@ -1,7 +1,7 @@
 /// 设备行布局契约测试
 ///
-/// 用户要求：一行一台机器，左侧图标、中间 IP（**不带端口**）、
-/// 右侧其它信息，在线/离线**只用图标**表达（离线是红色带斜线的图标）。
+/// 用户要求：机器列表改成紧凑形式，左侧图标、中间别名（**不带端口**）、
+/// 右侧运行/未读，在线/离线**只用图标**表达（离线是红色带斜线的图标）。
 library;
 
 import 'dart:io';
@@ -23,12 +23,11 @@ void main() {
     test('ConsoleDevices 从不拼 :port', () {
       // 后来的改动把主标题从 host 换成了别名（opencode 隧道条目显示
       // host 会像一串 id），但「不拼端口」这条一直成立。
-      final start = devices.indexOf('ConsoleDeviceCard(');
+      final start = devices.indexOf('ConsoleMachineChip(');
       expect(start >= 0, isTrue);
       final call = devices.substring(start);
-      expect(call.contains('server.port'), isFalse,
-          reason: '设备行不该再拼端口');
-      expect(devices.contains('groups[i].server.host'), isTrue,
+      expect(call.contains('server.port'), isFalse, reason: '设备行不该再拼端口');
+      expect(devices.contains('group.server.host'), isTrue,
           reason: '别名缺失时要退回地址');
     });
   });
@@ -52,12 +51,11 @@ void main() {
     test('不再有「在线 / 离线」文字行', () {
       // 旧布局用整行文字表达状态，已删除
       expect(devices.contains("online ? '在线' : '离线'"), isFalse);
-      expect(devices.contains('stateText'), isFalse,
-          reason: '状态不再用文字行，交给图标');
+      expect(devices.contains('stateText'), isFalse, reason: '状态不再用文字行，交给图标');
     });
   });
 
-  group('单行布局', () {
+  group('紧凑布局', () {
     test('字段只剩一行信息，运行/未读退化为图标+数字', () {
       // 旧布局是「运行 N」「未读 N」两个带文字的胶囊
       expect(devices.contains('运行 '), isFalse);
@@ -65,14 +63,24 @@ void main() {
       expect(devices.contains('DeviceMiniStat'), isTrue);
     });
 
+    test('机器条横向滚动，不再一台机器一张全宽卡', () {
+      expect(devices.contains('scrollDirection: Axis.horizontal'), isTrue);
+      expect(devices.contains('class ConsoleMachineChip'), isTrue);
+      expect(devices.contains('class ConsoleDeviceCard'), isFalse,
+          reason: '纵向大卡片已替换为紧凑胶囊');
+      expect(devices.contains('height: 44'), isTrue,
+          reason: '胶囊高度固定在 44，避免回到多行');
+    });
+
     test('主标题是别名，缺别名时退回地址', () {
       // ConsoleDeviceChip（会话里的设备徽章）已拆到独立文件，不再有
-      // name 字段冲突；设备行用的是 title = name 或 host。
-      final start = devices.indexOf('class ConsoleDeviceCard');
+      // name 字段冲突；设备条用的是 title = name 或 host。
+      final start = devices.indexOf('class ConsoleMachineChip');
       expect(start >= 0, isTrue);
       final card = devices.substring(start);
       expect(card.contains('this.title'), isTrue);
-      expect(card.contains('title: groups[i].server.name.isEmpty'), isTrue,
+      expect(devices.contains('final name = group.server.name'), isTrue);
+      expect(devices.contains("host.isNotEmpty ? host : 'PC'"), isTrue,
           reason: '防御旧数据：空名退回地址');
     });
 
@@ -81,8 +89,7 @@ void main() {
       expect(parts.contains('class DeviceMiniStat'), isTrue);
       expect(parts.contains('class DeviceActiveBadge'), isTrue);
       final lines = devices.split('\n').length;
-      expect(lines, lessThanOrEqualTo(220),
-          reason: 'widget 文件上限 200，留一点余量');
+      expect(lines, lessThanOrEqualTo(220), reason: 'widget 文件上限 200，留一点余量');
     });
   });
 }

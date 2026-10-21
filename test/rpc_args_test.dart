@@ -23,11 +23,12 @@ const _apiPath = 'lib/services/dsh/dsh_api.dart';
 
 /// 取出某个 `rpc('method', {...})` 调用里 args 的最外层键名
 Set<String> _argKeysFor(String source, String method) {
-  final marker = "rpc('$method'";
-  final start = source.indexOf(marker);
-  if (start < 0) return {};
+  // dart format 可能把 rpc( 和字符串拆到两行，marker 必须容忍换行。
+  final marker = RegExp("rpc\\(\\s*'${RegExp.escape(method)}'");
+  final match = marker.firstMatch(source);
+  if (match == null) return {};
   // 从调用点往后扫，找出紧随其后的第一个 { 里出现的字符串键
-  final braceStart = source.indexOf('{', start);
+  final braceStart = source.indexOf('{', match.start);
   if (braceStart < 0) return {};
   var depth = 0;
   var end = braceStart;
@@ -83,12 +84,14 @@ void main() {
   });
 
   group('单对象首参的端点用 request 包装', () {
-    test('create / prompt / search / rename / updateQueue 都用 request', () {
-      // session/page 已随 DshApi.getHistory() 一起弃用（历史改走 mux
-      // session/follow），不再是客户端调用的端点，故不在样本内。
+    test('create / prompt / page / search / rename / updateQueue 都用 request',
+        () {
+      // session/page 只用于完成通知的摘要快照；历史主体仍走 mux
+      // session/follow，两者职责不同。
       for (final method in const [
         'session/create',
         'session/prompt',
+        'session/page',
         'session/search',
         'session/rename',
         'session/updateQueue',
@@ -99,11 +102,13 @@ void main() {
       }
     });
 
-    test('已弃用的 session/page 不应被重新接回客户端', () {
-      // 历史加载统一走 mux session/follow；若有人再加回 HTTP 分页，
-      // 就会出现两套历史加载逻辑各自漂移（旧 bug 的形状）。
-      expect(source.contains("'session/page'"), isFalse,
-          reason: 'session/page 已弃用：历史走 mux session/follow 流');
+    test('完成通知摘要通过 session/page 读取最近历史', () {
+      // 历史跟随仍走 mux session/follow；session/page 只用于完成通知的
+      // 一次性摘要快照，必须带 maxMessages 上限，避免拉整段历史。
+      expect(source.contains("'session/page'"), isTrue,
+          reason: '完成通知摘要需要读取最近历史');
+      expect(source.contains("'maxMessages'"), isTrue,
+          reason: '摘要快照必须限制条数');
     });
   });
 

@@ -73,6 +73,32 @@ void main() {
       expect(state.sessionsError, isNull);
       expect(state.health, ConnectionHealth.offline);
     });
+
+    test('reset 清空上一台机器的模型选择', () {
+      state.setModelSelection(
+        const ModelSelection(provider: 'p', model: 'm'),
+      );
+      state.reset();
+      expect(state.modelSelection, isNull,
+          reason: '换后端不能继续显示上一台的模型名');
+    });
+
+    test('visibleSessions 是只读视图，调用方改不到中枢', () {
+      state.setSessions([
+        {'sessionId': 'a'},
+        {'sessionId': 'b'},
+      ]);
+      expect(() => state.visibleSessions.add({'sessionId': 'c'}),
+          throwsUnsupportedError);
+      expect(state.sessions.length, 2);
+
+      state.setArchivedIds({'a'});
+      expect(
+        state.visibleSessions.map((s) => s['sessionId']).toList(),
+        ['b'],
+      );
+      expect(() => state.visibleSessions.clear(), throwsUnsupportedError);
+    });
   });
 
   group('ModelSelection 解析与比较', () {

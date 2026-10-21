@@ -20,6 +20,11 @@ void main() {
     state.setSessionId('s1');
   });
 
+  tearDown(() {
+    dispatcher.dispose();
+    state.dispose();
+  });
+
   group('运行态在 turn 边界上的收敛', () {
     test('turn/start 重新武装运行态', () {
       dispatcher.onTurnEnd();
@@ -67,6 +72,38 @@ void main() {
       dispatcher.reset();
       dispatcher.onTurnStart();
       expect(state.agentRunning, isTrue);
+    });
+
+    test('本地回显对账后仍能重新武装运行态', () {
+      dispatcher.onTurnEnd();
+      const rpcId = 'r1';
+
+      // 用户上一轮刚结束就再发一条：durable 回显会走 rpcId 对账分支，
+      // 这条路径也必须清掉 _turnClosed，否则紧随其后的 running:true 被挡。
+      dispatcher.addLocalUserMessage('hi', rpcId);
+      dispatcher.onUserMessage('hi', rpcId, '1');
+      dispatcher.onSessionStatus('s1', true);
+
+      expect(state.agentRunning, isTrue);
+    });
+
+    test('连续 chunk 只推进消息版本，不再广播全局状态', () async {
+      dispatcher.onTurnStart();
+      dispatcher.onTextDelta('a');
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(state.assistantStreaming, isTrue);
+
+      var globalNotifies = 0;
+      state.addListener(() => globalNotifies++);
+      final revisionBefore = dispatcher.messagesRevision.value;
+
+      dispatcher.onTextDelta('b');
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+
+      expect(globalNotifies, 0,
+          reason: '流式阶段的后继增量只该刷新消息区，不能再通知全局状态');
+      expect(dispatcher.messagesRevision.value, greaterThan(revisionBefore));
+      expect(dispatcher.messages.any((m) => m.content == 'ab'), isTrue);
     });
   });
 

@@ -63,12 +63,12 @@ mixin SessionStateTools on _SessionStateCore {
     notifyListeners();
   }
 
-  /// 过滤归档会话后的可见列表
+  /// 过滤归档会话后的可见列表（只读副本，调用方不能改到中枢内部）
   List<Map<String, dynamic>> get visibleSessions {
-    if (_archivedIds.isEmpty) return _sessions;
-    return _sessions
-        .where((s) => !_archivedIds.contains(s['sessionId']))
-        .toList();
+    if (_archivedIds.isEmpty) return List.unmodifiable(_sessions);
+    return List.unmodifiable(
+      _sessions.where((s) => !_archivedIds.contains(s['sessionId'])),
+    );
   }
 
   void updateSessionStatus(String sessionId, bool running) {

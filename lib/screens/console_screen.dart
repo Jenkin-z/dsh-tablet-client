@@ -5,20 +5,21 @@ import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../utils/constants.dart';
+import '../utils/console_sessions.dart';
 import '../widgets/connection_status.dart';
 import '../widgets/console_devices.dart';
-import '../widgets/console_merged_tile.dart';
+import '../widgets/console_recent_list.dart';
 import '../widgets/console_widgets.dart';
 import 'pair_screen.dart';
 
-/// 控制台：顶部每设备一张状态卡，下方按设备分组展示会话
+/// 控制台：顶部紧凑机器条，下方跨机器混排最近会话
 ///
 /// 重构后：只做展示，不做权威判断。
 /// 连接/会话状态一律从 SessionState 读取，不自己推断。
 class ConsoleScreen extends StatelessWidget {
   final void Function(String serverId, String sessionId) onOpenSession;
 
-  /// 只切机器、不指定会话。点设备卡但没有运行中的会话时走这条。
+  /// 只切机器、不指定会话。点设备条时走这条。
   final void Function(String serverId) onSwitchServer;
 
   const ConsoleScreen({
@@ -32,44 +33,60 @@ class ConsoleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<ServerManager, SettingsService, SessionState>(
-      builder: (context, manager, settings, session, _) {
-        final groups = manager.groups;
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
-          appBar: AppBar(
-            title: const Text(
-              '控制台',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            actions: [
-              const Center(child: ConnectionStatus()),
-              const SizedBox(width: IosTheme.spaceM),
-              if (manager.lastRefresh != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: IosTheme.spaceS),
-                    child: Text(
-                      '更新于 ${_clock(manager.lastRefresh!)}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: IosTheme.iosGray,
-                      ),
-                    ),
+    return Consumer2<ServerManager, SettingsService>(
+      builder: (context, manager, settings, _) {
+        // 控制台只关心「当前会话」和「各会话待办类型」。
+        // 用 Selector 把运行态/流式等高频通知挡在页面之外：
+        // IndexedStack 里隐藏的控制台不会跟着聊天页一起重建。
+        return Selector<SessionState, String>(
+          selector: (_, session) {
+            final pending = session.pendingSessionIds.toList()..sort();
+            final kinds = pending
+                .map((id) => '$id:${session.pendingKindOf(id)}')
+                .join(',');
+            return '${session.sessionId}|$kinds';
+          },
+          builder: (context, _, __) {
+            final session = context.read<SessionState>();
+            final groups = manager.groups;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Scaffold(
+              backgroundColor:
+                  isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
+              appBar: AppBar(
+                title: const Text(
+                  '控制台',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 22),
-                tooltip: '刷新',
-                onPressed: manager.refreshAll,
+                actions: [
+                  const Center(child: ConnectionStatus()),
+                  const SizedBox(width: IosTheme.spaceM),
+                  if (manager.lastRefresh != null)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: IosTheme.spaceS),
+                        child: Text(
+                          '更新于 ${_clock(manager.lastRefresh!)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: IosTheme.iosGray,
+                          ),
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 22),
+                    tooltip: '刷新',
+                    onPressed: manager.refreshAll,
+                  ),
+                ],
               ),
-            ],
-          ),
-          body: _body(context, manager, settings, session, groups),
+              body: _body(context, manager, settings, session, groups),
+            );
+          },
         );
       },
     );
@@ -85,113 +102,43 @@ class ConsoleScreen extends StatelessWidget {
     SessionState session,
     List<ServerGroup> groups,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (groups.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.computer_outlined,
-              size: 56,
-              color: IosTheme.iosGray,
-            ),
-            const SizedBox(height: IosTheme.spaceM),
-            Text(
-              '还没有 PC',
-              style: TextStyle(
-                fontSize: 17,
-                color: IosTheme.iosGray,
-              ),
-            ),
-            const SizedBox(height: IosTheme.spaceS),
-            Text(
-              '去设置里添加一台运行 DSH 的电脑',
-              style: TextStyle(
-                fontSize: 15,
-                color: IosTheme.iosGray,
-              ),
-            ),
-            const SizedBox(height: IosTheme.spaceXL),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PairScreen()),
-                );
-              },
-              child: const Text('添加 PC'),
-            ),
-          ],
-        ),
-      );
-    }
+    if (groups.isEmpty) return _emptyState(context);
 
-    // 3 小时窗口内的会话总数，用于区块标题的计数与「全部已读」
-    final cutoff =
-        DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-    final activeKeys = <String>[];
-    for (final g in groups) {
-      for (final s in [...g.running, ...g.unviewed, ...g.recent]) {
-        final id = s['sessionId'] as String? ?? '';
-        if (id.isEmpty || s['blank'] == true) continue;
-        if (((s['updatedAt'] as num?)?.toInt() ?? 0) < cutoff) continue;
-        activeKeys.add(settings.seenKey(g.server.id, id));
-      }
-    }
-    final unviewedKeys =
-        activeKeys.where(settings.unviewedIds.contains).toSet();
-
-    // 每台机器是否有窗口内的会话，没有就不渲染该分组（避免空标题）
-    final groupsWithRecent = groups.where((g) {
-      final c = DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-      return [...g.running, ...g.unviewed, ...g.recent].any((s) {
-        final id = s['sessionId'] as String? ?? '';
-        if (id.isEmpty || s['blank'] == true) return false;
-        return ((s['updatedAt'] as num?)?.toInt() ?? 0) >= c;
-      });
-    }).toList();
+    // 跨机器混排：所有机器 3 小时窗口内的会话放在同一张卡片里，
+    // 按最近活动倒序；设备归属由每行的徽章表达。
+    final recent = collectRecentSessions(groups, window: _window);
+    final unviewedKeys = settings.unviewedIds;
+    final hasUnviewed = unviewedKeys.isNotEmpty;
+    // 标题旁的橙色徽标只表示「窗口内有未读」；「全部已读」则清全量，
+    // 否则超窗的未读永远清不掉（顶部计数是全量的）。
+    final hasRecentUnviewed = recent.any((entry) {
+      final id = entry.session['sessionId'] as String? ?? '';
+      return unviewedKeys.contains(settings.seenKey(entry.serverId, id));
+    });
 
     return RefreshIndicator(
       onRefresh: manager.refreshAll,
       child: ListView(
         padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
         children: [
+          const SizedBox(height: IosTheme.spaceS),
           ConsoleDevices(
             groups: groups,
             // 高亮只看「哪台是当前机器」，与连没连上无关。
             // 之前写成 session.connected ? activeServerId : null，
             // 一断线就全不亮，看着像切换没生效。
             activeServerId: settings.activeServerId,
-            onTapDevice: (serverId) {
-              // 手势语义唯一：点卡片 = 只切当前机器，留在控制台。
-              // 曾经这里会「有运行会话就跳对话、否则不跳」，
-              // 同一个动作两种结果，用户感受就是「有点乱」。
-              // 要看会话请点会话行 —— 那是另一个手势。
-              final group =
-                  groups.where((g) => g.server.id == serverId).firstOrNull;
-              if (group == null) return;
-              if (group.server.unpaired) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => PairScreen(existingServerId: serverId),
-                  ),
-                );
-                return;
-              }
-              onSwitchServer(serverId);
-            },
+            onTapDevice: (serverId) => _onTapDevice(context, groups, serverId),
           ),
-          const SizedBox(height: IosTheme.spaceL),
+          const SizedBox(height: IosTheme.spaceS),
           ConsoleSectionHeader(
             icon: Icons.forum_outlined,
             iconColor: IosTheme.iosBlue,
             title: '最近 3 小时',
-            count: activeKeys.length,
-            badge: unviewedKeys.isNotEmpty,
-            action: unviewedKeys.isEmpty
-                ? null
-                : TextButton(
+            count: recent.length,
+            badge: hasRecentUnviewed,
+            action: hasUnviewed
+                ? TextButton(
                     // 清「全部未读」，而不是只清这个 3 小时区块里的。
                     //
                     // 顶部的未读计数走 server_manager.unviewedCount →
@@ -202,62 +149,77 @@ class ConsoleScreen extends StatelessWidget {
                       settings.unviewedIds.toList(growable: false),
                     ),
                     child: const Text('全部已读'),
-                  ),
+                  )
+                : null,
           ),
-          if (groupsWithRecent.isEmpty)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
-              padding: const EdgeInsets.all(IosTheme.spaceXL),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-              ),
-              child: const Center(
-                child: Text(
-                  '最近 3 小时没有活跃会话',
-                  style: TextStyle(color: IosTheme.iosGray, fontSize: 15),
-                ),
-              ),
-            )
-          else
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-                boxShadow: IosTheme.shadowS,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  for (var i = 0; i < groupsWithRecent.length; i++) ...[
-                    if (i > 0)
-                      Divider(
-                        height: 0.5,
-                        thickness: 0.5,
-                        indent: 56,
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.06),
-                      ),
-                    ConsoleMergedTile(
-                      group: groupsWithRecent[i],
-                      window: _window,
-                      currentSessionId: session.sessionId,
-                      isActiveServer: groupsWithRecent[i].server.id ==
-                          settings.activeServerId,
-                      pendingKindOf: session.pendingKindOf,
-                      unviewedKeys: settings.unviewedIds,
-                      unviewedKeyBuilder: settings.seenKey,
-                      onOpenSession: (sessionId) =>
-                          onOpenSession(groupsWithRecent[i].server.id, sessionId),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          ConsoleRecentList(
+            entries: recent,
+            currentSessionId: session.sessionId,
+            activeServerId: settings.activeServerId,
+            unviewedKeys: unviewedKeys,
+            unviewedKeyBuilder: settings.seenKey,
+            pendingKindOf: session.pendingKindOf,
+            onOpenSession: onOpenSession,
+          ),
         ],
       ),
     );
+  }
+
+  Widget _emptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.computer_outlined,
+            size: 56,
+            color: IosTheme.iosGray,
+          ),
+          const SizedBox(height: IosTheme.spaceM),
+          const Text(
+            '还没有 PC',
+            style: TextStyle(fontSize: 17, color: IosTheme.iosGray),
+          ),
+          const SizedBox(height: IosTheme.spaceS),
+          const Text(
+            '去设置里添加一台运行 DSH 的电脑',
+            style: TextStyle(fontSize: 15, color: IosTheme.iosGray),
+          ),
+          const SizedBox(height: IosTheme.spaceXL),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PairScreen()),
+              );
+            },
+            child: const Text('添加 PC'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手势语义唯一：点设备条 = 只切当前机器，留在控制台。
+  ///
+  /// 曾经这里会「有运行会话就跳对话、否则不跳」，同一个动作两种结果，
+  /// 用户感受就是「有点乱」。要看会话请点会话行 —— 那是另一个手势。
+  void _onTapDevice(
+    BuildContext context,
+    List<ServerGroup> groups,
+    String serverId,
+  ) {
+    final group = groups.where((g) => g.server.id == serverId).firstOrNull;
+    if (group == null) return;
+    if (group.server.unpaired) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PairScreen(existingServerId: serverId),
+        ),
+      );
+      return;
+    }
+    onSwitchServer(serverId);
   }
 }

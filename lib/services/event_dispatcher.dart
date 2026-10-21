@@ -41,6 +41,18 @@ abstract class _EventDispatcherCore {
   final List<ChatMessage> _messages = [];
   final Set<String> _seenUserSeq = {};
 
+  /// 消息列表版本号。
+  ///
+  /// 流式输出只改消息内容，不改运行态/审批等全局状态。让消息区单独监听
+  /// 这个版本号，避免每来一个 chunk 就 `state.notify()` 把整棵树重绘一遍。
+  final ValueNotifier<int> messagesRevision = ValueNotifier<int>(0);
+  bool _disposed = false;
+
+  void _bumpMessages() {
+    // 后端关闭时可能还有排队的事件回调；不要再去碰已释放的 notifier。
+    if (!_disposed) messagesRevision.value++;
+  }
+
   /// 本地乐观气泡的 rpcId → 内容。
   ///
   /// Web 端的对账是双层的（ChatView.tsx:139-157）：durable 消息一出现就按
@@ -54,10 +66,6 @@ abstract class _EventDispatcherCore {
   bool _turnClosed = false;
 
   _EventDispatcherCore(this.state);
-
-  void _touchActivity() {
-    state.setLastTurnEnd(null);
-  }
 }
 
 /// 事件统一入口：所有后端事件都先进这里，再更新状态中枢
@@ -121,9 +129,13 @@ class EventDispatcher extends _EventDispatcherCore
     _messages.clear();
     _seenUserSeq.clear();
     _pendingEcho.clear();
+    _bumpMessages();
   }
 
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _deltaFlushTimer?.cancel();
+    messagesRevision.dispose();
   }
 }

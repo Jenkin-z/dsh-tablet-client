@@ -29,11 +29,16 @@ class ConsoleDeviceChip extends StatelessWidget {
             size: 6,
           ),
           const SizedBox(width: IosTheme.spaceXS),
-          Text(
-            name,
-            style: TextStyle(
-              fontSize: 11,
-              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+              ),
             ),
           ),
         ],

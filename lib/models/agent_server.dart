@@ -74,6 +74,13 @@ class AgentServer {
     };
   }
 
+  /// 连接配置指纹：只随「后端地址 / 凭据 / 类型」变化。
+  ///
+  /// UI 用它做 ChatScreen 的 key：同一台 PC 重新配对时 id 不变，
+  /// 但 cookie/token 已换，必须重建后端，不能继续用旧连接。
+  /// 刻意不含 name/lastSessionId —— 改名、切会话不该触发重连。
+  int get connectionRevision => Object.hash(kind, httpUrl, cookie, token);
+
   /// 列表/控制台展示用地址（去掉 scheme，隧道域名也不换行）
   String get displayAddress {
     final u = url;

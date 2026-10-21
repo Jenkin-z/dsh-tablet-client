@@ -120,8 +120,10 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
 
       final token = await _acquireToken(target);
       if (token == null) return;
+      if (!mounted) return;
 
       final settings = context.read<SettingsService>();
+      final manager = context.read<ServerManager>();
       final existing = _existing;
       final id = existing?.id ?? const Uuid().v4();
       final name = _name.text.trim().isNotEmpty
@@ -139,7 +141,7 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
         unpaired: false,
       ));
       await settings.setActiveServer(id);
-      await context.read<ServerManager>().refreshAll();
+      await manager.refreshAll();
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on OpenCodeAuthException catch (e) {

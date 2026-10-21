@@ -21,10 +21,13 @@
     <!-- 应用内更新：调起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- 凭据（cookie/token）只留在本机，不进云备份 / 换机迁移 -->
     <application
         android:label="DSHM"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"

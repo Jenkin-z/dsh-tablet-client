@@ -101,8 +101,64 @@ String timeAgoOf(int? ms) {
   return '${dt.month}/${dt.day}';
 }
 
+/// 从历史消息提炼一条通知摘要。
+///
+/// 完成通知的标题来自会话投影里的任务名；正文没有现成字段，
+/// 只能从最近历史里取最后一条有效消息：通常是 assistant 的结果，
+/// 如果用户刚发了新任务还没回复，就取这条 user 文本。
+/// 这里只做纯文本归一化，网络请求由数据源负责。
+String? summarizeConversation(
+  Iterable<({String role, String text})> messages, {
+  int maxChars = 100,
+}) {
+  String? assistant;
+  String? user;
+  var assistantAt = -1;
+  var userAt = -1;
+  var index = 0;
+  for (final m in messages) {
+    final text = _cleanSummary(m.text);
+    if (text.isNotEmpty) {
+      if (m.role == 'assistant') {
+        assistant = text;
+        assistantAt = index;
+      } else if (m.role == 'user') {
+        user = text;
+        userAt = index;
+      }
+    }
+    index++;
+  }
+  // 最后一条是 assistant 就用结果；如果用户刚发了新任务还没回复，
+  // 用这条新任务，别拿上一轮的旧结果冒充本次概要。
+  final pick = assistantAt >= userAt ? assistant : user;
+  if (pick == null) return null;
+  return pick.length > maxChars ? '${pick.substring(0, maxChars)}…' : pick;
+}
+
+String _cleanSummary(String raw) => raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+/// 完成通知文案：标题是任务名，正文是机器 + 概要。
+///
+/// 摘要缺失或与标题重复时退回可点击的通用文案，避免通知只有
+/// 「会话已完成」这种没有信息量的句子。
+({String title, String body}) completionNotice({
+  required Map<String, dynamic> session,
+  required String serverName,
+  String? summary,
+}) {
+  final title = sessionTitleOf(session);
+  final machine = serverName.trim().isEmpty ? 'PC' : serverName.trim();
+  final clean = summary == null ? '' : _cleanSummary(summary);
+  final body = clean.isEmpty || clean == title
+      ? '在$machine上完成，点击查看结果'
+      : '$machine · $clean';
+  return (title: title, body: body);
+}
+
 /// 会话活跃时间（ms）；缺失按 0 处理沉底
-int activityOf(Map<String, dynamic> s) => (s['updatedAt'] as int?) ?? 0;
+int activityOf(Map<String, dynamic> s) =>
+    (s['updatedAt'] as num?)?.toInt() ?? 0;
 
 /// 会话的工作区标题（未分组返回 null）
 String? workspaceOf(

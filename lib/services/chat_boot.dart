@@ -9,6 +9,22 @@ mixin ChatBoot on _ChatControllerCore {
   // ── 初始化 / 重连 ───────────────────────────────
 
   Future<void> boot() async {
+    if (_booting) {
+      _bootQueued = true;
+      return;
+    }
+    _booting = true;
+    try {
+      do {
+        _bootQueued = false;
+        await _bootOnce();
+      } while (_bootQueued);
+    } finally {
+      _booting = false;
+    }
+  }
+
+  Future<void> _bootOnce() async {
     // 状态中枢是全局共享的：换 PC 会重建 ChatController，
     // 必须先清掉上一台的残留，否则控制台会读到过期状态。
     dispatcher.reset();

@@ -35,7 +35,9 @@ class ChatMessageList extends StatelessWidget {
       itemCount: messages.length,
       itemBuilder: (context, index) {
         final message = messages[messages.length - 1 - index];
-        return MessageBubble(message: message);
+        // key 必须跟消息走：插入/删除时按 index 复用 State 会让气泡内容错位，
+        // 也会让 MessageBubble 的缓存命中到错误的消息上。
+        return MessageBubble(key: ValueKey(message.id), message: message);
       },
     );
   }

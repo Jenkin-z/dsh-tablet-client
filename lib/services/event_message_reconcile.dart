@@ -17,7 +17,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       content: text,
       pending: true,
     ));
-    state.notify();
+    _bumpMessages();
     onScrollToBottom?.call();
   }
 
@@ -26,7 +26,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
     if (_pendingEcho.remove(rpcId) == null) return;
     final before = _messages.length;
     _messages.removeWhere((m) => m.id == rpcId && m.pending);
-    if (_messages.length != before) state.notify();
+    if (_messages.length != before) _bumpMessages();
   }
 
   /// 发送成功确认：把乐观气泡就地转为确认态。
@@ -40,7 +40,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
     final idx = _messages.indexWhere((m) => m.id == rpcId && m.pending);
     if (idx >= 0) {
       _messages[idx] = _messages[idx].copyWith(pending: false);
-      state.notify();
+      _bumpMessages();
     }
   }
 
@@ -71,7 +71,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       ));
     }
     state.clearChanges();
-    state.notify();
+    _bumpMessages();
     onJumpToLatest?.call();
   }
 
@@ -99,8 +99,10 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       _reconcileEcho(rpcId, text);
       final key = 'u$seq';
       if (seq.isNotEmpty) _seenUserSeq.add(key);
-      _touchActivity();
-      state.notify();
+      // 回显对账同样是新一轮开始：不重新武装的话，turn/end 之后用户
+      // 马上再发一条，紧随其后的 running:true 会被 _turnClosed 挡掉。
+      _turnClosed = false;
+      _bumpMessages();
       return;
     }
 
@@ -114,7 +116,6 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       return;
     }
 
-    _touchActivity();
     // 用户发了新消息 = 新一轮的开始。
     // 必须在这里重新武装运行态：本轮消息可能被客户端去重（同内容、
     // 同 seq）而跳过下面那行，但用户的心智模型是「我一发，它就又在跑了」。
@@ -124,7 +125,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       role: 'user',
       content: text,
     ));
-    state.notify();
+    _bumpMessages();
     onScrollToBottom?.call();
   }
 }

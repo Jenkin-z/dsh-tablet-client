@@ -7,17 +7,49 @@ import '../theme/ios_theme.dart';
 ///
 /// iOS 风格：用户消息蓝色圆角气泡，Agent 消息白色/深色背景，
 /// 系统消息（错误等）淡红背景居中显示。
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   final ChatMessage message;
 
   const MessageBubble({super.key, required this.message});
 
   @override
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble> {
+  ChatMessage? _cachedMessage;
+  ({bool dark, double width, TextScaler scaler})? _cachedLayout;
+  Widget? _cachedWidget;
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final layout = (
+      dark: isDark,
+      width: MediaQuery.sizeOf(context).width,
+      scaler: MediaQuery.textScalerOf(context),
+    );
+
+    // 已定稿消息的实例不会再变。父级因为其它消息/运行态重建时直接复用
+    // 整棵子树，Markdown 不重新解析，文本选择状态也不会丢。
+    if (identical(widget.message, _cachedMessage) &&
+        layout == _cachedLayout &&
+        _cachedWidget != null) {
+      return _cachedWidget!;
+    }
+
+    final built = _buildBubble(context, isDark: isDark);
+    _cachedMessage = widget.message;
+    _cachedLayout = layout;
+    _cachedWidget = built;
+    return built;
+  }
+
+  Widget _buildBubble(BuildContext context, {required bool isDark}) {
+    final message = widget.message;
     final isUser = message.role == 'user';
     final isSystem = message.role == 'system';
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Align(
       alignment: isUser

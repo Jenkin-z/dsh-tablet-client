@@ -38,6 +38,12 @@ abstract class _ChatControllerCore extends ChangeNotifier {
   /// 当前选中的后端（按 kind 选 DshBackend / OpenCodeBackend）
   AgentBackend? _backend;
 
+  /// boot 单飞：启动、刷新按钮、路由恢复、mux ready 可能同时触发。
+  /// 并发 boot 会各自 dispose/create backend，先完成的那次会被后完成
+  /// 的覆盖，状态中枢也跟着抖。这里合并成「跑完再补一次」。
+  bool _booting = false;
+  bool _bootQueued = false;
+
   _ChatControllerCore({
     required this.settings,
     required this.state,

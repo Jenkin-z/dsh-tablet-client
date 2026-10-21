@@ -7,16 +7,46 @@ part of 'dsh_api.dart';
 // library，可访问宿主私有字段。
 
 mixin DshApiSessions on _DshApiCore {
-  Future<List<Map<String, dynamic>>> listSessions() async {
+  Future<List<Map<String, dynamic>>> listSessions({Duration? timeout}) async {
     // Host 形参名是 `_request: SessionListRequest`（下划线只是表示"保留不用"），
     // 生成客户端规则是「线上字段名 = 形参名」，所以这里**必须**是 `_request`。
     // 传 `{}` 会让 Host 参数解析失败 → 列表永远为空。
     // 依据：apps/web/tests/smoke-real.e2e.ts:755-766 的真实调用。
-    final value = await rpc('session/list', {
-      '_request': <String, dynamic>{},
-    });
+    final value = await rpc(
+      'session/list',
+      {'_request': <String, dynamic>{}},
+      timeout: timeout,
+    );
     final items = value['items'] as List<dynamic>? ?? [];
     return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// 读取最近历史，用于完成通知摘要。
+  ///
+  /// 历史跟随仍以 mux 的 `session/follow` 为准；这里只做一次有上限的
+  /// 快照读取，避免为了通知正文把整段历史拉下来。
+  Future<Map<String, dynamic>> getHistory(
+    String sessionId, {
+    int? throughSeq,
+    int? beforeSeq,
+    int? maxMessages,
+    Duration? timeout,
+  }) async {
+    final request = <String, dynamic>{
+      'address': {'kind': 'session', 'sessionId': sessionId},
+      'throughSeq': throughSeq ?? -1,
+      if (beforeSeq != null) 'beforeSeq': beforeSeq,
+      if (maxMessages != null) 'maxMessages': maxMessages,
+    };
+    final value = await rpc(
+      'session/page',
+      {'request': request},
+      timeout: timeout,
+    );
+    return {
+      'events': value['records'] ?? [],
+      'hasMore': value['hasMore'] == true,
+    };
   }
 
   Future<String> createSession(

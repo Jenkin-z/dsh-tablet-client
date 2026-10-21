@@ -10,7 +10,6 @@ part of 'event_dispatcher.dart';
 
 mixin EventDispatcherTurnSession on _EventDispatcherCore {
   void onToolCall(String toolName, [String? arguments]) {
-    _touchActivity();
     // 参数是未解析的 JSON 字符串，抽一个能看懂的摘要放进状态栏
     state.setActiveTool(_toolSummary(toolName, arguments));
     state.setAgentRunning(true);
@@ -50,7 +49,6 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
   }
 
   void onToolView(ToolViewRecord rec) {
-    _touchActivity();
     state.applyToolView(
       diffs: rec.diffs,
       title: rec.title,
@@ -65,10 +63,8 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
   /// Host 的 `api-session/status` 只在**状态变化**时推送，所以不能依赖它
   /// 把 running 从 false 拉回 true —— 这里用 journal 的 `turn/start` 兜底。
   void onTurnStart() {
-    _touchActivity();
     _turnClosed = false;
     state.setAgentRunning(true);
-    state.notify();
   }
 
   void onTurnEnd() {
@@ -94,7 +90,7 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     if (idx >= 0) {
       _messages[idx] = _messages[idx].copyWith(isStreaming: false);
     }
-    state.notify();
+    _bumpMessages();
   }
 
   void onQueueUpdate(List<Map<String, dynamic>> queueItems) {

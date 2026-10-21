@@ -101,18 +101,25 @@ class OpenCodeApi {
   // ── 会话 ────────────────────────────────────────
 
   /// 根会话列表（parentID=null 只取根会话；子会话 = DSH subagent 的等价物）
-  Future<List<Map<String, dynamic>>> listSessions({int limit = 100}) async {
-    final data = await _get('/api/session', query: {
-      'limit': '$limit',
-      'parentID': 'null',
-    });
+  Future<List<Map<String, dynamic>>> listSessions({
+    int limit = 100,
+    Duration? timeout,
+  }) async {
+    final data = await _get('/api/session',
+        query: {
+          'limit': '$limit',
+          'parentID': 'null',
+        },
+        timeout: timeout);
     final items = data['data'];
-    return items is List ? items.whereType<Map<String, dynamic>>().toList() : [];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : [];
   }
 
   /// 活跃会话 id 集合（`{data: {"ses_xxx": {type:"running"}}}`）
-  Future<Set<String>> activeSessions() async {
-    final data = await _get('/api/session/active');
+  Future<Set<String>> activeSessions({Duration? timeout}) async {
+    final data = await _get('/api/session/active', timeout: timeout);
     final map = data['data'];
     return map is Map ? map.keys.whereType<String>().toSet() : <String>{};
   }
@@ -136,15 +143,19 @@ class OpenCodeApi {
     return info is Map<String, dynamic> ? info : const {};
   }
 
-  /// 历史消息（asc 序）
+  /// 历史消息（默认 asc 序；摘要要传 order: 'desc' 取最新一页）
   Future<List<Map<String, dynamic>>> messages(String sessionId,
-      {int limit = 200}) async {
-    final data = await _get('/api/session/$sessionId/message', query: {
-      'limit': '$limit',
-      'order': 'asc',
-    });
+      {int limit = 200, String order = 'asc', Duration? timeout}) async {
+    final data = await _get('/api/session/$sessionId/message',
+        query: {
+          'limit': '$limit',
+          'order': order,
+        },
+        timeout: timeout);
     final items = data['data'];
-    return items is List ? items.whereType<Map<String, dynamic>>().toList() : [];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : [];
   }
 
   /// 发送提示；返回服务端分配的 inbox 消息 id（回执对账用）
@@ -169,7 +180,9 @@ class OpenCodeApi {
   Future<List<Map<String, dynamic>>> modelCatalog() async {
     final data = await _get('/api/model');
     final items = data['data'];
-    return items is List ? items.whereType<Map<String, dynamic>>().toList() : [];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : [];
   }
 
   /// 切换会话模型（语义 = 对后续轮次生效，与 DSH 投影 next 一致）
@@ -194,7 +207,9 @@ class OpenCodeApi {
   Future<List<Map<String, dynamic>>> permissionRequests() async {
     final data = await _get('/api/permission/request');
     final items = data['data'];
-    return items is List ? items.whereType<Map<String, dynamic>>().toList() : [];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : [];
   }
 
   /// 审批应答：once | always | reject（实测 204 后会话恢复执行）

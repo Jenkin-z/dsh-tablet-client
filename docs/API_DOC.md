@@ -48,6 +48,9 @@
 
 ## 二、接口清单
 
+> ⚠️ §3（WebSocket Mux 层）的帧规格以 **`docs/MUX_PROTOCOL.md`** 为准，
+> 那是逐条对照 DSH 源码和真实报文核对出的权威规格；HTTP 部分本节仍有效。
+
 ### 1. 授权层
 
 #### 1.1 `GET /?token=<launch-token>` — 换取 browser cookie
@@ -191,6 +194,12 @@ Content-Type: application/json
 ---
 
 #### 3.2 `$events` 流 — 审批与提问
+
+> ⚠️ **本节已由 `docs/MUX_PROTOCOL.md` 取代（以那份为准）**。
+> 下面的 waterfall 帧形状是早期推断，**有误**：真实帧是扁平结构
+> `value.type` 为判别字段，`agentId` 就是 SessionId，审批事件名为
+> `approval/request`。详见 MUX_PROTOCOL.md 的证据表与帧规格。
+> 保留本节仅作历史对照。
 
 **Opening frame**:
 

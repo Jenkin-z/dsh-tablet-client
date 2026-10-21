@@ -83,11 +83,12 @@ void main() {
   });
 
   group('单对象首参的端点用 request 包装', () {
-    test('create / prompt / page / search / rename / updateQueue 都用 request', () {
+    test('create / prompt / search / rename / updateQueue 都用 request', () {
+      // session/page 已随 DshApi.getHistory() 一起弃用（历史改走 mux
+      // session/follow），不再是客户端调用的端点，故不在样本内。
       for (final method in const [
         'session/create',
         'session/prompt',
-        'session/page',
         'session/search',
         'session/rename',
         'session/updateQueue',
@@ -96,6 +97,13 @@ void main() {
         expect(keys, isNotEmpty, reason: '没找到 $method 的 rpc 调用（方法名或调用形式变了？）');
         expect(keys, contains('request'), reason: '$method 必须用 request 包装');
       }
+    });
+
+    test('已弃用的 session/page 不应被重新接回客户端', () {
+      // 历史加载统一走 mux session/follow；若有人再加回 HTTP 分页，
+      // 就会出现两套历史加载逻辑各自漂移（旧 bug 的形状）。
+      expect(source.contains("'session/page'"), isFalse,
+          reason: 'session/page 已弃用：历史走 mux session/follow 流');
     });
   });
 

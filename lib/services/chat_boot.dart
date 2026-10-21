@@ -100,9 +100,17 @@ mixin ChatBoot on _ChatControllerCore {
   /// settings_service 里定义、**从未被任何界面调用**，于是未读只能靠
   /// 「全部已读」清空；而那个按钮又只清 3 小时窗口内的，超窗的永远清不掉
   /// —— 这就是用户看到的「一直有未读、数字涨到 103」。
+  ///
+  /// 写未读水位属于「旁路 bookkeeping」：它失败绝不能连带把
+  /// boot / switchSession 打断（那会让用户连对话页都进不去）。
+  /// 所以这里吞掉异常，只留一条调试日志。
   Future<void> _markCurrentSeen(String serverId, String? sessionId) async {
     if (sessionId == null || sessionId.isEmpty) return;
-    await settings.markSeen(settings.seenKey(serverId, sessionId));
+    try {
+      await settings.markSeen(settings.seenKey(serverId, sessionId));
+    } catch (e) {
+      debugPrint('markSeen 失败（不影响进入对话）: $e');
+    }
   }
 
   Future<void> _refreshSessions() async {

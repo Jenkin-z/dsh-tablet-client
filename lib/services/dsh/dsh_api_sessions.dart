@@ -49,22 +49,6 @@ mixin DshApiSessions on _DshApiCore {
     return rid;
   }
 
-  /// 历史分页；throughSeq=null 表示空截断（仅探测会话存在）
-  Future<Map<String, dynamic>> getHistory(String sessionId,
-      {int? throughSeq, int? beforeSeq, int? maxMessages}) async {
-    final request = <String, dynamic>{
-      'address': {'kind': 'session', 'sessionId': sessionId},
-      'throughSeq': throughSeq ?? -1,
-      if (beforeSeq != null) 'beforeSeq': beforeSeq,
-      if (maxMessages != null) 'maxMessages': maxMessages,
-    };
-    final value = await rpc('session/page', {'request': request});
-    return {
-      'events': value['records'] ?? [],
-      'hasMore': value['hasMore'] == true,
-    };
-  }
-
   Future<bool> testConnection() async {
     try {
       await listSessions();

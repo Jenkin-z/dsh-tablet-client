@@ -7,8 +7,8 @@ Flutter 原生 Android 应用，将旧 Android 平板变为 DSH 的监控台。
 | Module | Responsibility | Data tables | Source directory | APIs/其他 |
 |--------|---------------|-------------|-----------------|----------|
 | **ChatController** | 聊天业务逻辑：连接、消息流、审批、会话切换 | - | `lib/services/chat_controller.dart` | - |
-| **DshApi** | DSH HTTP RPC 封装 | - | `lib/services/dsh_api.dart` | `POST /api/*` |
-| **MuxStream** | WebSocket 事件流：流式输出、审批、变更 | - | `lib/services/mux_stream.dart`, `mux_history.dart` | `WS /api/remote.mux` |
+| **DshApi** | DSH HTTP RPC 封装 | - | `lib/services/dsh/dsh_api.dart` | `POST /api/*` |
+| **MuxStream** | WebSocket 事件流：流式输出、审批、变更 | - | `lib/services/dsh/mux_stream.dart`, `lib/services/dsh/mux_history.dart` | `WS /api/remote.mux` |
 | **SettingsService** | 持久化设置：服务器、主题、声音、未读水位 | SharedPreferences | `lib/services/settings_service.dart`, `seen_store.dart` | - |
 | **ServerManager** | 多台 PC 聚合轮询 | - | `lib/services/server_manager.dart`, `session_monitor.dart` | - |
 | **SessionRouter** | 跨 tab 会话切换 | - | `lib/services/session_router.dart` | - |

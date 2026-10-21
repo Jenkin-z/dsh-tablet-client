@@ -57,7 +57,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_auth.dart` |
+| 文件 | `lib/services/dsh/dsh_auth.dart` |
 | 方法 | `NativeAuth.exchangeCookie(PairTarget)` |
 | HTTP | `GET http://<host>:3080/?token=<token>` |
 | 响应 | `303` + `Set-Cookie: dsh-auth-xxx=...` |
@@ -68,7 +68,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_auth.dart` |
+| 文件 | `lib/services/dsh/dsh_auth.dart` |
 | 方法 | `NativeAuth.fetchFromRelay(host, port: 8099)` |
 | HTTP | `GET http://<host>:8099/launch-token.json` |
 | 响应 | `{ "token": "r_..." }` |
@@ -108,7 +108,7 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_api.dart` line 74 |
+| 文件 | `lib/services/dsh/dsh_api_sessions.dart` |
 | 方法 | `listSessions()` |
 | RPC | `POST /api/session/list` |
 | 参数 | `{ "_request": {} }` |
@@ -120,7 +120,7 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_api.dart` line 80 |
+| 文件 | `lib/services/dsh/dsh_api_sessions.dart` |
 | 方法 | `createSession({cwd?, agentPreset?, workspaceId?})` |
 | RPC | `POST /api/session/create` |
 | 参数 | `{ "request": { "cwd"?, "agentPreset"?, "workspaceId"? } }` |
@@ -131,30 +131,33 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_api.dart` line 91 |
+| 文件 | `lib/services/dsh/dsh_api_sessions.dart` |
 | 方法 | `sendPrompt(sessionId, text)` |
 | RPC | `POST /api/session/prompt` |
 | 参数 | `{ "request": { "requestId": "<uuid>", "sessionId": "...", "mode": "queue", "content": [{"type":"text","text":"..."}] } }` |
 | 返回 | 成功/失败（客户端自生成 requestId 用于回声对账） |
 | 超时 | 30s |
 
-#### 2.4 `session/page` — 历史分页
+#### 2.4 `session/page` — 历史分页（**已弃用，客户端不再调用**）
+
+> ⚠️ 客户端历史加载**已全部改走 mux `session/follow` 流**（见 §3.3），
+> `DshApi.getHistory()` 已删除。保留本节仅为记录 Host 侧的接口形状。
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_api.dart` line 107 |
-| 方法 | `getHistory(sessionId, {throughSeq?, beforeSeq?, maxMessages?})` |
+| 文件 | ~~`lib/services/dsh/dsh_api.dart`~~（已删） |
+| 方法 | ~~`getHistory(sessionId, {throughSeq?, beforeSeq?, maxMessages?})`~~ |
 | RPC | `POST /api/session/page` |
 | 参数 | `{ "request": { "address": {"kind":"session","sessionId":"..."}, "throughSeq": -1, "beforeSeq"?, "maxMessages"? } }` |
 | 返回 | `{ "records": [...], "hasMore": bool }` |
 | 超时 | 30s |
-| 用途 | 会话验证（maxMessages=1）、快照加载 |
+| 替代者 | mux `session/follow` 开窗快照（`MuxStream.snapshotHasMore` 表示还有更早历史） |
 
 #### 2.5 `session/cancel` — 取消当前轮
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/dsh_api.dart` line 122 |
+| 文件 | `lib/services/dsh/dsh_api_sessions.dart` |
 | 方法 | `cancelSession(sessionId)` |
 | RPC | `POST /api/session/cancel` |
 | 参数 | `{ "request": { "sessionId": "..." } }` |
@@ -170,7 +173,7 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/mux_stream.dart` |
+| 文件 | `lib/services/dsh/mux_stream.dart` |
 | 连接 | `IOWebSocketChannel.connect(wsBaseUrl + '/api/remote.mux')` |
 | 认证 | `Cookie: dsh-auth-xxx=...` (upgrade header) |
 | Ping | `pingInterval: 20s` |
@@ -310,17 +313,18 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/mux_stream.dart` line 332 |
+| 文件 | `lib/services/dsh/mux_event_result.dart` |
 | 方法 | `respondApproval(eventId, allow)` |
 | HTTP | `POST http://<host>:3080/api/$events/result` |
 | 参数 | `{ "clientId": "...", "eventId": "...", "outcome": { "kind": "result", "value": "allowed-once" \| "rejected" } }` |
+| 拒绝分支 | outcome 另有 `{ "kind": "rejected", "error": { ... } }` 形态（`MuxStream._postEventResult` 的 `rejected` 非空时走这条） |
 | 超时 | 15s |
 
 #### 4.2 提问应答
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/mux_stream.dart` line 376 |
+| 文件 | `lib/services/dsh/mux_event_result.dart` |
 | 方法 | `respondQuestion(eventId, answers)` |
 | HTTP | `POST http://<host>:3080/api/$events/result` |
 | 参数 | `{ "clientId": "...", "eventId": "...", "outcome": { "kind": "result", "value": { "answers": [{ "id": "...", "selected": ["..."], "custom": "..." }] } } }` |
@@ -343,7 +347,7 @@ Content-Type: application/json
 
 | 属性 | 值 |
 |---|---|
-| 文件 | `lib/services/update_service.dart` line 99 |
+| 文件 | `lib/services/update_service.dart` |
 | HTTP | `GET http://<host>:8099/dsh-agent.apk` |
 | 超时 | 连接 10s / 请求 20s / 分块 30s |
 | 特性 | 进度回调、流式写入 |
@@ -564,7 +568,7 @@ void onMuxSnapshot(List<Map<String, dynamic>> records) {
 | `session/list` (SessionRecord) | ✅ listSessions() | projections 解析不安全 |
 | `session/create` | ✅ createSession() | 未用 agentPreset/workspaceId |
 | `session/prompt` (queue mode) | ✅ sendPrompt() | 无 |
-| `session/page` (throughSeq/beforeSeq) | ✅ getHistory() | 仅用于验证 |
+| `session/page` (throughSeq/beforeSeq) | ⚠️ 已弃用（历史改走 `session/follow`） | 无（mux 覆盖同一能力） |
 | `session/cancel` | ✅ cancelSession() | 无 |
 | `session/follow` (journal stream) | ✅ MuxStream.fol | 无 |
 | `workspace/follow` (archived IDs) | ✅ MuxStream.wfo | 仅读归档，不管理 |

@@ -437,11 +437,11 @@ Phase 3 (长期): 架构升级
 
 | 功能 | 官方源码路径 | Tablet 对应 |
 |---|---|---|
-| Mux 物理连接 | `packages/api/gateway/src/client/stream-client.ts` | `lib/services/mux_stream.dart` |
+| Mux 物理连接 | `packages/api/gateway/src/client/stream-client.ts` | `lib/services/dsh/mux_stream.dart` |
 | Session 流协议 | `packages/api/gateway/src/stream-protocol.ts` | 无独立定义，嵌入 mux_stream.dart |
-| Session 历史/跟随 | `packages/api/session-controller/src/history.ts` | `lib/services/mux_session_handler.dart` |
+| Session 历史/跟随 | `packages/api/session-controller/src/history.ts` | `lib/services/dsh/mux_session_handler.dart` |
 | Session 控制流 | `packages/api/session-controller/src/control.ts` | **不存在** |
-| Session 命令 | `packages/api/session-controller/src/commands.ts` | `lib/services/dsh_api.dart` |
+| Session 命令 | `packages/api/session-controller/src/commands.ts` | `lib/services/dsh/dsh_api.dart` |
 | Session 列表 | `packages/api/session-controller/src/list.ts` | `lib/services/session_monitor.dart` |
 | Workspace 命令 | `packages/api/workspace-controller/src/commands.ts` | 无 |
 | 设置管理 | `packages/api/settings-controller/src/index.ts` | 无 |

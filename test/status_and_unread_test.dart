@@ -6,8 +6,6 @@
 /// 3. 顶部状态点一直绿色（_sessionsOk == null 被当成健康）
 library;
 
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
 import 'package:dsh_tablet_client/services/session_state.dart';

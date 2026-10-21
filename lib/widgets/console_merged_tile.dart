@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/server_manager.dart';
 import '../theme/ios_theme.dart';
-import '../utils/session_format.dart';
-import 'console_animations.dart';
-import 'console_device_chip.dart';
+import 'console_merged_session_row.dart';
 
 /// 合并会话列表条目：按服务器分组，只显示窗口期内活跃的会话
 ///
 /// 图标/配色沿用重构前 ConsoleMergedTile 的那一套（未读橙、运行中脉冲、
 /// 设备归属徽章），并补上侧栏已有的「待办 > 未读 > 运行中」优先级。
 /// 两页对同一会话必须显示同一状态，否则用户没法信任何一个。
+/// 单条会话拆到 console_merged_session_row.dart，让本文件守住 200 行上限。
 class ConsoleMergedTile extends StatelessWidget {
   final ServerGroup group;
 
@@ -154,92 +153,15 @@ class ConsoleMergedTile extends StatelessWidget {
     final isUnviewed = unviewedKeys
         .contains(unviewedKeyBuilder(group.server.id, sessionId));
 
-    final iconColor = hasPending || isUnviewed
-        ? IosTheme.iosOrange
-        : running
-            ? IosTheme.iosGreen
-            : (isCurrent ? IosTheme.iosBlue : IosTheme.iosGray);
-
-    final IconData icon;
-    if (hasPending) {
-      icon = Icons.error_outline;
-    } else if (isUnviewed) {
-      icon = Icons.mark_as_unread_outlined;
-    } else if (session['blank'] == true) {
-      icon = Icons.chat_bubble_outline;
-    } else {
-      icon = Icons.chat_bubble;
-    }
-
-    return Material(
-      color: isCurrent
-          ? IosTheme.iosBlue.withValues(alpha: 0.1)
-          : Colors.transparent,
-      child: InkWell(
-        onTap: () => onOpenSession(sessionId),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: IosTheme.spaceL,
-            vertical: IosTheme.spaceS,
-          ),
-          child: Row(
-            children: [
-              // 运行中保留脉冲动画；有待办时脉冲让位给告警图标
-              if (running && !hasPending)
-                const ConsolePulseDot()
-              else
-                Icon(icon, size: 20, color: iconColor),
-              const SizedBox(width: IosTheme.spaceM),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      sessionTitleOf(session),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: isCurrent || running || isUnviewed
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        // 设备归属徽章：重构前有这个，别丢
-                        ConsoleDeviceChip(
-                          name: group.server.name,
-                          online: group.monitor.online,
-                        ),
-                        const SizedBox(width: IosTheme.spaceXS),
-                        Expanded(
-                          child: Text(
-                            '${timeAgoOf(session['updatedAt'] as int?)}'
-                            '${isCurrent ? ' · 当前' : ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: IosTheme.iosGray,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: IosTheme.iosGray3,
-              ),
-            ],
-          ),
-        ),
-      ),
+    return ConsoleMergedSessionRow(
+      session: session,
+      serverName: group.server.name,
+      serverOnline: group.monitor.online,
+      isCurrent: isCurrent,
+      isUnviewed: isUnviewed,
+      running: running,
+      hasPending: hasPending,
+      onTap: () => onOpenSession(sessionId),
     );
   }
 }

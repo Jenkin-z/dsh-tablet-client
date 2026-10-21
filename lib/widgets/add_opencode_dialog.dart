@@ -3,12 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/agent_server.dart';
-import '../screens/qr_scan_screen.dart';
 import '../services/opencode/opencode_api.dart';
 import '../services/opencode/opencode_target.dart';
 import '../services/server_manager.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
+import 'open_code_credential_flow.dart';
 import 'opencode_server_form.dart';
 
 /// 添加 opencode 后端（两种接入方式）
@@ -20,6 +20,8 @@ import 'opencode_server_form.dart';
 ///    （PC 端需 `opencode serve --hostname 0.0.0.0`）。
 ///
 /// [existingServerId] 非空 = 重新授权（保留条目，只更新凭据）。
+/// 换码/验密码/扫码拆到 open_code_credential_flow.dart，
+/// 让本文件守住 200 行上限。
 class AddOpenCodeDialog extends StatefulWidget {
   final String? existingServerId;
   const AddOpenCodeDialog({super.key, this.existingServerId});
@@ -71,44 +73,22 @@ class _AddOpenCodeDialogState extends State<AddOpenCodeDialog> {
   /// 按模式取令牌：授权链接换码 / 手动连接先验再存。
   /// 失败时写 _error 并返回 null。
   Future<String?> _acquireToken(OpenCodeTarget target) async {
-    if (_linkMode) {
-      final code = target.pairCode;
-      if (code == null) {
-        setState(() => _error = '链接里没有授权码：请粘贴 opencode pair --remote 输出的完整链接');
-        return null;
-      }
-      return OpenCodeApi(baseUrl: target.baseUrl).exchangePairCode(code);
-    }
-    final password = _password.text.trim();
-    if (password.isEmpty) {
-      setState(() => _error = '请填服务密码（PC 端 opencode serve 的 OPENCODE_SERVER_PASSWORD）');
-      return null;
-    }
-    // 先验再存：密码错当场说，别存一个连不上的条目
-    final ok = await OpenCodeApi(baseUrl: target.baseUrl, password: password)
-        .testConnection();
-    if (!ok) {
-      setState(() => _error = '连不上 $target.baseUrl：PC 上 opencode serve 起了吗？');
-      return null;
-    }
-    return password;
+    final flow = OpenCodeCredentialFlow(
+      linkMode: _linkMode,
+      password: _password.text,
+      onError: (msg) => setState(() => _error = msg),
+    );
+    return flow.acquireToken(target);
   }
 
   /// 扫码填入：授权二维码（含 /auth/connect/<code>）→ 链接模式；
   /// 局域网地址二维码 → 手动模式。识别不出给错误提示。
   Future<void> _scan() async {
-    final raw = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) =>
-            const QrScanScreen(expect: QrScanExpect.opencodeLink),
-      ),
+    final target = await scanOpenCodeTarget(
+      context,
+      onError: (msg) => setState(() => _error = msg),
     );
-    if (raw == null || !mounted) return;
-    final target = parseOpenCodeTarget(raw);
-    if (target == null) {
-      setState(() => _error = '扫到的内容不是有效的 opencode 地址');
-      return;
-    }
+    if (target == null || !mounted) return;
     if (target.pairCode != null) {
       // 输入框只放规整后的授权链接（扫码原文可能带说明文字或多行）
       _link.text = '${target.baseUrl}/auth/connect/${target.pairCode}';

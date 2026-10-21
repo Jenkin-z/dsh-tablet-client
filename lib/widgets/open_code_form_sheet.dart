@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../models/pending.dart';
 import '../theme/ios_theme.dart';
-import 'form_field_input.dart';
+import 'open_code_form_field_row.dart';
+import 'open_code_form_logic.dart';
 
 /// opencode 表单弹窗 —— iOS 风格
 ///
 /// 与 DSH 的 QuestionSheet（chips+文本）不同：opencode form 是结构化字段，
 /// 答案形状 `{key: value}` 与 reply API 1:1，不做形状转换。
 /// required 空缺才拦截（optional 可空——DSH 没有 optional 概念）。
-/// 字段级渲染在 [FormFieldInput]。
+/// 字段级渲染在 [FormFieldInput]，字段行拆到 open_code_form_field_row.dart，
+/// 取值/校验逻辑拆到 open_code_form_logic.dart。
 class OpenCodeFormSheet extends StatefulWidget {
   final PendingForm form;
 
@@ -32,20 +34,19 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
   bool _submitting = false;
   String? _error;
 
+  /// 取值/可见性/必填校验的纯逻辑
+  OpenCodeFormLogic get _logic => OpenCodeFormLogic(
+        values: _values,
+        editedText: {
+          for (final e in _text.entries) e.key: e.value.text,
+        },
+      );
+
   @override
   void initState() {
     super.initState();
     // 服务端 default 预填（用户不改也能直接提交）
-    for (final f in widget.form.fields) {
-      final key = f['key'] as String? ?? '';
-      final d = f['default'];
-      if (key.isEmpty || d == null) continue;
-      if (d is String || d is bool || d is num) {
-        _values[key] = d;
-      } else if (d is List) {
-        _values[key] = d.whereType<String>().toList();
-      }
-    }
+    OpenCodeFormLogic.applyDefaults(widget.form, _values);
   }
 
   @override
@@ -62,67 +63,8 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
         () => TextEditingController(text: value is String ? value : ''),
       );
 
-  /// when 联动：字段仅在 `[{[key,op,value]}]` 全部命中时可见（AND）
-  bool _visible(Map<String, dynamic> field) {
-    final when = field['when'];
-    if (when is! List) return true;
-    for (final w in when) {
-      if (w is! Map) continue;
-      final k = w['key'] as String? ?? '';
-      final op = w['op'] as String? ?? 'eq';
-      final v = w['value'];
-      final cur = _values[k];
-      final hit = switch (op) {
-        'neq' => cur != v,
-        _ => cur == v,
-      };
-      if (!hit) return false;
-    }
-    return true;
-  }
-
-  Map<String, dynamic> _buildAnswer() {
-    final answer = <String, dynamic>{};
-    for (final f in widget.form.fields) {
-      if (f['hidden'] == true || !_visible(f)) continue;
-      final key = f['key'] as String? ?? '';
-      if (key.isEmpty) continue;
-      final v = _values[key];
-      if (v == null) continue;
-      // 文本类：用户在文本框编辑过以 controller 为准；否则用值本身
-      // （chip 选项值 / default 不走 controller——见 FormFieldInput）
-      if (v is String) {
-        final edited = _text[key]?.text ?? '';
-        if (edited.isNotEmpty) {
-          answer[key] = edited;
-        } else if (v.isNotEmpty) {
-          answer[key] = v;
-        }
-      } else if (v is List) {
-        if (v.isNotEmpty) answer[key] = v;
-      } else {
-        answer[key] = v;
-      }
-    }
-    return answer;
-  }
-
-  bool _missingRequired() {
-    for (final f in widget.form.fields) {
-      if (f['required'] != true) continue;
-      if (f['hidden'] == true || !_visible(f)) continue;
-      final key = f['key'] as String? ?? '';
-      final v = _values[key];
-      final empty = v == null ||
-          (v is String && v.isEmpty) ||
-          (v is List && v.isEmpty);
-      if (empty) return true;
-    }
-    return false;
-  }
-
   Future<void> _submit() async {
-    if (_missingRequired()) {
+    if (_logic.missingRequired(widget.form)) {
       setState(() => _error = '有必填项未填写');
       return;
     }
@@ -131,7 +73,7 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
       _error = null;
     });
     try {
-      final ok = await widget.onSubmit(_buildAnswer());
+      final ok = await widget.onSubmit(_logic.buildAnswer(widget.form));
       if (mounted && ok) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -148,9 +90,7 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fields = widget.form.fields
-        .where((f) => f['hidden'] != true && _visible(f))
-        .toList();
+    final fields = _logic.visibleFields(widget.form);
     return AlertDialog(
       backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
       shape: RoundedRectangleBorder(
@@ -214,39 +154,14 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
 
   Widget _fieldRow(Map<String, dynamic> f) {
     final key = f['key'] as String? ?? '';
-    final title = f['title'] as String? ?? key;
-    final desc = f['description'] as String?;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: IosTheme.spaceL),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title + (f['required'] == true ? ' *' : ''),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-          ),
-          if (desc != null && desc.isNotEmpty) ...[
-            const SizedBox(height: IosTheme.spaceXS),
-            Text(
-              desc,
-              style: const TextStyle(fontSize: 13, color: IosTheme.iosGray),
-            ),
-          ],
-          const SizedBox(height: IosTheme.spaceS),
-          FormFieldInput(
-            key: ValueKey(key),
-            fieldKey: key,
-            type: f['type'] as String? ?? 'string',
-            field: f,
-            value: _values[key],
-            controller: _controllerFor(key, _values[key]),
-            onChanged: (v) => setState(() {
-              _values[key] = v;
-              _error = null;
-            }),
-          ),
-        ],
-      ),
+    return OpenCodeFormFieldRow(
+      field: f,
+      value: _values[key],
+      controller: _controllerFor(key, _values[key]),
+      onChanged: (v) => setState(() {
+        _values[key] = v;
+        _error = null;
+      }),
     );
   }
 }

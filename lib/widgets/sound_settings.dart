@@ -5,10 +5,14 @@ import 'package:path_provider/path_provider.dart';
 import '../services/settings_service.dart';
 import '../services/sound_service.dart';
 import '../theme/ios_theme.dart';
+import 'custom_sound_tile.dart';
+import 'sound_settings_row.dart';
 
 /// 声音设置区块 —— iOS 风格
 ///
 /// 提示音开关 + 试听 + 自定义铃声。
+/// 分隔线/试听按钮拆到 sound_settings_row.dart，自定义铃声行拆到
+/// custom_sound_tile.dart，让本文件守住 200 行上限。
 class SoundSettingsSection extends StatelessWidget {
   final SettingsService settings;
 
@@ -38,13 +42,7 @@ class SoundSettingsSection extends StatelessWidget {
                 onChanged: (v) => settings.setSoundEnabled(v),
                 activeThumbColor: IosTheme.iosGreen,
               ),
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.only(left: 56),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              const SoundSettingsDivider(),
               SwitchListTile(
                 secondary: Icon(
                   Icons.notification_important_outlined,
@@ -62,13 +60,7 @@ class SoundSettingsSection extends StatelessWidget {
                     : null,
                 activeThumbColor: IosTheme.iosGreen,
               ),
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.only(left: 56),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              const SoundSettingsDivider(),
               SwitchListTile(
                 secondary: Icon(
                   Icons.task_alt_outlined,
@@ -86,13 +78,7 @@ class SoundSettingsSection extends StatelessWidget {
                     : null,
                 activeThumbColor: IosTheme.iosGreen,
               ),
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.only(left: 56),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              const SoundSettingsDivider(),
               ListTile(
                 leading: Icon(
                   Icons.play_circle_outline,
@@ -107,9 +93,18 @@ class SoundSettingsSection extends StatelessWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _soundButton(context, '确认', 'approval'),
-                    _soundButton(context, '提问', 'question'),
-                    _soundButton(context, '完成', 'done'),
+                    SoundPreviewButton(
+                      label: '确认',
+                      onPressed: () => _previewSound('approval'),
+                    ),
+                    SoundPreviewButton(
+                      label: '提问',
+                      onPressed: () => _previewSound('question'),
+                    ),
+                    SoundPreviewButton(
+                      label: '完成',
+                      onPressed: () => _previewSound('done'),
+                    ),
                   ],
                 ),
               ),
@@ -123,22 +118,10 @@ class SoundSettingsSection extends StatelessWidget {
             children: [
               _customSoundTile(context, 'approval', '确认音',
                   '审批 / 问题请求到达'),
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.only(left: 56),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              const SoundSettingsDivider(),
               _customSoundTile(
                   context, 'question', '提问音', 'Agent 提问到达'),
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.only(left: 56),
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              const SoundSettingsDivider(),
               _customSoundTile(
                   context, 'done', '完成音', 'Agent 一轮回答结束'),
             ],
@@ -148,62 +131,15 @@ class SoundSettingsSection extends StatelessWidget {
     );
   }
 
-  Widget _soundButton(BuildContext context, String label, String soundName) {
-    return TextButton(
-      onPressed: () => _previewSound(soundName),
-      style: TextButton.styleFrom(
-        foregroundColor: IosTheme.iosBlue,
-        padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceS),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 14),
-      ),
-    );
-  }
-
   Widget _customSoundTile(
       BuildContext context, String name, String label, String desc) {
-    final custom = settings.customSoundPath(name);
-    final fileName =
-        custom == null ? null : custom.split('/').last.split('\\').last;
-    return ListTile(
-      leading: Icon(
-        Icons.music_note_outlined,
-        color: IosTheme.iosPink,
-        size: 22,
-      ),
-      title: Text(label),
-      subtitle: Text(
-        custom == null
-            ? '$desc · 内置默认'
-            : '$desc · 自定义：$fileName',
-        style: const TextStyle(fontSize: 13),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextButton(
-            onPressed: () => _pickCustomSound(context, name),
-            style: TextButton.styleFrom(
-              foregroundColor: IosTheme.iosBlue,
-              padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceS),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('选择'),
-          ),
-          if (custom != null)
-            IconButton(
-              icon: const Icon(Icons.restore, size: 18),
-              color: IosTheme.iosGray,
-              tooltip: '恢复内置',
-              onPressed: () => _resetCustomSound(name),
-            ),
-        ],
-      ),
+    return CustomSoundTile(
+      settings: settings,
+      name: name,
+      label: label,
+      desc: desc,
+      onPick: () => _pickCustomSound(context, name),
+      onReset: () => _resetCustomSound(name),
     );
   }
 

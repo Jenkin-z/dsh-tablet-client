@@ -1,47 +1,8 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-/// 授权失败（401 cookie 过期，需重新换取）
-class DshAuthException implements Exception {
-  final int status;
-  final bool unpaired;
-  final String message;
+import 'dsh_auth_relay.dart';
 
-  const DshAuthException({
-    required this.status,
-    required this.unpaired,
-    required this.message,
-  });
-
-  @override
-  String toString() => message;
-}
-
-/// 解析出的 PC 目标（IP:端口，可带启动令牌）
-class PairTarget {
-  final String host;
-  final int port;
-  final String? token;
-
-  const PairTarget({required this.host, this.port = 3080, this.token});
-
-  /// 指向 8899 配对页（新方案），而不是 DSH 本体
-  bool get isPairServer =>
-      (token == null || token!.isEmpty) && port == NativeAuth.pairPort;
-}
-
-/// 授权结果：DSH 本体地址 + cookie
-class AuthGrant {
-  final String host;
-  final int port;
-  final String cookie;
-
-  const AuthGrant({
-    required this.host,
-    required this.port,
-    required this.cookie,
-  });
-}
+part 'dsh_auth_parts.dart';
 
 /// DSH 原生 browser-session 授权（无需配对插件）
 ///
@@ -118,8 +79,7 @@ class NativeAuth {
         );
       }
       final loc = Uri.tryParse(resp.headers['location'] ?? '');
-      final dshPort =
-          (loc != null && loc.hasPort) ? loc.port : _desktopPort;
+      final dshPort = (loc != null && loc.hasPort) ? loc.port : _desktopPort;
       return AuthGrant(
         host: host,
         port: dshPort,
@@ -227,27 +187,9 @@ class NativeAuth {
   }
 
   /// 从 PC 的 8099 中转服务读取最新启动令牌（全自动，无需手动传）
-  static Future<PairTarget> fetchFromRelay(String host, {int port = 8099}) async {
-    final resp = await http
-        .get(Uri.parse('http://$host:$port/launch-token.json'))
-        .timeout(const Duration(seconds: 10));
-    if (resp.statusCode != 200) {
-      throw DshAuthException(
-        status: resp.statusCode,
-        unpaired: false,
-        message: '8099 上没有 launch-token.json，'
-            '请在 PC 上运行 tool\\publish_launch_token.ps1',
-      );
-    }
-    final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final token = data['token'] as String?;
-    if (token == null || token.isEmpty) {
-      throw const DshAuthException(
-        status: 500,
-        unpaired: false,
-        message: 'launch-token.json 里没有 token',
-      );
-    }
-    return PairTarget(host: host, port: 3080, token: token);
-  }
+  ///
+  /// 实现放在 [NativeAuthRelay]（同目录），这里只做门面转发，
+  /// 保持 `NativeAuth.fetchFromRelay` 这个调用路径不变。
+  static Future<PairTarget> fetchFromRelay(String host, {int port = 8099}) =>
+      NativeAuthRelay.fetchFromRelay(host, port: port);
 }

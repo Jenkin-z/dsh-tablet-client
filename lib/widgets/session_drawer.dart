@@ -3,12 +3,15 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../utils/session_format.dart';
+import 'session_drawer_header.dart';
 import 'session_tile.dart';
 
 /// 对话页左侧会话抽屉 —— iOS 风格
 ///
 /// 按 cwd 目录分组，可折叠/展开。
 /// 默认全部收起；当前会话所在目录自动展开；展开后最多显示 5 条。
+/// 标题栏与「新建会话」按钮拆到 session_drawer_header.dart，
+/// 让本文件守住 200 行上限。
 class SessionDrawer extends StatefulWidget {
   final List<Map<String, dynamic>> sessions;
   final String serverId;
@@ -52,74 +55,12 @@ class _SessionDrawerState extends State<SessionDrawer> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 标题栏
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                IosTheme.spaceXL,
-                IosTheme.spaceL,
-                IosTheme.spaceL,
-                IosTheme.spaceS,
-              ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '会话',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                  if (widget.loading)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: IosTheme.iosBlue,
-                      ),
-                    )
-                  else
-                    IconButton(
-                      icon: const Icon(
-                        Icons.refresh,
-                        size: 22,
-                        color: IosTheme.iosBlue,
-                      ),
-                      tooltip: '刷新',
-                      onPressed: widget.onRefresh,
-                    ),
-                ],
-              ),
+            SessionDrawerTitleBar(
+              loading: widget.loading,
+              onRefresh: widget.onRefresh,
             ),
             // 新建会话按钮
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: IosTheme.spaceL,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: IosTheme.iosBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(IosTheme.radiusS),
-                ),
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.add_circle_outline,
-                    color: IosTheme.iosBlue,
-                    size: 22,
-                  ),
-                  title: const Text(
-                    '新建会话',
-                    style: TextStyle(
-                      color: IosTheme.iosBlue,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  onTap: widget.onCreateUngrouped,
-                ),
-              ),
-            ),
+            SessionNewSessionButton(onTap: widget.onCreateUngrouped),
             const SizedBox(height: IosTheme.spaceM),
             // 分隔线
             Container(

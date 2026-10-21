@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/pending.dart';
 import '../theme/ios_theme.dart';
+import 'question_block.dart';
 
 export '../models/pending.dart' show PendingQuestion;
 
@@ -8,6 +9,7 @@ export '../models/pending.dart' show PendingQuestion;
 ///
 /// 单选 chips / 多选 chips / 自定义文本；
 /// plan-review 意图给通过/否决按钮。
+/// 题块布局拆到 question_block.dart（含 question_sheet_fields.dart）。
 class QuestionSheet extends StatefulWidget {
   final PendingQuestion question;
   final Future<void> Function(List<Map<String, dynamic>> answers) onSubmit;
@@ -59,7 +61,32 @@ class _QuestionSheetState extends State<QuestionSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final q in widget.question.questions) _questionBlock(q),
+              for (final q in widget.question.questions)
+                QuestionBlock(
+                  q: q,
+                  selected:
+                      _selected.putIfAbsent(q['id'] as String? ?? '', () => {}),
+                  controller: _controllerFor(q['id'] as String? ?? ''),
+                  isDark: isDark,
+                  onMultiSelect: (label, v) => setState(() {
+                    final set = _selected
+                        .putIfAbsent(q['id'] as String? ?? '', () => {});
+                    if (v) {
+                      set.add(label);
+                    } else {
+                      set.remove(label);
+                    }
+                  }),
+                  onChoiceSelect: (label) => setState(() {
+                    final qid = q['id'] as String? ?? '';
+                    _selected.putIfAbsent(qid, () => {})
+                      ..clear()
+                      ..add(label);
+                    // 单选：选选项即清空自定义文本
+                    _custom[qid]?.clear();
+                    _error = null;
+                  }),
+                ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: IosTheme.spaceM),
@@ -107,149 +134,6 @@ class _QuestionSheetState extends State<QuestionSheet> {
     );
   }
 
-  Widget _questionBlock(Map<String, dynamic> q) {
-    final qid = q['id'] as String? ?? '';
-    final header = q['header'] as String?;
-    final question = q['question'] as String? ?? '';
-    final detail = q['detail'] as String?;
-    final options = (q['options'] as List? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
-    final multi = q['multiSelect'] == true;
-    final intent = q['intent'] as Map<String, dynamic>?;
-    final selected = _selected.putIfAbsent(qid, () => <String>{});
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: IosTheme.spaceL),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (header != null && header.isNotEmpty)
-            Text(
-              header,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: IosTheme.iosGray,
-              ),
-            ),
-          const SizedBox(height: IosTheme.spaceXS),
-          Text(
-            question,
-            style: TextStyle(
-              fontSize: 15,
-              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
-            ),
-          ),
-          if (detail != null && detail.isNotEmpty) ...[
-            const SizedBox(height: IosTheme.spaceXS),
-            Text(
-              detail,
-              style: TextStyle(
-                fontSize: 13,
-                color: IosTheme.iosGray,
-              ),
-            ),
-          ],
-          if (intent != null && intent['kind'] == 'plan-review') ...[
-            const SizedBox(height: IosTheme.spaceS),
-            Container(
-              padding: const EdgeInsets.all(IosTheme.spaceM),
-              decoration: BoxDecoration(
-                color: IosTheme.iosBlue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(IosTheme.radiusXS),
-              ),
-              child: Text(
-                '计划评审：${intent['approve'] ?? ''}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: IosTheme.iosBlue,
-                ),
-              ),
-            ),
-          ],
-          if (options.isNotEmpty) ...[
-            const SizedBox(height: IosTheme.spaceM),
-            Wrap(
-              spacing: IosTheme.spaceS,
-              runSpacing: IosTheme.spaceS,
-              children: [
-                for (final o in options)
-                  Builder(builder: (context) {
-                    final label = o['label'] as String? ?? '';
-                    final desc = o['description'] as String?;
-                    final isSel = selected.contains(label);
-                    return multi
-                        ? FilterChip(
-                            label: Text(label),
-                            selected: isSel,
-                            onSelected: (v) => setState(() {
-                              if (v) {
-                                selected.add(label);
-                              } else {
-                                selected.remove(label);
-                              }
-                            }),
-                            tooltip: desc,
-                            selectedColor:
-                                IosTheme.iosBlue.withValues(alpha: 0.15),
-                            checkmarkColor: IosTheme.iosBlue,
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(IosTheme.radiusChip),
-                            ),
-                          )
-                        : ChoiceChip(
-                            label: Text(label),
-                            selected: isSel,
-                            onSelected: (_) => setState(() {
-                              selected
-                                ..clear()
-                                ..add(label);
-                              // 单选：选选项即清空自定义文本
-                              _custom[qid]?.clear();
-                              _error = null;
-                            }),
-                            tooltip: desc,
-                            selectedColor:
-                                IosTheme.iosBlue.withValues(alpha: 0.15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(IosTheme.radiusChip),
-                            ),
-                          );
-                  }),
-              ],
-            ),
-          ],
-          const SizedBox(height: IosTheme.spaceM),
-          TextField(
-            controller: _controllerFor(qid),
-            style: const TextStyle(fontSize: 15),
-            decoration: InputDecoration(
-              hintText: '补充说明（可选）',
-              hintStyle: TextStyle(color: IosTheme.iosGray),
-              filled: true,
-              fillColor: isDark
-                  ? const Color(0xFF3A3A3C)
-                  : const Color(0xFFF2F2F7),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(IosTheme.radiusInput),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: IosTheme.spaceL,
-                vertical: IosTheme.spaceM,
-              ),
-            ),
-            maxLines: 2,
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 按 Web 端规则编码答案（QuestionComposer.tsx:205-232）
   ///
   /// - 单选 + 自定义文本 → `selected` **强制清空**（自定义即替代选项）
@@ -289,7 +173,8 @@ class _QuestionSheetState extends State<QuestionSheet> {
 
   Future<void> _submit() async {
     // Web 端要求全部作答才可提交，未答则跳到第一处缺失
-    final missing = widget.question.questions.where((q) => !_answered(q)).toList();
+    final missing =
+        widget.question.questions.where((q) => !_answered(q)).toList();
     if (missing.isNotEmpty) {
       setState(() => _error = '请先完成这道问题：请选择一个选项或填写自定义答案。');
       return;

@@ -17,6 +17,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/utils/session_format.dart';
 
+import 'support/source_reader.dart';
+
 Map<String, dynamic> _s(
   String id, {
   String? origin,
@@ -111,7 +113,7 @@ void main() {
     });
 
     test('ChatController 的会话列表同样过滤', () {
-      final src = File('lib/services/chat_controller.dart').readAsStringSync();
+      final src = readSourceWithParts('lib/services/chat_controller.dart');
       expect(src.contains('isUserFacingSession'), isTrue,
           reason: '对话页侧栏用 state.sessions，不过滤会漏出子 Agent');
     });

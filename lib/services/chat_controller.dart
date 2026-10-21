@@ -13,15 +13,19 @@ import 'server_manager.dart';
 import 'session_state.dart';
 import 'settings_service.dart';
 
-/// 聊天业务逻辑门面：按 AgentServer.kind 选后端，页面只跟这个类对话
+part 'chat_boot.dart';
+part 'chat_messaging.dart';
+
+/// 本地乐观气泡与 durable 消息对账用的 id 生成器
+const Uuid _uuid = Uuid();
+
+/// 库内共享宿主：声明各分片（mixin）依赖的字段，
+/// 本身不对外暴露。[ChatController] 继承它并混入各职责分片。
 ///
-/// 重构后：
-/// - 公开 API（boot/switchSession/send/cancel/answerApproval…）与后端无关；
-/// - 所有连线、状态迁移、审批应答收在各自 backend 内部
-///   （DshBackend / OpenCodeBackend 同级实现 AgentBackend）；
-/// - 所有状态都从 SessionState 读取，所有事件都经 EventDispatcher 分发；
-/// - 通知/声音钩子挂在 EventDispatcher 上（构造时一次），后端无关。
-class ChatController extends ChangeNotifier {
+/// 注意：分片用 `mixin X on _ChatControllerCore` 挂载，**不能**写成
+/// `on ChatController` —— 那会让 mixin 与宿主类互为超接口，
+/// Dart 直接报 recursive_interface_inheritance。
+abstract class _ChatControllerCore extends ChangeNotifier {
   final SettingsService settings;
   final ServerManager? manager;
 
@@ -31,12 +35,10 @@ class ChatController extends ChangeNotifier {
   /// 统一事件入口（与 state 同一实例生命周期）
   late final EventDispatcher dispatcher;
 
-  /// 本地乐观气泡与 durable 消息对账用的 id 生成器
-  static const _uuid = Uuid();
-
+  /// 当前选中的后端（按 kind 选 DshBackend / OpenCodeBackend）
   AgentBackend? _backend;
 
-  ChatController({
+  _ChatControllerCore({
     required this.settings,
     required this.state,
     this.manager,
@@ -54,6 +56,27 @@ class ChatController extends ChangeNotifier {
       },
     );
   }
+}
+
+/// 聊天业务逻辑门面：按 AgentServer.kind 选后端，页面只跟这个类对话
+///
+/// 重构后：
+/// - 公开 API（boot/switchSession/send/cancel/answerApproval…）与后端无关；
+/// - 所有连线、状态迁移、审批应答收在各自 backend 内部
+///   （DshBackend / OpenCodeBackend 同级实现 AgentBackend）；
+/// - 所有状态都从 SessionState 读取，所有事件都经 EventDispatcher 分发；
+/// - 通知/声音钩子挂在 EventDispatcher 上（构造时一次），后端无关。
+///
+/// 按职责拆分（part 文件，同库共享私有作用域，对外 API 不变）：
+/// - chat_boot.dart：初始化/重连 + 会话操作 + 会话列表/标题/已读
+/// - chat_messaging.dart：发送/取消 + 审批/提问 + opencode 表单
+class ChatController extends _ChatControllerCore
+    with ChatBoot, ChatMessaging {
+  ChatController({
+    required super.settings,
+    required super.state,
+    super.manager,
+  });
 
   /// 模型目录 / 切换（未连接或后端不支持时为 null）
   ModelCatalogService? get models => _backend?.models;
@@ -63,295 +86,5 @@ class ChatController extends ChangeNotifier {
     _backend?.dispose();
     dispatcher.dispose();
     super.dispose();
-  }
-
-  // ── 初始化 / 重连 ───────────────────────────────
-
-  Future<void> boot() async {
-    // 状态中枢是全局共享的：换 PC 会重建 ChatController，
-    // 必须先清掉上一台的残留，否则控制台会读到过期状态。
-    dispatcher.reset();
-    state.reset();
-
-    state.setConnecting(true);
-    state.setConnectionError(null);
-
-    final srv = settings.active;
-    if (srv == null) {
-      state.setConnecting(false);
-      state.setConnected(false);
-      state.setConnectionError('还没有 PC，去设置里添加。');
-      return;
-    }
-    if (!srv.isPaired) {
-      state.setConnecting(false);
-      state.setConnected(false);
-      state.setConnectionError(switch (srv.kind) {
-        AgentKind.dsh => '需要配对：请先在 PC 上启动 dsh web，然后用启动令牌完成配对。',
-        AgentKind.opencode => '需要授权：请在设置里重新添加 opencode（粘贴授权链接或填密码）。',
-      });
-      return;
-    }
-    // 无会话不算死局：backend 必须先建出来，否则侧栏「新建会话」会静默
-    // 无效（曾经授权成功却永远连不上就是这个坑）。建好后刷新列表，
-    // 有会话就自动打开最近一条；真没有再提示（此时侧栏新建也可用了）。
-    var sessionId = settings.sessionId;
-    var listed = false; // 本次 boot 是否已经拉过列表
-    if (sessionId == null || sessionId.isEmpty) {
-      await _backend?.dispose();
-      _backend = _createBackend(srv);
-      await _refreshSessions();
-      listed = true;
-      final candidates = state.sessions.toList();
-      final latest = candidates.isEmpty
-          ? null
-          : candidates.reduce((a, b) =>
-              ((a['updatedAt'] as int? ?? 0) >= (b['updatedAt'] as int? ?? 0))
-                  ? a
-                  : b);
-      sessionId = latest?['sessionId'] as String?;
-      if (sessionId == null || sessionId.isEmpty) {
-        state.setConnecting(false);
-        state.setConnected(false);
-        state.setConnectionError('这台后端还没有会话：打开侧栏「新建会话」开始第一段对话。');
-        return;
-      }
-      await settings.setSessionId(sessionId);
-    }
-
-    state.setSessionId(sessionId);
-    state.setSessionTitle(_titleFor(sessionId));
-
-    await _markCurrentSeen(srv.id, sessionId);
-
-    if (!listed) {
-      await _backend?.dispose();
-      _backend = _createBackend(srv);
-    }
-
-    // 列表与「连接+历史」互不依赖，并行跑，切机器进对话页少等一段串行往返；
-    // listed 分支刚拉过列表，不重复拉（原版这里会拉两遍）
-    if (listed) {
-      await _backend!.open(sessionId);
-    } else {
-      await Future.wait([_refreshSessions(), _backend!.open(sessionId)]);
-    }
-  }
-
-  AgentBackend _createBackend(AgentServer srv) {
-    final ctx = BackendContext(
-      settings: settings,
-      manager: manager,
-      state: state,
-      dispatcher: dispatcher,
-      server: srv,
-      onRefreshSessions: _refreshSessions,
-    );
-    return switch (srv.kind) {
-      AgentKind.dsh => DshBackend(ctx),
-      AgentKind.opencode => OpenCodeBackend(ctx),
-    };
-  }
-
-  String _defaultTitle(AgentServer srv) => switch (srv.kind) {
-        AgentKind.dsh => 'DSH Agent',
-        AgentKind.opencode => 'opencode Agent',
-      };
-
-  /// 打开一个会话 = 读过它。
-  ///
-  /// 这是未读功能的**唯一出口**。此前 `settings.markSeen()` 只在
-  /// settings_service 里定义、**从未被任何界面调用**，于是未读只能靠
-  /// 「全部已读」清空；而那个按钮又只清 3 小时窗口内的，超窗的永远清不掉
-  /// —— 这就是用户看到的「一直有未读、数字涨到 103」。
-  Future<void> _markCurrentSeen(String serverId, String? sessionId) async {
-    if (sessionId == null || sessionId.isEmpty) return;
-    await settings.markSeen(settings.seenKey(serverId, sessionId));
-  }
-
-  Future<void> _refreshSessions() async {
-    final backend = _backend;
-    if (backend == null) return;
-    state.setLoadingSessions(true);
-    try {
-      final items = await backend.listSessions();
-      // 与 SessionMonitor 用同一个判定：子 Agent 会话和多余的空会话
-      // 都不进任何列表（Web 端 sessionVisible() 的等价规则）
-      state.setSessions(items
-          .where((s) => isUserFacingSession(s,
-              currentSessionId: settings.sessionId))
-          .toList());
-      state.setSessionTitle(_titleFor(settings.sessionId));
-      // 拉到了才算数据侧健康 —— 状态点据此变绿
-      state.setSessionsHealth(ok: true);
-    } catch (e) {
-      // 不再静默：列表失败就是降级，状态点会变橙并可点开看原因
-      state.setSessionsHealth(ok: false, error: '会话列表读取失败：$e');
-    } finally {
-      state.setLoadingSessions(false);
-    }
-  }
-
-  String _titleFor(String? sessionId) {
-    final srv = settings.active;
-    final fallback =
-        srv == null ? 'DSH Agent' : _defaultTitle(srv);
-    if (sessionId == null) return fallback;
-    for (final s in state.sessions) {
-      if (s['sessionId'] == sessionId) {
-        return sessionTitleOf(s);
-      }
-    }
-    return fallback;
-  }
-
-  // ── 会话操作 ────────────────────────────────────
-
-  Future<void> switchSession(String sessionId) async {
-    if (sessionId == _backend?.activeSessionId && state.connected) return;
-    await settings.setSessionId(sessionId);
-    state.setSessionId(sessionId);
-    state.setSessionTitle(_titleFor(sessionId));
-    // 打开即已读：切换会话也要清掉它的未读标记
-    await _markCurrentSeen(settings.activeServerId ?? '', sessionId);
-    dispatcher.reset();
-    await _backend?.open(sessionId);
-  }
-
-  Future<void> createNewSession({String? cwd}) async {
-    final backend = _backend;
-    // 不再要求 state.connected：两种后端的 API 客户端都是构造即就绪的
-    // 纯 REST 能力，「授权成功但还没会话」时必须能从这里起步；
-    // 失败（连不上 / 后端拒绝）由下面统一显示。
-    if (backend == null) {
-      state.setConnectionError('后端未就绪：请先在设置里添加并选择一台 PC。');
-      return;
-    }
-    try {
-      final id = await backend.createSession(cwd: cwd);
-      await settings.setSessionId(id);
-      await _refreshSessions();
-      await switchSession(id);
-    } catch (e) {
-      state.setConnectionError('新建会话失败：$e');
-    }
-  }
-
-  // ── 发送 / 取消 ─────────────────────────────────
-
-  /// 当前后端实际连着的会话（权威值，而非设置里的期望值）
-  String get _activeSessionId => _backend?.activeSessionId ?? state.sessionId ?? '';
-
-  /// 发送消息。
-  ///
-  /// 先本地乐观上屏（用同一个 rpcId 与 durable 消息对账），
-  /// 再发请求；失败就把乐观气泡撤回并抛出，避免消息「假装发出去了」。
-  Future<void> send(String text) async {
-    final backend = _backend;
-    if (backend == null) throw StateError('未连接，消息已保留');
-    if (!state.connected) throw StateError('未连接，消息已保留');
-    final sessionId = _activeSessionId;
-    if (sessionId.isEmpty) throw StateError('没有可用会话');
-
-    final rpcId = _uuid.v4();
-    dispatcher.addLocalUserMessage(text, rpcId);
-    try {
-      await backend.sendPrompt(
-        sessionId: sessionId,
-        text: text,
-        requestId: rpcId,
-      );
-    } catch (e) {
-      dispatcher.failLocalUserMessage(rpcId);
-      rethrow;
-    }
-  }
-
-  /// 请求停止当前运行。
-  ///
-  /// 只发请求，**不修改本地 running 状态** —— Web 端要求以 Host 推来的
-  /// 权威状态为准（InputBar.tsx:283 附近）。失败向上抛，由界面提示。
-  Future<void> cancel() async {
-    final backend = _backend;
-    if (backend == null || !state.connected) {
-      throw StateError('未连接，无法停止');
-    }
-    final sessionId = _activeSessionId;
-    if (sessionId.isEmpty) {
-      throw StateError('没有可停止的会话');
-    }
-    await backend.cancel(sessionId);
-  }
-
-  // ── 审批 / 提问 ─────────────────────────────────
-
-  Future<bool> answerApproval(PendingApproval a, bool allow) async {
-    final sessionId = a.sessionId.isEmpty ? _activeSessionId : a.sessionId;
-    final ok = await _backend?.replyApproval(
-          sessionId: sessionId,
-          approvalId: a.approvalId,
-          allow: allow,
-        ) ??
-        false;
-    if (ok) {
-      state.removeApproval(a.approvalId);
-    }
-    return ok;
-  }
-
-  /// 提问应答（DSH 独有；opencode 表单 v1 不在范围）
-  Future<bool> submitQuestion(List<Map<String, dynamic>> answers) async {
-    final q = state.question;
-    if (q == null) return false;
-    final dsh = _backend is DshBackend ? _backend as DshBackend : null;
-    final ok = await dsh?.respondQuestion(q.rpcId, answers) ?? false;
-    if (ok) {
-      state.removeQuestion(q.rpcId);
-      if (state.questionDialogOpen) {
-        state.setQuestionDialogOpen(false);
-      }
-    }
-    return ok;
-  }
-
-  /// 放弃回答：显式通知 Host，避免请求一直挂着
-  Future<void> cancelQuestion() async {
-    final q = state.question;
-    if (q == null) return;
-    // 先从界面移除，不让用户对着已放弃的卡片继续操作
-    state.removeQuestion(q.rpcId);
-    if (state.questionDialogOpen) {
-      state.setQuestionDialogOpen(false);
-    }
-    final dsh = _backend is DshBackend ? _backend as DshBackend : null;
-    await dsh?.cancelQuestion(q.rpcId);
-  }
-
-  // ── opencode 表单（opencode 独有；DSH 无对应物） ──
-
-  /// 应答 opencode 表单。返回 true = 已提交或已被解决（UI 安静关闭）；
-  /// 答案不合法时上抛（message 来自服务端，可直显）。
-  Future<bool> submitForm(
-    String formId,
-    Map<String, dynamic> answer,
-  ) async {
-    final oc = _backend is OpenCodeBackend ? _backend as OpenCodeBackend : null;
-    if (oc == null) return false;
-    final ok = await oc.submitForm(formId, answer);
-    if (state.formDialogOpen) {
-      state.setFormDialogOpen(false);
-    }
-    return ok;
-  }
-
-  /// 放弃回答 opencode 表单：通知 Agent 后本地移除
-  Future<void> cancelForm(String formId) async {
-    // 先从界面移除，不让用户对着已放弃的表单继续操作
-    state.removeForm(formId);
-    if (state.formDialogOpen) {
-      state.setFormDialogOpen(false);
-    }
-    final oc = _backend is OpenCodeBackend ? _backend as OpenCodeBackend : null;
-    await oc?.cancelForm(formId, message: '用户放弃回答');
   }
 }

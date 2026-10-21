@@ -5,8 +5,16 @@ import 'package:uuid/uuid.dart';
 import '../models/agent_server.dart';
 import 'seen_store.dart';
 
-/// 持久化：多后端列表（DSH / opencode）、主题、声音、未读水位
-class SettingsService extends ChangeNotifier {
+part 'settings_servers.dart';
+part 'settings_preferences.dart';
+
+/// 库内共享宿主：声明设置服务各分片（mixin）依赖的字段，
+/// 本身不对外暴露。[SettingsService] 继承它并混入各职责分片。
+///
+/// 注意：分片用 `mixin X on _SettingsCore` 挂载，**不能**写成
+/// `on SettingsService` —— 那会让 mixin 与宿主类互为超接口，
+/// Dart 直接报 recursive_interface_inheritance。
+abstract class _SettingsCore extends ChangeNotifier {
   late SharedPreferences _prefs;
   final _uuid = const Uuid();
   final SeenStore _seen = SeenStore();
@@ -58,7 +66,15 @@ class SettingsService extends ChangeNotifier {
   String? customSoundPath(String name) => _customSounds[name];
   String seenKey(String serverId, String sessionId) =>
       AgentServer.sessionKey(serverId, sessionId);
+}
 
+/// 持久化：多后端列表（DSH / opencode）、主题、声音、未读水位
+///
+/// 按职责拆分（part 文件，同库共享私有作用域，对外 API 不变）：
+/// - settings_servers.dart：多后端列表的读写与当前后端选择
+/// - settings_preferences.dart：开关类偏好 + 声音 + 未读水位
+class SettingsService extends _SettingsCore
+    with SettingsServers, SettingsPreferences {
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     _keepScreenOn = _prefs.getBool('keepScreenOn') ?? true;
@@ -73,205 +89,5 @@ class SettingsService extends ChangeNotifier {
     _seen.load(_prefs);
     _loadServers();
     notifyListeners();
-  }
-
-  void _loadServers() {
-    final raw = _prefs.getString('serversJson');
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final list = jsonDecode(raw) as List<dynamic>;
-        _servers = list
-            .whereType<Map<String, dynamic>>()
-            .map(AgentServer.fromJson)
-            // opencode 隧道条目只有 url 没有 host，两者有其一即可
-            .where((s) => s.id.isNotEmpty && (s.host.isNotEmpty || (s.url ?? '').isNotEmpty))
-            .toList();
-      } catch (_) {
-        _servers = [];
-      }
-    }
-    _activeServerId = _prefs.getString('activeServerId');
-    if (_servers.isEmpty) {
-      final host = _prefs.getString('serverHost') ?? '192.168.10.171';
-      final port = _prefs.getInt('serverPort') ?? 3080;
-      final sid = _prefs.getString('sessionId');
-      final id = _uuid.v4();
-      _servers = [
-        AgentServer(
-            id: id, name: host, host: host, port: port, lastSessionId: sid),
-      ];
-      _activeServerId = id;
-      _seen.rekeyBareIds(id);
-      _seen.save(_prefs);
-      _saveServers();
-      return;
-    }
-    if (_activeServerId == null ||
-        !_servers.any((s) => s.id == _activeServerId)) {
-      _activeServerId = _servers.first.id;
-    }
-  }
-
-  Future<void> _saveServers() async {
-    await _prefs.setString(
-        'serversJson', jsonEncode(_servers.map((s) => s.toJson()).toList()));
-    if (_activeServerId != null) {
-      await _prefs.setString('activeServerId', _activeServerId!);
-    }
-    final a = active;
-    if (a == null) return;
-    // 旧镜像字段：opencode 隧道条目没有 host，别用空串把旧值盖掉
-    if (a.host.isNotEmpty) await _prefs.setString('serverHost', a.host);
-    await _prefs.setInt('serverPort', a.port);
-    if (a.lastSessionId != null) {
-      await _prefs.setString('sessionId', a.lastSessionId!);
-    }
-  }
-
-  Future<void> upsertServer(AgentServer server) async {
-    final i = _servers.indexWhere((s) => s.id == server.id);
-    if (i >= 0) {
-      _servers[i] = server;
-    } else {
-      _servers.add(server);
-    }
-    _activeServerId ??= server.id;
-    await _saveServers();
-    notifyListeners();
-  }
-
-  Future<void> removeServer(String id) async {
-    _servers.removeWhere((s) => s.id == id);
-    if (_activeServerId == id) {
-      _activeServerId = _servers.isEmpty ? null : _servers.first.id;
-    }
-    await _saveServers();
-    notifyListeners();
-  }
-
-  Future<void> setActiveServer(String id) async {
-    if (!_servers.any((s) => s.id == id)) return;
-    _activeServerId = id;
-    await _saveServers();
-    notifyListeners();
-  }
-
-  Future<void> patchServer(String id, AgentServer Function(AgentServer) fn) async {
-    final i = _servers.indexWhere((s) => s.id == id);
-    if (i < 0) return;
-    _servers[i] = fn(_servers[i]);
-    await _saveServers();
-    notifyListeners();
-  }
-
-  Future<void> setServer(String host, int port) async {
-    final a = active;
-    if (a == null) {
-      final id = _uuid.v4();
-      await upsertServer(
-          AgentServer(id: id, name: host, host: host, port: port));
-      await setActiveServer(id);
-      return;
-    }
-    await patchServer(
-        a.id, (s) => s.copyWith(host: host, port: port, name: s.name));
-  }
-
-  Future<void> setSessionId(String? id) async {
-    final a = active;
-    if (a == null) return;
-    await patchServer(
-      a.id,
-      (s) => s.copyWith(lastSessionId: id, clearSessionId: id == null),
-    );
-  }
-
-  Future<void> setKeepScreenOn(bool value) async {
-    _keepScreenOn = value;
-    await _prefs.setBool('keepScreenOn', value);
-    notifyListeners();
-  }
-
-  Future<void> setAutoReconnect(bool value) async {
-    _autoReconnect = value;
-    await _prefs.setBool('autoReconnect', value);
-    notifyListeners();
-  }
-
-  Future<void> setSoundEnabled(bool value) async {
-    _soundEnabled = value;
-    await _prefs.setBool('soundEnabled', value);
-    notifyListeners();
-  }
-
-  Future<void> setApprovalSound(bool value) async {
-    _approvalSound = value;
-    await _prefs.setBool('approvalSound', value);
-    notifyListeners();
-  }
-
-  Future<void> setCompletionSound(bool value) async {
-    _completionSound = value;
-    await _prefs.setBool('completionSound', value);
-    notifyListeners();
-  }
-
-  Future<void> setCustomSound(String name, String? path) async {
-    if (path == null || path.isEmpty) {
-      _customSounds.remove(name);
-      await _prefs.remove('customSound.$name');
-    } else {
-      _customSounds[name] = path;
-      await _prefs.setString('customSound.$name', path);
-    }
-    notifyListeners();
-  }
-
-  void _loadCustomSounds() {
-    for (final name in ['approval', 'question', 'done']) {
-      final p = _prefs.getString('customSound.$name');
-      if (p != null && p.isNotEmpty) _customSounds[name] = p;
-    }
-  }
-
-  Future<void> setWsExpanded(String id, bool expanded) async {
-    if (expanded) {
-      _expandedWs.add(id);
-    } else {
-      _expandedWs.remove(id);
-    }
-    await _prefs.setStringList('expandedWs', _expandedWs.toList());
-    notifyListeners();
-  }
-
-  Future<void> setUpdateAutoCheck(bool value) async {
-    _updateAutoCheck = value;
-    await _prefs.setBool('updateAutoCheck', value);
-    notifyListeners();
-  }
-
-  Future<void> setThemeMode(String key) async {
-    if (key != 'system' && key != 'light' && key != 'dark') return;
-    _themeModeKey = key;
-    await _prefs.setString('themeMode', key);
-    notifyListeners();
-  }
-
-  Future<void> rememberBaseline(String id, int at) async {
-    await _seen.rememberBaseline(_prefs, id, at);
-  }
-
-  Future<void> markSeen(String id) async {
-    final changed = await _seen.markSeen(_prefs, id);
-    if (changed) notifyListeners();
-  }
-
-  Future<void> markAllSeen(Iterable<String> ids) async {
-    final changed = await _seen.markAllSeen(_prefs, ids);
-    if (changed) notifyListeners();
-  }
-
-  Future<void> addUnviewed(String id) async {
-    if (await _seen.addUnviewed(_prefs, id)) notifyListeners();
   }
 }

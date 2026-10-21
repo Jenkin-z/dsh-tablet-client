@@ -19,14 +19,16 @@ import 'package:dsh_tablet_client/models/connection_health.dart';
 import 'package:dsh_tablet_client/services/session_state.dart';
 import 'package:dsh_tablet_client/theme/ios_theme.dart';
 
+import 'support/source_reader.dart';
+
 void main() {
   group('状态点只反映对话页（mux）的数据健康', () {
     late String main;
     late String manager;
 
     setUpAll(() {
-      main = File('lib/main.dart').readAsStringSync();
-      manager = File('lib/services/server_manager.dart').readAsStringSync();
+      main = readSourceWithParts('lib/main.dart');
+      manager = readSourceWithParts('lib/services/server_manager.dart');
     });
 
     test('main.dart 不再把轮询结果接到 setSessionsHealth', () {

@@ -10,6 +10,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/services/session_router.dart';
 
+import 'support/source_reader.dart';
+
 void main() {
   group('SessionRouter：切换请求是一次性的', () {
     test('request 递增 token，consume 只成功一次', () {
@@ -47,7 +49,7 @@ void main() {
     setUpAll(() {
       final f = File('lib/screens/console_screen.dart');
       expect(f.existsSync(), isTrue);
-      src = f.readAsStringSync();
+      src = readSourceWithParts('lib/screens/console_screen.dart');
     });
 
     test('设备卡点击回调里不出现 running.isNotEmpty 分支', () {
@@ -76,8 +78,8 @@ void main() {
     late String chat;
 
     setUpAll(() {
-      shell = File('lib/screens/main_shell.dart').readAsStringSync();
-      chat = File('lib/screens/chat_screen.dart').readAsStringSync();
+      shell = readSourceWithParts('lib/screens/main_shell.dart');
+      chat = readSourceWithParts('lib/screens/chat_screen.dart');
     });
 
     test('MainShell 跨机器时不再发路由请求', () {

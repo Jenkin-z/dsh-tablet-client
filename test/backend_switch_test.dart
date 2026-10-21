@@ -12,11 +12,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reader.dart';
+
 void main() {
   late String src;
 
   setUpAll(() {
-    src = File('lib/services/chat_controller.dart').readAsStringSync();
+    src = readSourceWithParts('lib/services/chat_controller.dart');
   });
 
   group('boot 换后端前清残留', () {

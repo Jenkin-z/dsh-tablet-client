@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
 import 'package:dsh_tablet_client/services/session_state.dart';
 
+import 'support/source_reader.dart';
+
 void main() {
   group('状态点：null 不能算健康', () {
     test('未验证过 → 连接中（橙），不是绿', () {
@@ -62,8 +64,8 @@ void main() {
     late String console;
 
     setUpAll(() {
-      ctrl = File('lib/services/chat_controller.dart').readAsStringSync();
-      console = File('lib/screens/console_screen.dart').readAsStringSync();
+      ctrl = readSourceWithParts('lib/services/chat_controller.dart');
+      console = readSourceWithParts('lib/screens/console_screen.dart');
     });
 
     test('markSeen 必须真的被调用（曾经只定义、无人调用）', () {
@@ -102,7 +104,7 @@ void main() {
     late String disp;
 
     setUpAll(() {
-      disp = File('lib/services/event_dispatcher.dart').readAsStringSync();
+      disp = readSourceWithParts('lib/services/event_dispatcher.dart');
     });
 
     test('onSessionStatus 里 running:true 必须检查 _turnClosed', () {

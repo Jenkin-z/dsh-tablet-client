@@ -9,10 +9,14 @@ import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../utils/constants.dart';
 import '../widgets/approval_card.dart';
+import '../widgets/chat_approval_list.dart';
+import '../widgets/chat_app_bar_actions.dart';
+import '../widgets/chat_app_bar_title.dart';
+import '../widgets/chat_disconnect_banner.dart';
+import '../widgets/chat_message_list.dart';
+import '../widgets/chat_question_prompt.dart';
 import '../widgets/changes_drawer.dart';
 import '../widgets/chat_input_bar.dart';
-import '../widgets/connection_status.dart';
-import '../widgets/message_bubble.dart';
 import '../widgets/model_sheet.dart';
 import '../widgets/open_code_form_host.dart';
 import '../widgets/question_sheet.dart';
@@ -259,58 +263,6 @@ class _ChatScreenState extends State<ChatScreen> {
     state.openEndDrawer();
   }
 
-  /// 断线横幅
-  Widget _disconnectBanner() {
-    final retrying = _ctrl.settings.autoReconnect;
-    return Material(
-      color: IosTheme.iosOrange.withValues(alpha: 0.16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: IosTheme.spaceL,
-          vertical: IosTheme.spaceS,
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.cloud_off_outlined,
-              size: 18,
-              color: IosTheme.iosOrange,
-            ),
-            const SizedBox(width: IosTheme.spaceS),
-            Expanded(
-              child: Text(
-                retrying ? '连接中断，正在重连…' : '已断开，自动重连已关闭',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 有待回答的问题时给一条入口（弹窗被关掉后还能再打开）
-  Widget _questionPrompt() {
-    final q = _ctrl.state.allQuestions
-        .where((x) => x.sessionId == _ctrl.state.sessionId)
-        .firstOrNull;
-    if (q == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        IosTheme.spaceL,
-        IosTheme.spaceXS,
-        IosTheme.spaceL,
-        0,
-      ),
-      child: IosButton(
-        label: '有 ${q.questions.length} 个问题待回答',
-        icon: Icons.help_outline,
-        filled: false,
-        onPressed: _maybeShowQuestionDialog,
-      ),
-    );
-  }
-
   /// 打开模型切换面板
   ///
   /// 面板返回选中的模型后回写状态，让标题栏立刻反映新值；
@@ -341,6 +293,23 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// 有待回答的问题时给一条入口（弹窗被关掉后还能再打开）
+  Widget _questionPrompt() {
+    return ChatQuestionPrompt(
+      ctrl: _ctrl,
+      onPressed: _maybeShowQuestionDialog,
+    );
+  }
+
+  /// AppBar 标题：连接状态点 + 当前会话名（保持原语义，未做任何改动）
+  Widget _appBarTitle() {
+    return ChatAppBarTitle(
+      title: _ctrl.settings.active == null
+          ? 'DSH Agent'
+          : _ctrl.state.sessionTitle,
+    );
+  }
+
   // ── 构建 ────────────────────────────────────────
 
   @override
@@ -353,58 +322,17 @@ class _ChatScreenState extends State<ChatScreen> {
         key: _scaffoldKey,
         backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
       appBar: AppBar(
-        title: Row(
-          children: [
-            const ConnectionStatus(showLabel: false),
-            const SizedBox(width: IosTheme.spaceS),
-            Expanded(
-              child: Text(
-                _ctrl.settings.active == null
-                    ? 'DSH Agent'
-                    : _ctrl.state.sessionTitle,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
+        title: _appBarTitle(),
         actions: [
-          // 停止：运行中或正在停止时才出现
-          if (_ctrl.state.agentRunning || _stopping)
-            IconButton(
-              icon: _stopping
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.stop_circle_outlined, size: 22),
-              tooltip: _stopping ? '正在停止' : '停止',
-              onPressed: _stopping ? null : _stop,
-            ),
-          // 变更入口常驻：没待办时也要能翻历史 diff。
-          // 之前写成 pendingCount > 0 才渲染，等于没变更就再也打不开。
-          IconButton(
-            icon: Badge(
-              label: Text('${_ctrl.state.changes.pendingCount}'),
-              isLabelVisible: _ctrl.state.changes.pendingCount > 0,
-              child: const Icon(Icons.difference_outlined, size: 22),
-            ),
-            tooltip: '变更',
-            onPressed: _ctrl.state.connected ? _openChanges : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 22),
-            tooltip: '重连',
-            onPressed: _ctrl.boot,
-          ),
-          IconButton(
-            icon: const Icon(Icons.tune, size: 22),
-            tooltip: '切换模型',
-            onPressed: _openModelSheet,
+          ChatAppBarActions(
+            agentRunning: _ctrl.state.agentRunning,
+            stopping: _stopping,
+            pendingCount: _ctrl.state.changes.pendingCount,
+            connected: _ctrl.state.connected,
+            onStop: _stop,
+            onOpenChanges: _openChanges,
+            onBoot: _ctrl.boot,
+            onOpenModelSheet: _openModelSheet,
           ),
         ],
       ),
@@ -430,7 +358,8 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           // 断线横幅：重构时丢了，导致断线后页面一句话都不说
-          if (!_ctrl.state.connected) _disconnectBanner(),
+          if (!_ctrl.state.connected)
+            ChatDisconnectBanner(retrying: _ctrl.settings.autoReconnect),
           if (_ctrl.state.activeTool != null)
             ToolStatusBar(toolName: _ctrl.state.activeTool!),
           _questionPrompt(),
@@ -440,14 +369,12 @@ class _ChatScreenState extends State<ChatScreen> {
             child: _buildMessages(),
           ),
           // 只展示当前会话的审批；其它会话的审批在侧栏以告警点提示（同 Web 端）
-          ..._ctrl.state.approvals
-              .where((a) => a.sessionId == sessionId)
-              .map((a) => ApprovalCard(
-                    approval: a,
-                    isForeignSession: false,
-                    onAnswer: (allow) => _answerApproval(a, allow),
-                    onViewSession: () => _switchSession(a.sessionId),
-                  )),
+          ChatApprovalList(
+            approvals: _ctrl.state.approvals,
+            sessionId: sessionId,
+            onAnswer: _answerApproval,
+            onViewSession: (a) => _switchSession(a.sessionId),
+          ),
           ChatInputBar(
             controller: _inputController,
             connected: _ctrl.state.connected,
@@ -462,27 +389,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessages() {
-    final messages = _ctrl.dispatcher.messages;
-    if (messages.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无消息',
-          style: TextStyle(
-            color: IosTheme.iosGray,
-            fontSize: 15,
-          ),
-        ),
-      );
-    }
-    return ListView.builder(
-      controller: _scrollController,
-      reverse: true,
-      padding: const EdgeInsets.symmetric(vertical: IosTheme.spaceS),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[messages.length - 1 - index];
-        return MessageBubble(message: message);
-      },
+    return ChatMessageList(
+      scrollController: _scrollController,
+      messages: _ctrl.dispatcher.messages,
     );
   }
 }

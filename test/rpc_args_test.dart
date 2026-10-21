@@ -17,6 +17,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source_reader.dart';
+
 const _apiPath = 'lib/services/dsh/dsh_api.dart';
 
 /// 取出某个 `rpc('method', {...})` 调用里 args 的最外层键名
@@ -53,7 +55,8 @@ void main() {
   setUpAll(() {
     final f = File(_apiPath);
     expect(f.existsSync(), isTrue, reason: '找不到 $_apiPath');
-    source = f.readAsStringSync();
+    // 契约代码已按职责拆到同库 part 文件，聚合读取才能覆盖到
+    source = readSourceWithParts(_apiPath);
   });
 
   group('session/list 必须用 _request', () {
@@ -111,7 +114,7 @@ void main() {
   group('session/follow 的 request 包装层', () {
     test('mux_stream.dart 的 follow 开窗必须含 request 层', () {
       // index.ts:401  follow(request: SessionFollowRequest, signal)
-      final src = File('lib/services/dsh/mux_stream.dart').readAsStringSync();
+      final src = readSourceWithParts('lib/services/dsh/mux_stream.dart');
       final idx = src.indexOf("'session/follow'");
       expect(idx >= 0, isTrue, reason: '找不到 session/follow 开窗代码');
       // 取该 open 调用附近的一段，确认 args → request → address 三层

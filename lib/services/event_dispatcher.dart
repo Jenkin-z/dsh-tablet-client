@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../models/pending.dart';
-import 'app_visibility.dart';
 import 'dsh/mux_history.dart';
 import 'model_catalog.dart';
 import 'notification_service.dart';

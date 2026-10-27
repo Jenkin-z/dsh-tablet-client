@@ -111,6 +111,9 @@ class ChangesDiffBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final lines = unifiedDiff(change.oldText, change.newText);
+    // 宽行不换行（换行会毁掉代码缩进和 diff 对齐），整块横向滚动；
+    // 行宽按 monospace 字符数估算，超出估算的极长行截断显示。
+    final rowWidth = _diffRowWidth(context, lines);
     return Container(
       margin: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -128,13 +131,45 @@ class ChangesDiffBlock extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final l in lines) _diffLine(l, isDark),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 内容比可视区窄时撑满可视区，色带不缩成一条
+          final width = rowWidth < constraints.maxWidth
+              ? constraints.maxWidth
+              : rowWidth;
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: width,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final l in lines) _diffLine(l, isDark),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
+  }
+
+  /// 估算 diff 单行渲染宽度：monospace 字符宽 × 最长行字符数。
+  /// Tab 按 4 个空格宽估算，再加 1 字符余量。
+  double _diffRowWidth(BuildContext context, List<DiffLine> lines) {
+    const style = TextStyle(fontFamily: 'monospace', fontSize: 12);
+    final tp = TextPainter(
+      text: const TextSpan(text: 'MMMMMMMMMM', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final charWidth = tp.maxIntrinsicWidth / 10;
+    tp.dispose();
+    var maxLen = 0;
+    for (final l in lines) {
+      final len = l.text.replaceAll('\t', '    ').length + 2; // +2 = 前缀
+      if (len > maxLen) maxLen = len;
+    }
+    return (maxLen + 1) * charWidth + IosTheme.spaceM * 2;
   }
 
   Widget _diffLine(DiffLine l, bool isDark) {
@@ -163,8 +198,12 @@ class ChangesDiffBlock extends StatelessWidget {
         horizontal: IosTheme.spaceM,
         vertical: IosTheme.spaceXXS,
       ),
+      // 宽行单行显示（横向滚动由外层块负责）；maxLines:1 防止估算偏差
+      // 导致意外折行破坏对齐
       child: SelectableText(
         '$prefix${l.text}',
+        maxLines: 1,
+        softWrap: false,
         style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 12,

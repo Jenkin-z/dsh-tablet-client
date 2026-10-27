@@ -193,6 +193,7 @@ class SessionMonitor {
         // 点击「X机器的会话已完成」能直接跳过去
         serverId: server.id,
         sessionId: session['sessionId'] as String? ?? '',
+        kind: NotifyKind.completion,
       );
     } catch (_) {}
     KeepAliveService.setStatus('${notice.title}: ${notice.body}');

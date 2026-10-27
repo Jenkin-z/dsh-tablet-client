@@ -9,7 +9,7 @@ import '../widgets/sound_settings.dart';
 
 /// 设置 › 通知与声音
 ///
-/// 提示音开关/试听/自定义铃声 + 系统通知自测。
+/// 通知分类开关 + 提示音开关/试听/自定义铃声 + 系统通知自测。
 class SettingsNotifyPage extends StatelessWidget {
   const SettingsNotifyPage({super.key});
 
@@ -19,6 +19,43 @@ class SettingsNotifyPage extends StatelessWidget {
     return SettingsSubPage(
       title: '通知与声音',
       children: [
+        SettingsGroup(
+          title: '通知类型',
+          children: [
+            _NotifySwitch(
+              icon: Icons.approval_outlined,
+              color: IosTheme.iosOrange,
+              title: '审批提醒',
+              subtitle: '工具调用需要确认时',
+              value: s.notifyApproval,
+              onChanged: s.setNotifyApproval,
+            ),
+            _NotifySwitch(
+              icon: Icons.help_outline,
+              color: IosTheme.iosBlue,
+              title: '提问提醒',
+              subtitle: 'Agent 向你提问时',
+              value: s.notifyQuestion,
+              onChanged: s.setNotifyQuestion,
+            ),
+            _NotifySwitch(
+              icon: Icons.edit_note_outlined,
+              color: IosTheme.iosPurple,
+              title: '表单提醒',
+              subtitle: 'opencode 表单待填写时',
+              value: s.notifyForm,
+              onChanged: s.setNotifyForm,
+            ),
+            _NotifySwitch(
+              icon: Icons.check_circle_outline,
+              color: IosTheme.iosGreen,
+              title: '完成提醒',
+              subtitle: '会话一轮跑完时',
+              value: s.notifyCompletion,
+              onChanged: s.setNotifyCompletion,
+            ),
+          ],
+        ),
         SettingsGroup(
           title: '提示音',
           children: [SoundTogglesSection(settings: s)],
@@ -60,6 +97,35 @@ class SettingsNotifyPage extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// 通知分类开关行（iOS 风格：彩色图标 + 标题/副标题 + Switch）
+class _NotifySwitch extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _NotifySwitch({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title: Text(title, style: const TextStyle(fontSize: 15)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: Switch(value: value, onChanged: onChanged),
     );
   }
 }

@@ -37,6 +37,32 @@ mixin SettingsPreferences on _SettingsCore {
     notifyListeners();
   }
 
+  // ── 通知分类开关（审批/提问/表单/完成） ──────────
+
+  Future<void> setNotifyApproval(bool value) async {
+    _notifyApproval = value;
+    await _prefs.setBool('notifyApproval', value);
+    notifyListeners();
+  }
+
+  Future<void> setNotifyQuestion(bool value) async {
+    _notifyQuestion = value;
+    await _prefs.setBool('notifyQuestion', value);
+    notifyListeners();
+  }
+
+  Future<void> setNotifyForm(bool value) async {
+    _notifyForm = value;
+    await _prefs.setBool('notifyForm', value);
+    notifyListeners();
+  }
+
+  Future<void> setNotifyCompletion(bool value) async {
+    _notifyCompletion = value;
+    await _prefs.setBool('notifyCompletion', value);
+    notifyListeners();
+  }
+
   Future<void> setCustomSound(String name, String? path) async {
     if (path == null || path.isEmpty) {
       _customSounds.remove(name);

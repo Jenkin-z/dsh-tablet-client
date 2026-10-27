@@ -26,6 +26,11 @@ abstract class _SettingsCore extends ChangeNotifier {
   bool _soundEnabled = true;
   bool _approvalSound = true;
   bool _completionSound = true;
+  // 通知分类开关（都默认开 = 历史行为）
+  bool _notifyApproval = true;
+  bool _notifyQuestion = true;
+  bool _notifyForm = true;
+  bool _notifyCompletion = true;
   Map<String, String> _customSounds = {};
   Set<String> _expandedWs = {};
   bool _updateAutoCheck = true;
@@ -57,6 +62,10 @@ abstract class _SettingsCore extends ChangeNotifier {
   bool get soundEnabled => _soundEnabled;
   bool get approvalSound => _approvalSound;
   bool get completionSound => _completionSound;
+  bool get notifyApproval => _notifyApproval;
+  bool get notifyQuestion => _notifyQuestion;
+  bool get notifyForm => _notifyForm;
+  bool get notifyCompletion => _notifyCompletion;
   Map<String, String> get customSounds => Map.unmodifiable(_customSounds);
   Set<String> get expandedWs => Set.unmodifiable(_expandedWs);
   bool get updateAutoCheck => _updateAutoCheck;
@@ -82,6 +91,10 @@ class SettingsService extends _SettingsCore
     _soundEnabled = _prefs.getBool('soundEnabled') ?? true;
     _approvalSound = _prefs.getBool('approvalSound') ?? true;
     _completionSound = _prefs.getBool('completionSound') ?? true;
+    _notifyApproval = _prefs.getBool('notifyApproval') ?? true;
+    _notifyQuestion = _prefs.getBool('notifyQuestion') ?? true;
+    _notifyForm = _prefs.getBool('notifyForm') ?? true;
+    _notifyCompletion = _prefs.getBool('notifyCompletion') ?? true;
     _loadCustomSounds();
     _expandedWs = (_prefs.getStringList('expandedWs') ?? []).toSet();
     _updateAutoCheck = _prefs.getBool('updateAutoCheck') ?? true;

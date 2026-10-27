@@ -3,11 +3,18 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'app_visibility.dart';
 
+/// 通知分类：设置页可按类开关（都默认开，保持历史行为）
+enum NotifyKind { approval, question, form, completion }
+
 /// 系统本地通知：弹出 heads-up 通知（有声音、震动、状态栏图标）
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static int _nextNotificationId = 0;
+
+  /// 分类开关过滤器（main.dart 注入，读 SettingsService 的实时值）。
+  /// null = 不过滤（全部照发）。测试通知不带 kind，永不过滤。
+  static bool Function(NotifyKind kind)? categoryFilter;
 
   /// 点击通知后的跳转回调（MainShell 注册）。
   ///
@@ -121,9 +128,11 @@ class NotificationService {
     String? serverId,
     String? sessionId,
     bool skipInForeground = false,
+    NotifyKind? kind,
   }) async {
     if (!_initialized) return;
     if (skipInForeground && AppVisibility.foreground) return;
+    if (kind != null && !(categoryFilter?.call(kind) ?? true)) return;
     final nid = id ?? nextId();
     final payload = _encodePayload(serverId, sessionId);
     final details = NotificationDetails(

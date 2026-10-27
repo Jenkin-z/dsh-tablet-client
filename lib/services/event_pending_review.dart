@@ -39,6 +39,7 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       serverId: serverIdProvider?.call(),
       sessionId: sessionId,
       skipInForeground: sessionId == state.sessionId,
+      kind: NotifyKind.approval,
     );
   }
 
@@ -65,6 +66,7 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       serverId: serverIdProvider?.call(),
       sessionId: sessionId,
       skipInForeground: sessionId == state.sessionId,
+      kind: NotifyKind.question,
     );
     // 非当前会话的提问不入弹窗：Web 端只在侧栏显示告警点，落选者留在队列里
     if (state.sessionId == sessionId) {
@@ -94,6 +96,7 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       serverId: serverIdProvider?.call(),
       sessionId: form.sessionId,
       skipInForeground: form.sessionId == state.sessionId,
+      kind: NotifyKind.form,
     );
     // 非当前会话的表单不入弹窗：只留在队列里，等用户切过去
     if (state.sessionId == form.sessionId) {

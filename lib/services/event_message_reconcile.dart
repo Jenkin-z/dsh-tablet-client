@@ -25,6 +25,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
   /// 发送失败：把乐观气泡撤掉
   void failLocalUserMessage(String rpcId) {
     if (_pendingEcho.remove(rpcId) == null) return;
+    _ackedEcho.remove(rpcId);
     final before = _messages.length;
     _messages.removeWhere((m) => m.id == rpcId && m.pending);
     if (_messages.length != before) _bumpMessages();
@@ -35,9 +36,13 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
   /// opencode 的 durable 消息不带 rpcId，无法按 id 对账；
   /// POST /prompt 返回 2xx 即服务端已收，此时就地确认即可
   /// （DSH 仍走 [_reconcileEcho] 的 durable 对账，两条路并存）。
+  ///
+  /// 注意：确认后**保留** _pendingEcho 记录（转入 _ackedEcho）——
+  /// durable 回显到达时还要靠它按内容把本地气泡对账掉，否则连发
+  /// 两条消息时，先到的 durable 回显会在列表尾部多出一条重复气泡。
   void confirmLocalUserMessage(String rpcId) {
     if (!_pendingEcho.containsKey(rpcId)) return;
-    _pendingEcho.remove(rpcId);
+    _ackedEcho.add(rpcId);
     final idx = _messages.indexWhere((m) => m.id == rpcId && m.pending);
     if (idx >= 0) {
       _messages[idx] = _messages[idx].copyWith(pending: false);
@@ -49,6 +54,7 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
   void _reconcileEcho(String? rpcId, String text) {
     if (rpcId == null || rpcId.isEmpty) return;
     if (_pendingEcho.remove(rpcId) == null) return;
+    _ackedEcho.remove(rpcId);
     // 本地乐观气泡按 id 命中；如果快照已经先装入了 durable 消息，
     // 则按 rpcId 命中那条，避免重复。
     final idx = _messages.indexWhere(
@@ -79,13 +85,27 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
         if (m.role == 'user' && m.rpcId != null && m.rpcId!.isNotEmpty)
           m.rpcId!,
     };
-    for (final entry in _pendingEcho.entries) {
+    // durable 用户消息可能不带 rpcId（opencode 常态），按内容兜底：
+    // 快照里已经有同内容的用户消息 = 服务端已落库，本地回显不必补回，
+    // 并把这条回显记录出表（否则每次装载都会重复走一遍这个判断）。
+    final loadedUserTexts = <String>{
+      for (final m in loaded)
+        if (m.role == 'user') m.content,
+    };
+    // 注意遍历的是 entries 快照：命中「已落库」分支会在循环内出表，
+    // 直接迭代 _pendingEcho.entries 会 Concurrent modification。
+    for (final entry in _pendingEcho.entries.toList()) {
       if (loadedRpcIds.contains(entry.key)) continue;
+      if (loadedUserTexts.contains(entry.value)) {
+        _pendingEcho.remove(entry.key);
+        _ackedEcho.remove(entry.key);
+        continue;
+      }
       _messages.add(ChatMessage(
         id: entry.key,
         role: 'user',
         content: entry.value,
-        pending: true,
+        pending: !_ackedEcho.contains(entry.key),
         rpcId: entry.key,
       ));
     }
@@ -147,6 +167,22 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
 
     final key = 'u$seq';
     if (seq.isNotEmpty && !_seenUserSeq.add(key)) return;
+
+    // 内容兜底对账：durable 消息不带 rpcId 时（opencode 常态），按内容
+    // 把**最老**一条本地回显就地转为 durable，不新增第二条。
+    // 只动最老一条：连发第二条时，先到的回显不会把还没回显的第二条
+    // 乐观气泡一并吞掉（「我的消息发出去没？」的 ghosting bug）。
+    // 遍历 entries 快照：_reconcileEcho 会在循环内出表。
+    if (_pendingEcho.isNotEmpty) {
+      for (final entry in _pendingEcho.entries.toList()) {
+        if (entry.value == text) {
+          _reconcileEcho(entry.key, text);
+          _turnClosed = false;
+          _bumpMessages();
+          return;
+        }
+      }
+    }
 
     // 内容去重：如果最后一条用户消息内容相同，跳过（旧数据没有 data.id 时兜底）
     if (_messages.isNotEmpty &&

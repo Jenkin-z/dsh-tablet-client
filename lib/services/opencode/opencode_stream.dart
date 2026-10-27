@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../utils/constants.dart';
+import '../reconnect_policy.dart';
 
 /// opencode SSE 订阅：`GET /api/event`（Basic 鉴权，Accept: text/event-stream）
 ///
@@ -41,7 +42,11 @@ class OpenCodeStream {
   StreamSubscription<List<int>>? _sub;
   Timer? _retryTimer;
   bool _disposed = false;
-  int _attempts = 0;
+
+  /// 重连退避（与 DSH mux 共用同一策略，含抖动）。
+  /// 计数只在收到首帧数据时归零 —— HTTP 200 不算稳定，
+  /// 否则「接受连接立刻挂」的半开服务端会让重试永远停在最快档。
+  final ReconnectBackoff _backoff = ReconnectBackoff();
   bool _authFailed = false;
 
   static const _user = 'opencode';
@@ -91,7 +96,6 @@ class OpenCodeStream {
         _scheduleRetry();
         return;
       }
-      _attempts = 0;
       onConnected?.call();
       _sub = resp.stream.listen(
         _onBytes,
@@ -145,21 +149,11 @@ class OpenCodeStream {
     _scheduleRetry();
   }
 
-  /// 指数退避：前 5 次 3s，之后 30s 起翻倍，上限 60s（与 DSH mux 同参）
+  /// 指数退避 + 抖动（策略与 DSH mux 同源，见 ReconnectBackoff）
   void _scheduleRetry() {
     if (_disposed || _authFailed) return;
     _cancelRetry();
-    _attempts++;
-    var secs = reconnectFastDelaySec;
-    if (_attempts > reconnectFastLimit) {
-      secs = reconnectSlowDelaySec;
-      for (var i = reconnectFastLimit + 1; i < _attempts; i++) {
-        if (secs >= reconnectMaxDelaySec) break;
-        secs *= 2;
-      }
-    }
-    if (secs > reconnectMaxDelaySec) secs = reconnectMaxDelaySec;
-    _retryTimer = Timer(Duration(seconds: secs), connect);
+    _retryTimer = Timer(_backoff.nextDelay(), connect);
   }
 
   // ── SSE 帧解析 ───────────────────────────────────
@@ -177,6 +171,8 @@ class OpenCodeStream {
   }
 
   void _onDecoded(String text) {
+    // 收到首帧数据 = 连接真正活了，重连计数才归零（见 _backoff 注释）
+    if (_backoff.attempts != 0) _backoff.markStable();
     // 手动切行：解码后的文本边界仍可能落在一行中间，只有见到 \n
     // 才算完整行，剩下的尾巴留在缓冲区等下一个 chunk。
     _textBuffer.write(text);

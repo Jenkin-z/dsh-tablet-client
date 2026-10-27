@@ -51,6 +51,9 @@ const int changesMaxCharsPerFile = 100000;
 const int diffMaxLines = 400;
 const int diffDpCellLimit = 4000000;
 
+/// 变更之间最多保留的上下文行数，更长的连续段折叠为省略号
+const int diffContextFold = 3;
+
 // ── 更新下载 ──────────────────────────────────────
 const Duration downloadConnectTimeout = Duration(seconds: 10);
 const Duration downloadRequestTimeout = Duration(seconds: 20);

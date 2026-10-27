@@ -6,6 +6,7 @@ import 'app_visibility.dart';
 import 'dsh/mux_history.dart';
 import 'model_catalog.dart';
 import 'notification_service.dart';
+import 'session_idle.dart';
 import 'session_state.dart';
 import 'sound_service.dart';
 
@@ -82,7 +83,16 @@ abstract class _EventDispatcherCore {
   /// Web 端的对账是双层的（ChatView.tsx:139-157）：durable 消息一出现就按
   /// rpcId 把本地回显滤掉；这里的做法等价 —— 收到带同一 rpcId 的 durable
   /// user/message 时撤掉本地那条。
+  ///
+  /// 生命周期：发出即入表；POST 成功确认后**不移除**（转入 [_ackedEcho]
+  /// 标记已确认）—— opencode 的 durable 消息不带 rpcId，后续要靠这张表
+  /// 按**内容**对账最老一条本地回显（见 event_message_reconcile 的
+  /// 内容兜底路径）。只有真正对账掉 / 发送失败才出表。
   final Map<String, String> _pendingEcho = {};
+
+  /// 已被服务端确认（POST 2xx）但还没被 durable 消息对账掉的回显。
+  /// 影响两件事：历史装载补回时不再显示 pending 态；内容兜底对账的候选。
+  final Set<String> _ackedEcho = {};
 
   /// 本轮是否已经收到 `turn/end`。
   ///
@@ -152,6 +162,7 @@ class EventDispatcher extends _EventDispatcherCore
     _seenUserSeq.clear();
     _seenUserIds.clear();
     _pendingEcho.clear();
+    _ackedEcho.clear();
     _currentAssistantId = null;
     _bumpMessages();
   }

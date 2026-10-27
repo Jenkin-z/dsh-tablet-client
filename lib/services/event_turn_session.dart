@@ -109,6 +109,22 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     // 队列更新，暂不处理
   }
 
+  /// stale-busy 自愈（与后端无关的兜底，供重连/历史装载后调用）
+  ///
+  /// 「只清不设」：仅当消息流尾部表明最后一轮确实已收尾
+  /// （见 [isSessionActuallyIdle]）才清掉运行态；判定不了就什么都不做。
+  /// 真在跑的会话由各自的权威通道恢复（opencode 的 active 轮询 /
+  /// DSH 的 control 推送），本方法永远不会把它们顶成「进行中」。
+  ///
+  /// DSH 的重连不接这条：journal 重放会补发 turn/end，control 推送
+  /// 受 [_turnClosed] 闸门约束，已有权威自愈路径。
+  void clearStaleBusyIfIdle(String sessionId) {
+    if (sessionId.isEmpty || sessionId != state.sessionId) return;
+    if (!isSessionActuallyIdle(_messages)) return;
+    state.setAgentRunning(false);
+    state.updateSessionStatus(sessionId, false);
+  }
+
   void onWorkspaceBaseline(List<String> archivedSessionIds) {
     state.setArchivedIds(Set.from(archivedSessionIds));
   }

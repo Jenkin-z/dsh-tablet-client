@@ -82,8 +82,6 @@ extension on MuxStream {
         onError: _onError,
         cancelOnError: false,
       );
-
-      _reconnectAttempts = 0;
     } catch (e) {
       debugPrint('MuxStream connect failed: $e');
       _scheduleReconnect();
@@ -101,12 +99,15 @@ extension on MuxStream {
     _clientId = null;
   }
 
-  // ── 重连（指数退避）────
+  // ── 重连（指数退避 + 抖动，策略见 ReconnectBackoff）────
+  //
+  // 注意：这里**不能**重置退避计数 —— connect() 每次重试都会走到这里，
+  // 在此归零等于退避永远停在最快档。计数只在 _onData 收到首帧时归零
+  //（markStable），半开连接才会真正拉开重试间隔。
 
   void _cancelReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _reconnectAttempts = 0;
   }
 
   void _scheduleReconnect() {
@@ -114,17 +115,7 @@ extension on MuxStream {
     _closeChannel();
     onReconnecting?.call();
 
-    _reconnectAttempts++;
-    final delay = _reconnectAttempts <= reconnectFastLimit
-        ? Duration(seconds: reconnectFastDelaySec)
-        : Duration(
-            seconds: min(
-              reconnectSlowDelaySec *
-                  pow(2, _reconnectAttempts - reconnectFastLimit).toInt(),
-              reconnectMaxDelaySec,
-            ),
-          );
-
+    final delay = _backoff.nextDelay();
     _reconnectTimer = Timer(delay, () {
       if (!_disposed) connect();
     });

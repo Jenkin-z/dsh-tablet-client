@@ -13,9 +13,15 @@ class DiffLine {
 
 /// oldText == null 表示新建文件：全部标绿
 /// 超限时降级为「全删+全加」，并在末尾注记
+/// [contextFold]：变更之间最多保留多少行上下文，更长的连续段折叠为
+/// 省略号（null = 用 [diffContextFold]；传 0 关闭折叠）。移动端/平板上
+/// 长上下文会把 diff 卡片撑到不可读，折叠是大文件可读性的关键。
 List<DiffLine> unifiedDiff(String? oldText, String newText,
-    {int maxLines = diffMaxLines}) {
-  List<String> newLines = newText.split('\n');
+    {int maxLines = diffMaxLines, int? contextFold}) {
+  final fold = contextFold ?? diffContextFold;
+  // CRLF 归一化：否则 Windows 文件的每一行都带着 \r，和 Unix 侧
+  // 对比时整文件误报为「全变」。
+  List<String> newLines = newText.split(RegExp(r'\r?\n'));
   if (oldText == null) {
     final out = newLines.take(maxLines).map((l) => DiffLine(DiffOp.add, l)).toList();
     if (newLines.length > maxLines) {
@@ -23,7 +29,7 @@ List<DiffLine> unifiedDiff(String? oldText, String newText,
     }
     return out;
   }
-  List<String> oldLines = oldText.split('\n');
+  List<String> oldLines = oldText.split(RegExp(r'\r?\n'));
 
   // 规模保护：DP 表上限约 400 万格
   if (oldLines.length * newLines.length > diffDpCellLimit) {
@@ -48,29 +54,54 @@ List<DiffLine> unifiedDiff(String? oldText, String newText,
           : (dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1]);
     }
   }
-  final out = <DiffLine>[];
+  final raw = <DiffLine>[];
   var i = 0, j = 0;
-  while (i < n && j < m && out.length < maxLines) {
+  while (i < n && j < m) {
     if (oldLines[i] == newLines[j]) {
-      out.add(DiffLine(DiffOp.same, oldLines[i]));
+      raw.add(DiffLine(DiffOp.same, oldLines[i]));
       i++;
       j++;
     } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      out.add(DiffLine(DiffOp.del, oldLines[i]));
+      raw.add(DiffLine(DiffOp.del, oldLines[i]));
       i++;
     } else {
-      out.add(DiffLine(DiffOp.add, newLines[j]));
+      raw.add(DiffLine(DiffOp.add, newLines[j]));
       j++;
     }
   }
-  while (i < n && out.length < maxLines) {
-    out.add(DiffLine(DiffOp.del, oldLines[i++]));
+  while (i < n) {
+    raw.add(DiffLine(DiffOp.del, oldLines[i++]));
   }
-  while (j < m && out.length < maxLines) {
-    out.add(DiffLine(DiffOp.add, newLines[j++]));
+  while (j < m) {
+    raw.add(DiffLine(DiffOp.add, newLines[j++]));
   }
-  if (i < n || j < m) {
+  final out = _foldContext(raw, fold);
+  if (out.length > maxLines) {
+    out.removeRange(maxLines, out.length);
     out.add(const DiffLine(DiffOp.same, '… 以下内容已截断'));
+  }
+  return out;
+}
+
+/// 折叠连续的上下文行：每段保留前 [fold] 行，超出部分压缩成一行省略号。
+/// fold <= 0 时原样返回。变更块本身（add/del）永不被折叠。
+List<DiffLine> _foldContext(List<DiffLine> lines, int fold) {
+  if (fold <= 0) return lines;
+  final out = <DiffLine>[];
+  var run = 0;
+  for (final l in lines) {
+    if (l.op != DiffOp.same) {
+      run = 0;
+      out.add(l);
+      continue;
+    }
+    run++;
+    if (run <= fold) {
+      out.add(l);
+    } else if (run == fold + 1) {
+      out.add(const DiffLine(DiffOp.same, '…'));
+    }
+    // run > fold+1：继续吞掉
   }
   return out;
 }

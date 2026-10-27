@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../utils/constants.dart';
+import '../reconnect_policy.dart';
 import 'mux_history.dart';
 
 export 'mux_history.dart';
@@ -51,7 +51,10 @@ class MuxStream {
 
   /// 开窗快照是否还有更早历史（配合 session/page 翻页）
   bool snapshotHasMore = false;
-  int _reconnectAttempts = 0;
+  /// 重连退避（与 opencode SSE 共用同一策略）。
+  /// 计数只在收到首帧业务数据时归零 —— 连接对象建好不算稳定，
+  /// 否则半开连接会让退避永远停在最快档。
+  final ReconnectBackoff _backoff = ReconnectBackoff();
   Timer? _reconnectTimer;
   int _revision = 0;
 
@@ -135,6 +138,7 @@ class MuxStream {
 
   void disconnect() {
     _cancelReconnect();
+    _backoff.reset();
     _closeChannel();
   }
 

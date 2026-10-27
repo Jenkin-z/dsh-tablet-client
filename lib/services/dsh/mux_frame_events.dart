@@ -4,6 +4,9 @@ part of 'mux_stream.dart';
 
 extension on MuxStream {
   void _onData(dynamic data) {
+    // 收到首帧业务数据 = 连接真正活了，重连计数才归零。
+    // （HTTP/WS 握手成功不算稳定，见 ReconnectBackoff 注释）
+    if (_backoff.attempts != 0) _backoff.markStable();
     if (data is! String) return;
     Map<String, dynamic> msg;
     try {

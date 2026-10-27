@@ -45,6 +45,9 @@ class OpenCodeReconciler {
       // 取**最近**一页：asc 会从会话开头取，长会话下重拉回来的还是旧消息
       final raw = await api.recentMessages(sid);
       ctx.dispatcher.onHistoryLoaded(OpenCodeMapper.messagesToChat(raw));
+      // 消息尾部表明已收尾、本地却还卡在进行中 → 清掉 stale busy
+      //（只清不设；真在跑的会话由随后的 pollActive 按权威数据恢复）
+      ctx.dispatcher.clearStaleBusyIfIdle(sid);
     } catch (_) {
       // 重连瞬间拉历史失败：等下一个对账周期，不清空已有消息
     }
@@ -93,14 +96,22 @@ class OpenCodeReconciler {
     } catch (_) {
       return;
     }
+    final sid = boundSessionId();
     for (final id in ids) {
-      if (_activeIds.add(id)) ctx.dispatcher.onSessionStatus(id, true);
+      // 绑定会话每轮都推：边沿检测只覆盖「新出现」的会话，断线前就
+      // 在活跃集合里的会话重连后不会再次触发，恢复不了 running。
+      if (id == sid || _activeIds.add(id)) {
+        ctx.dispatcher.onSessionStatus(id, true);
+      }
     }
     for (final id in _activeIds.toList()) {
       if (!ids.contains(id)) {
         _activeIds.remove(id);
         ctx.dispatcher.onSessionStatus(id, false);
       }
+    }
+    if (sid != null && sid.isNotEmpty && !ids.contains(sid) && !_activeIds.contains(sid)) {
+      ctx.dispatcher.onSessionStatus(sid, false);
     }
   }
 

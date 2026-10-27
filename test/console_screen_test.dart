@@ -8,7 +8,7 @@ import 'package:dsh_tablet_client/services/session_monitor.dart';
 import 'package:dsh_tablet_client/services/session_source.dart';
 import 'package:dsh_tablet_client/services/session_state.dart';
 import 'package:dsh_tablet_client/services/settings_service.dart';
-import 'package:dsh_tablet_client/widgets/console_devices.dart';
+import 'package:dsh_tablet_client/widgets/console_machine_card.dart';
 import 'package:dsh_tablet_client/widgets/console_recent_list.dart';
 import 'package:dsh_tablet_client/widgets/console_session_tile.dart';
 import 'package:flutter/material.dart';
@@ -39,7 +39,7 @@ void main() {
   testWidgets('控制台把窗口内会话跨机器混排，并保留两种点击手势', (tester) async {
     final h = await _pumpConsole(tester, const Size(800, 600));
 
-    expect(find.byType(ConsoleMachineChip), findsOneWidget);
+    expect(find.byType(ConsoleMachineCard), findsOneWidget);
     expect(find.byType(ConsoleSessionTile), findsOneWidget);
     expect(find.text('修复登录页'), findsOneWidget);
     expect(find.text('工作台'), findsNWidgets(2));
@@ -48,7 +48,7 @@ void main() {
     expect(h.openedServer, 'srv-a');
     expect(h.openedSession, 'sess-1');
 
-    await tester.tap(find.byType(ConsoleMachineChip));
+    await tester.tap(find.byType(ConsoleMachineCard));
     expect(h.switchedServer, 'srv-a');
 
     h.dispose();
@@ -57,7 +57,7 @@ void main() {
   testWidgets('横屏设备栏在左侧，竖屏回到顶部', (tester) async {
     final h = await _pumpConsole(tester, const Size(1280, 800));
 
-    final chip = find.byType(ConsoleMachineChip);
+    final chip = find.byType(ConsoleMachineCard);
     final recent = find.byType(ConsoleRecentList);
     expect(tester.getCenter(chip).dx, lessThan(tester.getCenter(recent).dx));
     expect(find.text('设备'), findsOneWidget);

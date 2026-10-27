@@ -144,6 +144,9 @@ class _ApprovalCardState extends State<ApprovalCard> {
   }
 
   Future<void> _answer(bool allow) async {
+    // 同帧双击防重：rebuild 前 _answering 已同步为 true，入口检查挡重入
+    //（重复应答会命中已解决的审批，弹出假的失败提示）
+    if (_answering) return;
     setState(() => _answering = true);
     try {
       await widget.onAnswer(allow);

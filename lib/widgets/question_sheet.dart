@@ -172,6 +172,9 @@ class _QuestionSheetState extends State<QuestionSheet> {
   }
 
   Future<void> _submit() async {
+    // 同帧双击防重：setState 还没 rebuild 时按钮仍指向本方法，
+    // 第二次 tap 会进来。字段在首个 await 前就已同步置位，入口检查即可挡住。
+    if (_submitting) return;
     // Web 端要求全部作答才可提交，未答则跳到第一处缺失
     final missing =
         widget.question.questions.where((q) => !_answered(q)).toList();

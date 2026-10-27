@@ -64,6 +64,9 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
       );
 
   Future<void> _submit() async {
+    // 同帧双击防重：字段在首个 await 前同步置位，入口检查挡住 rebuild
+    // 前的第二次 tap（否则重复提交会命中已解决的请求报错）
+    if (_submitting) return;
     if (_logic.missingRequired(widget.form)) {
       setState(() => _error = '有必填项未填写');
       return;

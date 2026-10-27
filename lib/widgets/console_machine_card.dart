@@ -23,9 +23,6 @@ class ConsoleMachineCard extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
-  /// 纵向栏里宽度是固定的，标题必须可收缩，不能把统计挤出边界
-  final bool fillWidth;
-
   /// 卡片固定高度：纵向条里多台机器高度一致
   static const double cardHeight = 62;
 
@@ -44,7 +41,6 @@ class ConsoleMachineCard extends StatelessWidget {
     required this.active,
     this.error,
     this.onTap,
-    this.fillWidth = false,
   });
 
   IconData get _icon {
@@ -117,16 +113,15 @@ class ConsoleMachineCard extends StatelessWidget {
                       child: Icon(_icon, size: 15, color: statusColor),
                     ),
                     const SizedBox(width: 6),
-                    // 纵向栏宽度有界 → Expanded 吃满；横向条宽度无界
-                    // → 只封顶不设下限，按内容收缩（短名不撑长卡片）
-                    fillWidth
-                        ? Expanded(child: _content(isDark))
-                        : ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxWidth: contentMaxWidth,
-                            ),
-                            child: _content(isDark),
-                          ),
+                    // 只封顶不设下限，按内容收缩（短名不撑长卡片）；
+                    // 横屏左侧竖栏也用同一约束，由外层 Align 左对齐，
+                    // 不再满宽拉伸——那是「卡片还是很长」的根源
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: contentMaxWidth,
+                      ),
+                      child: _content(isDark),
+                    ),
                   ],
                 ),
               ),
@@ -137,8 +132,7 @@ class ConsoleMachineCard extends StatelessWidget {
     );
   }
 
-  /// 名称 + 第二行统计/地址。整体 Expanded：横向条里卡片不再被
-  /// 内容撑得忽长忽短，统一吃满高度内的可用宽度。
+  /// 名称 + 第二行统计/地址，宽度按内容收缩（父级 ConstrainedBox 封顶）
   Widget _content(bool isDark) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,

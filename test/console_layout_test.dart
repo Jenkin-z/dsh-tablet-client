@@ -64,22 +64,24 @@ void main() {
     expect(w, greaterThanOrEqualTo(80), reason: '点击目标别缩得太离谱');
   });
 
-  testWidgets('纵向设备条长别名省略，统计不被挤出', (tester) async {
+  testWidgets('竖栏里的卡片不满宽拉伸，长别名在钳制宽度内省略', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
               width: 228,
-              child: ConsoleMachineCard(
-                title: '一台名字非常非常长的开发机器，长到应该被省略',
-                subtitle: 'a.local',
-                online: true,
-                needsAuth: false,
-                running: 12,
-                unviewed: 34,
-                active: true,
-                fillWidth: true,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConsoleMachineCard(
+                  title: '一台名字非常非常长的开发机器，长到应该被省略',
+                  subtitle: 'a.local',
+                  online: true,
+                  needsAuth: false,
+                  running: 12,
+                  unviewed: 34,
+                  active: true,
+                ),
               ),
             ),
           ),
@@ -88,8 +90,10 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(tester.getSize(find.byType(ConsoleMachineCard)).height,
-        ConsoleMachineCard.cardHeight);
+    final size = tester.getSize(find.byType(ConsoleMachineCard));
+    expect(size.height, ConsoleMachineCard.cardHeight);
+    expect(size.width, lessThan(228),
+        reason: '横屏竖栏卡片不再满宽拉伸——「卡片还是很长」的回归防线');
   });
 
   testWidgets('数量都为 0 时第二行退回显示地址', (tester) async {

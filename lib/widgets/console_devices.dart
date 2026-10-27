@@ -38,7 +38,9 @@ class ConsoleDevices extends StatelessWidget {
         ),
         itemCount: groups.length,
         separatorBuilder: (_, __) => const SizedBox(height: IosTheme.spaceS),
-        itemBuilder: _card,
+        // 左对齐：卡片按内容收缩，不满宽拉伸（ListView 默认会撑满）
+        itemBuilder: (context, i) =>
+            Align(alignment: Alignment.centerLeft, child: _card(context, i)),
       );
     }
 
@@ -69,7 +71,6 @@ class ConsoleDevices extends StatelessWidget {
       unviewed: group.unviewed.length,
       error: group.monitor.error,
       active: group.server.id == activeServerId,
-      fillWidth: axis == Axis.vertical,
       onTap: () => onTapDevice(group.server.id),
     );
   }

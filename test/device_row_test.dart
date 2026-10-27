@@ -61,8 +61,15 @@ void main() {
 
     test('机器条横向滚动，卡片高度固定 62', () {
       expect(devices.contains('scrollDirection: Axis.horizontal'), isTrue);
-      expect(card.contains('height: 62'), isTrue,
+      expect(card.contains('static const double cardHeight = 62'), isTrue,
           reason: '两行卡片高度固定，避免内容抖动');
+    });
+
+    test('卡片宽度只封顶不设下限，短名不撑长', () {
+      expect(card.contains('contentMaxWidth'), isTrue,
+          reason: '内容宽度用常量封顶');
+      expect(card.contains('minWidth: 132'), isFalse,
+          reason: '旧版 minWidth 132 会把「PC」这种短名也撑到近 200 宽');
     });
 
     test('第一行是别名，第二行数量为 0 时退回地址', () {

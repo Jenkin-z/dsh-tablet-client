@@ -282,6 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => ModelSheet(
         service: service,
+        modeService: _ctrl.modes,
         sessionId: sessionId,
         current: _ctrl.state.modelSelection,
       ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import '../utils/constants.dart';
 import '../utils/session_format.dart';
 import 'agent_backend.dart';
+import 'agent_mode.dart';
 import 'dsh/dsh_api.dart';
 import 'dsh/mux_stream.dart';
 import 'dsh/model_service.dart';
@@ -37,6 +38,10 @@ class DshBackend implements AgentBackend {
 
   @override
   ModelCatalogService? get models => _models;
+
+  // DSH 无「模式」概念（agentPreset 是另一回事），保持 null 隐藏入口
+  @override
+  AgentModeService? get modes => null;
 
   @override
   String? get activeSessionId => _muxSessionId ?? ctx.state.sessionId;

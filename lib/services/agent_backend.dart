@@ -1,4 +1,5 @@
 import '../models/agent_server.dart';
+import 'agent_mode.dart';
 import 'event_dispatcher.dart';
 import 'model_catalog.dart';
 import 'session_state.dart';
@@ -22,6 +23,9 @@ abstract class AgentBackend {
 
   /// 模型目录/切换；未实现为 null（界面据此隐藏入口）
   ModelCatalogService? get models;
+
+  /// 模式目录/切换（opencode 的 agent：build/plan…）；未实现为 null
+  AgentModeService? get modes => null;
 
   /// 当前实际连着的会话（权威值，而非设置里的期望值）
   String? get activeSessionId;

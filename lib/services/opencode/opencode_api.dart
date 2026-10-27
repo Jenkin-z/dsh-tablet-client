@@ -223,6 +223,22 @@ class OpenCodeApi {
     });
   }
 
+  // ── 模式（agent）────────────────────────────────
+
+  /// 模式列表（`data[]`，Agent.Info：id/name/description/mode）
+  Future<List<Map<String, dynamic>>> agentCatalog() async {
+    final data = await _get('/api/agent');
+    final items = data['data'];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : [];
+  }
+
+  /// 切换会话模式（语义 = 对后续轮次生效，与模型切换一致）
+  Future<void> switchAgent(String sessionId, String agentId) async {
+    await _post('/api/session/$sessionId/agent', body: {'agent': agentId});
+  }
+
   // ── 权限审批 ────────────────────────────────────
 
   /// 待审批列表（与 permission.asked 事件载荷同构）

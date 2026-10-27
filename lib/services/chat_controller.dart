@@ -5,6 +5,7 @@ import '../models/agent_server.dart';
 import '../models/pending.dart';
 import '../utils/session_format.dart';
 import 'agent_backend.dart';
+import 'agent_mode.dart';
 import 'dsh_backend.dart';
 import 'event_dispatcher.dart';
 import 'model_catalog.dart';
@@ -87,6 +88,9 @@ class ChatController extends _ChatControllerCore
 
   /// 模型目录 / 切换（未连接或后端不支持时为 null）
   ModelCatalogService? get models => _backend?.models;
+
+  /// 模式目录 / 切换（opencode 的 agent；未连接或不支持时为 null）
+  AgentModeService? get modes => _backend?.modes;
 
   @override
   void dispose() {

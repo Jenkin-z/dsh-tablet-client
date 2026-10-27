@@ -2,11 +2,13 @@ import 'dart:async';
 
 import '../utils/constants.dart';
 import 'agent_backend.dart';
+import 'agent_mode.dart';
 import 'model_catalog.dart';
 import 'opencode/opencode_api.dart';
 import 'opencode/opencode_form_api.dart';
 import 'opencode/opencode_mapper.dart';
 import 'opencode/opencode_model_service.dart';
+import 'opencode/opencode_mode_service.dart';
 import 'opencode/opencode_reconciler.dart';
 import 'opencode/opencode_stream.dart';
 import 'opencode_stream_wiring.dart';
@@ -26,6 +28,7 @@ class OpenCodeBackend implements AgentBackend {
 
   OpenCodeStream? _stream;
   OpenCodeModelService? _models;
+  OpenCodeModeService? _modes;
   OpenCodeWiring? _wiring;
   late final OpenCodeReconciler _reconciler;
 
@@ -52,6 +55,9 @@ class OpenCodeBackend implements AgentBackend {
   ModelCatalogService? get models => _models;
 
   @override
+  AgentModeService? get modes => _modes;
+
+  @override
   String? get activeSessionId => _boundSessionId ?? ctx.state.sessionId;
 
   // ── 打开 / 切换 ─────────────────────────────────
@@ -69,6 +75,7 @@ class OpenCodeBackend implements AgentBackend {
     ctx.state.setConnecting(true);
     ctx.state.setConnectionError(null);
     _models = OpenCodeModelService(api);
+    _modes = OpenCodeModeService(api);
 
     // 历史/信息/对账三路互不依赖，全部并行发起（隧道上每个串行等待都是一轮往返）；
     // pollF 的错误监听创建时就挂上（晚于完成会算未处理异常），最后原样上抛。

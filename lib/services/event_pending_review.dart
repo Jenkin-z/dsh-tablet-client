@@ -31,12 +31,14 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
     ));
     SoundService.approval();
     // 不传 id：多个审批同时到达时，各自保留一条通知，不能互相覆盖。
-    // 带 serverId/sessionId：点击通知可跳到对应会话。
+    // 前台看当前会话时应用内审批卡已覆盖，不再弹系统通知；
+    // 其他会话的审批即使在前台也照弹（否则无从得知）。
     NotificationService.show(
       title: '需要确认',
       body: '工具 $toolName 需要确认',
       serverId: serverIdProvider?.call(),
       sessionId: sessionId,
+      skipInForeground: sessionId == state.sessionId,
     );
   }
 
@@ -56,15 +58,14 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       questions: questions,
     ));
     SoundService.question();
-    // 切到后台时提问也要弹通知，否则最小化时看不到提问
-    if (!AppVisibility.foreground) {
-      NotificationService.show(
-        title: 'DSH 向你提问',
-        body: questions.map((q) => q['question']).whereType<String>().join(' '),
-        serverId: serverIdProvider?.call(),
-        sessionId: sessionId,
-      );
-    }
+    // 前台看当前会话时弹窗已覆盖；非当前会话即使在前台也弹通知
+    NotificationService.show(
+      title: 'DSH 向你提问',
+      body: questions.map((q) => q['question']).whereType<String>().join(' '),
+      serverId: serverIdProvider?.call(),
+      sessionId: sessionId,
+      skipInForeground: sessionId == state.sessionId,
+    );
     // 非当前会话的提问不入弹窗：Web 端只在侧栏显示告警点，落选者留在队列里
     if (state.sessionId == sessionId) {
       onShowQuestionDialog?.call();
@@ -86,14 +87,14 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
   void onForm(PendingForm form) {
     state.addForm(form);
     SoundService.question();
-    if (!AppVisibility.foreground) {
-      NotificationService.show(
-        title: 'opencode 表单待填写',
-        body: form.title,
-        serverId: serverIdProvider?.call(),
-        sessionId: form.sessionId,
-      );
-    }
+    // 与提问同规则：前台当前会话不弹（弹窗已覆盖），其他会话照弹
+    NotificationService.show(
+      title: 'opencode 表单待填写',
+      body: form.title,
+      serverId: serverIdProvider?.call(),
+      sessionId: form.sessionId,
+      skipInForeground: form.sessionId == state.sessionId,
+    );
     // 非当前会话的表单不入弹窗：只留在队列里，等用户切过去
     if (state.sessionId == form.sessionId) {
       onShowFormDialog?.call();

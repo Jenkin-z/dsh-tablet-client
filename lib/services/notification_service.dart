@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'app_visibility.dart';
+
 /// 系统本地通知：弹出 heads-up 通知（有声音、震动、状态栏图标）
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
@@ -109,14 +111,19 @@ class NotificationService {
   ///
   /// [serverId]/[sessionId] 写进点击 payload：用户点通知后由 MainShell
   /// 路由到对应机器的对应会话。任一为空则不带 payload（点击只打开 App）。
+  /// [skipInForeground]：前台时不弹（应用内已有对应展示）。是否跳过由
+  /// **调用方**判断——规则统一为「事件属于当前正查看的会话才跳过」，
+  /// 非当前会话的事件即使在前台也要弹（否则用户根本无从得知）。
   static Future<void> show({
     int? id,
     required String title,
     required String body,
     String? serverId,
     String? sessionId,
+    bool skipInForeground = false,
   }) async {
     if (!_initialized) return;
+    if (skipInForeground && AppVisibility.foreground) return;
     final nid = id ?? nextId();
     final payload = _encodePayload(serverId, sessionId);
     final details = NotificationDetails(

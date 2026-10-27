@@ -203,7 +203,6 @@ class ChangesDiffBlock extends StatelessWidget {
       child: SelectableText(
         '$prefix${l.text}',
         maxLines: 1,
-        softWrap: false,
         style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 12,

@@ -26,6 +26,11 @@ abstract class _EventDispatcherCore {
   /// 运行状态推送的外部观察者（如 ServerManager 的实时刷新）
   void Function(String sessionId, bool running)? get onSessionStatusExternal;
 
+  /// 通知 payload 用的 serverId 提供者（点击通知跳转会话）。
+  /// dispatcher 只服务当前 active 的那台机器（ChatScreen 按
+  /// activeServerId 重建），通知时刻的 activeServerId 就是归属机器。
+  String? Function()? get serverIdProvider;
+
   void Function(String sessionId, String message)? get onSessionError;
   VoidCallback? get onScrollToBottom;
   VoidCallback? get onJumpToLatest;
@@ -124,6 +129,8 @@ class EventDispatcher extends _EventDispatcherCore
   @override
   void Function(String sessionId, bool running)? onSessionStatusExternal;
   @override
+  String? Function()? serverIdProvider;
+  @override
   void Function(String sessionId, String message)? onSessionError;
   @override
   VoidCallback? onScrollToBottom;
@@ -143,6 +150,7 @@ class EventDispatcher extends _EventDispatcherCore
   EventDispatcher({
     required SessionState state,
     this.onSessionStatusExternal,
+    this.serverIdProvider,
     this.onSessionError,
     this.onScrollToBottom,
     this.onJumpToLatest,

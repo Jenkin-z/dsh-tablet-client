@@ -31,9 +31,12 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
     ));
     SoundService.approval();
     // 不传 id：多个审批同时到达时，各自保留一条通知，不能互相覆盖。
+    // 带 serverId/sessionId：点击通知可跳到对应会话。
     NotificationService.show(
       title: '需要确认',
       body: '工具 $toolName 需要确认',
+      serverId: serverIdProvider?.call(),
+      sessionId: sessionId,
     );
   }
 
@@ -58,6 +61,8 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       NotificationService.show(
         title: 'DSH 向你提问',
         body: questions.map((q) => q['question']).whereType<String>().join(' '),
+        serverId: serverIdProvider?.call(),
+        sessionId: sessionId,
       );
     }
     // 非当前会话的提问不入弹窗：Web 端只在侧栏显示告警点，落选者留在队列里
@@ -85,6 +90,8 @@ mixin EventDispatcherPendingReview on _EventDispatcherCore {
       NotificationService.show(
         title: 'opencode 表单待填写',
         body: form.title,
+        serverId: serverIdProvider?.call(),
+        sessionId: form.sessionId,
       );
     }
     // 非当前会话的表单不入弹窗：只留在队列里，等用户切过去

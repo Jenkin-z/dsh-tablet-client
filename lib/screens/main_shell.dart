@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_visibility.dart';
+import '../services/notification_service.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
@@ -26,9 +27,22 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 点通知跳对应机器的对应会话（复用控制台「打开会话」同一条路径）。
+    // 机器已被删除的旧通知：只打开 App 不跳转，避免落到幽灵机器上。
+    NotificationService.onTap = (serverId, sessionId) {
+      if (!mounted) return;
+      final s = Provider.of<SettingsService>(context, listen: false);
+      if (!s.servers.any((e) => e.id == serverId)) return;
+      _openSession(serverId, sessionId);
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_updateChecked || !mounted) return;
       _updateChecked = true;
+      // 冷启动若由点通知拉起：settings 已在 main() 里加载完，直接路由
+      final launch = NotificationService.consumeLaunch();
+      if (launch != null) {
+        _openSession(launch.$1, launch.$2);
+      }
       final s = Provider.of<SettingsService>(context, listen: false);
       if (s.updateAutoCheck) {
         UpdateFlow.checkAndPrompt(
@@ -56,6 +70,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    NotificationService.onTap = null;
     _manager?.stop();
     super.dispose();
   }

@@ -189,6 +189,10 @@ class SessionMonitor {
         id: NotificationService.nextId(),
         title: notice.title,
         body: notice.body,
+        // monitor 覆盖所有机器（含非当前机器），server.id 是权威归属：
+        // 点击「X机器的会话已完成」能直接跳过去
+        serverId: server.id,
+        sessionId: session['sessionId'] as String? ?? '',
       );
     } catch (_) {}
     KeepAliveService.setStatus('${notice.title}: ${notice.body}');

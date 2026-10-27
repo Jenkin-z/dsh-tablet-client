@@ -52,6 +52,7 @@ abstract class _ChatControllerCore extends ChangeNotifier {
     // dispatcher 与 state 共用同一实例，避免状态分裂
     dispatcher = EventDispatcher(
       state: state,
+      serverIdProvider: () => settings.activeServerId,
       onSessionStatusExternal: (sessionId, running) {
         // 权威中枢先落状态，再通知 ServerManager 实时刷新列表
         manager?.applySessionStatus(

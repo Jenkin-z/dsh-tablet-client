@@ -6,6 +6,7 @@ import '../models/pending.dart';
 import '../utils/session_format.dart';
 import 'agent_backend.dart';
 import 'agent_mode.dart';
+import 'backend_factory.dart';
 import 'dsh_backend.dart';
 import 'event_dispatcher.dart';
 import 'model_catalog.dart';

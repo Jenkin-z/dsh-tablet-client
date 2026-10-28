@@ -46,6 +46,9 @@ class DshBackend implements AgentBackend {
   @override
   String? get activeSessionId => _muxSessionId ?? ctx.state.sessionId;
 
+  @override
+  Future<bool> testConnection() => _api.testConnection();
+
   // ── 打开 / 重连 ─────────────────────────────────
 
   @override

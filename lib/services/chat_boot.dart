@@ -104,10 +104,8 @@ mixin ChatBoot on _ChatControllerCore {
       server: srv,
       onRefreshSessions: _refreshSessions,
     );
-    return switch (srv.kind) {
-      AgentKind.dsh => DshBackend(ctx),
-      AgentKind.opencode => OpenCodeBackend(ctx),
-    };
+    // kind switch 收口在 backend_factory（全仓库唯一）
+    return createBackend(srv, ctx);
   }
 
   /// 打开一个会话 = 读过它。

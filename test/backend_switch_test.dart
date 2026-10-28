@@ -41,8 +41,19 @@ void main() {
 
   group('按 kind 分派后端', () {
     test('DSH / opencode 各走各的 AgentBackend 实现', () {
-      expect(src.contains('AgentKind.dsh => DshBackend(ctx)'), isTrue);
-      expect(src.contains('AgentKind.opencode => OpenCodeBackend(ctx)'), isTrue);
+      // kind switch 收口在 backend_factory（全仓库唯一的实现类装配点）
+      final factorySrc =
+          File('lib/services/backend_factory.dart').readAsStringSync();
+      expect(factorySrc.contains('AgentKind.dsh => DshBackend(ctx)'), isTrue);
+      expect(
+          factorySrc.contains('AgentKind.opencode => OpenCodeBackend(ctx)'),
+          isTrue);
+      // 设置页等外部入口也不得绕过工厂直连实现类
+      final chatSrc = readSourceWithParts('lib/services/chat_controller.dart');
+      expect(chatSrc.contains('=> DshBackend(ctx)'), isFalse,
+          reason: 'chat_controller 不应自带 kind switch（已收口 backend_factory）');
+      expect(chatSrc.contains('=> OpenCodeBackend(ctx)'), isFalse,
+          reason: 'chat_controller 不应自带 kind switch（已收口 backend_factory）');
     });
 
     test('提问应答只转给 DshBackend（opencode 表单 v1 不在范围）', () {

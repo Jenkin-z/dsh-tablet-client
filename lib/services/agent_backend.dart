@@ -33,6 +33,9 @@ abstract class AgentBackend {
   /// 连接事件流并进入该会话
   Future<void> open(String? sessionId);
 
+  /// 连接测试（免连接纯 REST；open 与否都能调）
+  Future<bool> testConnection();
+
   /// 归一化会话 map 列表（子会话已在数据入口过滤）
   Future<List<Map<String, dynamic>>> listSessions();
 

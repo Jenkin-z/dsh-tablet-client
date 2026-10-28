@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/agent_server.dart';
-import '../services/dsh/dsh_api.dart';
-import '../services/opencode/opencode_api.dart';
+import '../services/backend_ops.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../widgets/settings_entry.dart';
@@ -17,17 +15,8 @@ class SettingsSessionPage extends StatelessWidget {
   Future<void> _newSession(BuildContext context) async {
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final active = s.active;
-      if (active == null) return;
-      final id = switch (active.kind) {
-        AgentKind.dsh =>
-          await DshApi(baseUrl: s.serverUrl, cookie: active.cookie)
-              .createSession(),
-        AgentKind.opencode =>
-          await OpenCodeApi(baseUrl: active.httpUrl, password: active.token)
-              .createSession()
-              .then((info) => info['id'] as String? ?? ''),
-      };
+      // 新建会话走转接层（BackendOps 临时装配 backend，不直连具体 API 类）
+      final id = await BackendOps(s).createSession();
       if (id.isEmpty) throw Exception('响应里没有会话 id');
       await s.setSessionId(id);
       if (!context.mounted) return;

@@ -60,6 +60,9 @@ class OpenCodeBackend implements AgentBackend {
   @override
   String? get activeSessionId => _boundSessionId ?? ctx.state.sessionId;
 
+  @override
+  Future<bool> testConnection() => api.testConnection();
+
   // ── 打开 / 切换 ─────────────────────────────────
 
   @override

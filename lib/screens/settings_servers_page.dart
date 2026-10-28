@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/agent_server.dart';
-import '../services/dsh/dsh_api.dart';
-import '../services/opencode/opencode_api.dart';
+import '../services/backend_ops.dart';
 import '../services/settings_service.dart';
 import '../theme/ios_theme.dart';
 import '../widgets/server_list_card.dart';
@@ -30,19 +28,8 @@ class _SettingsServersPageState extends State<SettingsServersPage> {
     });
     try {
       final s = Provider.of<SettingsService>(context, listen: false);
-      final active = s.active;
-      final ok = active == null
-          ? false
-          : switch (active.kind) {
-              AgentKind.dsh => await DshApi(
-                  baseUrl: s.serverUrl,
-                  cookie: active.cookie,
-                ).testConnection(),
-              AgentKind.opencode => await OpenCodeApi(
-                  baseUrl: active.httpUrl,
-                  password: active.token,
-                ).testConnection(),
-            };
+      // 连接测试也走转接层（BackendOps 临时装配 backend，不直连具体 API 类）
+      final ok = await BackendOps(s).testConnection();
       if (!mounted) return;
       setState(() => _testResult = ok ? '连接正常 ✓' : '连接失败 ✗');
     } catch (e) {

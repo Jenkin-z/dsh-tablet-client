@@ -17,8 +17,9 @@ class _Recorder {
   final finals = <String>[];
   final turnStarts = <String>[];
   final turnEnds = <String>[];
+  final failedExecutions = <Map<String, String?>>[];
   final toolCalls = <Map<String, String?>>[];
-  var toolResults = 0;
+  final toolResults = <bool>[];
   final approvals = <Map<String, dynamic>>[];
   final resolved = <String>[];
   final userEchoes = <String>[];
@@ -31,8 +32,10 @@ class _Recorder {
     onAssistantFinal: finals.add,
     onTurnStart: turnStarts.add,
     onTurnEnd: turnEnds.add,
+    onExecutionFailed: (sid, message) =>
+        failedExecutions.add({'sessionId': sid, 'message': message}),
     onToolCall: (name, args) => toolCalls.add({'name': name, 'args': args}),
-    onToolResult: () => toolResults++,
+    onToolResult: toolResults.add,
     onApproval: ({
       required String sessionId,
       required String approvalId,
@@ -90,11 +93,41 @@ void main() {
       for (final t in const [
         'session.execution.succeeded',
         'session.execution.interrupted',
-        'session.execution.failed',
       ]) {
         map(t, {'sessionID': 's1'});
       }
-      expect(rec.turnEnds, ['s1', 's1', 's1']);
+      expect(rec.turnEnds, ['s1', 's1']);
+      // failed 也要收尾（错误之外，回合生命周期不能悬）
+      map('session.execution.failed', {'sessionID': 's1'});
+      expect(rec.turnEnds, hasLength(3));
+    });
+
+    test('execution.failed / session.error → onExecutionFailed（先于收尾）', () {
+      // Session.StructuredError 形状：data.error.message
+      map('session.execution.failed', {
+        'sessionID': 's1',
+        'error': {'type': 'ProviderAuthError', 'message': 'API key 无效'},
+      });
+      expect(rec.failedExecutions.single, {'sessionId': 's1', 'message': 'API key 无效'});
+      // 收尾仍要发生
+      expect(rec.turnEnds, ['s1']);
+    });
+
+    test('session.error（opencode 标准错误事件）同样报错并收尾', () {
+      map('session.error', {
+        'sessionID': 's1',
+        'error': {'type': 'provider.invalid-request', 'message': 'Invalid model'},
+      });
+      expect(rec.failedExecutions.single, {'sessionId': 's1', 'message': 'Invalid model'});
+      expect(rec.turnEnds, ['s1']);
+    });
+
+    test('execution.failed 无 error 载荷时 message 为 null（上层给兜底文案）', () {
+      map('session.execution.failed', {'sessionID': 's1'});
+      expect(rec.failedExecutions.single['message'], isNull);
+      // error 为字符串的兼容形状
+      map('session.execution.failed', {'sessionID': 's1', 'error': 'boom'});
+      expect(rec.failedExecutions.last['message'], 'boom');
     });
 
     test('sessionID 缺失的 execution 事件丢弃', () {
@@ -119,7 +152,7 @@ void main() {
 
       map('session.tool.success', {'sessionID': 's1'});
       map('session.tool.failed', {'sessionID': 's1'});
-      expect(rec.toolResults, 2);
+      expect(rec.toolResults, [false, true]);
     });
 
     test('permission.asked → 待审批（含资源列表与 message）', () {
@@ -235,6 +268,46 @@ void main() {
         'not-a-map',
       ];
       expect(OpenCodeMapper.messagesToChat(raw), isEmpty);
+    });
+
+    test('回合失败：assistant/idle 顶层 error → system 气泡（连续重复只留一条）', () {
+      final err = {
+        'type': 'provider.invalid-request',
+        'message': 'Upstream error: Invalid model',
+      };
+      final raw = <dynamic>[
+        {'type': 'user', 'id': 'm1', 'text': '帮我抓这个页面'},
+        {
+          'type': 'assistant',
+          'id': 'm2',
+          'content': <dynamic>[],
+          'error': err,
+        },
+        {'type': 'idle', 'id': 'm3', 'error': err},
+      ];
+      final msgs = OpenCodeMapper.messagesToChat(raw);
+      expect(msgs, hasLength(2));
+      expect(msgs[0].role, 'user');
+      expect(msgs[1].role, 'system');
+      expect(msgs[1].content, 'Upstream error: Invalid model');
+    });
+
+    test('带错误的 assistant 仍有文本时两者都保留（错误气泡 + 回答）', () {
+      final raw = <dynamic>[
+        {
+          'type': 'assistant',
+          'id': 'm1',
+          'content': [
+            {'type': 'text', 'text': '半截回答'},
+          ],
+          'error': {'type': 'x', 'message': '出错了'},
+        },
+      ];
+      final msgs = OpenCodeMapper.messagesToChat(raw);
+      expect(msgs, hasLength(2));
+      expect(msgs[0].role, 'system');
+      expect(msgs[1].role, 'assistant');
+      expect(msgs[1].content, '半截回答');
     });
 
     test('顺序由调用方保证（asc），mapper 不做重排', () {

@@ -16,7 +16,7 @@ import '../widgets/chat_disconnect_banner.dart';
 import '../widgets/chat_message_list.dart';
 import '../widgets/chat_question_prompt.dart';
 import '../widgets/changes_drawer.dart';
-import '../widgets/chat_input_bar.dart';
+import '../widgets/chat_input_section.dart';
 import '../widgets/model_sheet.dart';
 import '../widgets/open_code_form_host.dart';
 import '../widgets/question_sheet.dart';
@@ -376,10 +376,11 @@ class _ChatScreenState extends State<ChatScreen> {
             onAnswer: _answerApproval,
             onViewSession: (a) => _switchSession(a.sessionId),
           ),
-          ChatInputBar(
+          ChatInputSection(
             controller: _inputController,
             connected: _ctrl.state.connected,
-            running: _ctrl.state.agentRunning,
+            busy: _ctrl.state.turn.busy,
+            queue: _ctrl.state.queueFor(sessionId),
             onSend: _send,
             onStop: _stop,
           ),
@@ -393,6 +394,8 @@ class _ChatScreenState extends State<ChatScreen> {
     return ChatMessageList(
       scrollController: _scrollController,
       messages: _ctrl.dispatcher.messages,
+      processEntries: _ctrl.dispatcher.processEntries,
+      processCollapsed: _ctrl.dispatcher.processCollapsed,
     );
   }
 }

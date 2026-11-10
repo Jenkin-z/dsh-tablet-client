@@ -31,7 +31,11 @@ mixin ChatMessaging on _ChatControllerCore {
 
     final rpcId = _uuid.v4();
     dispatcher.addLocalUserMessage(text, rpcId);
-    state.setAgentRunning(true);
+    // 乐观运行态桥接：置 sending 相位（TurnSupervisor 唯一写入口）。
+    // 点了发送到 turn/start（DSH）/ execution.started（opencode）之间的
+    // 空窗里按钮先进入「进行中」，否则那一下 RTT 用户看到的是假空闲。
+    // 方向安全：权威侧随时可以纠正 —— running=false 的推送不受闸门拦截。
+    supervisor.beginLocalSend();
     try {
       await backend.sendPrompt(
         sessionId: sessionId,
@@ -39,7 +43,7 @@ mixin ChatMessaging on _ChatControllerCore {
         requestId: rpcId,
       );
     } catch (e) {
-      state.setAgentRunning(false);
+      supervisor.failLocalSend();
       dispatcher.failLocalUserMessage(rpcId);
       rethrow;
     }

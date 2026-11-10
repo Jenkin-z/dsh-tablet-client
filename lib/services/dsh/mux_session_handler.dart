@@ -39,12 +39,15 @@ void _handleSessionEvent(
       break;
     case 'assistant/message':
       // 定稿：整条替换，并结束打字机态（避免与 assistant-stream 双份渲染）。
-      // 带 tool-call 的消息是过程步骤，dispatcher 会丢弃当前过程气泡。
+      // 带 tool-call 的消息是过程步骤：文本整段交给 dispatcher 固化进
+      // 过程步骤卡（Web 端折叠进过程区的做法），不再丢弃。
       if (!isAppendSurface(event)) break;
       final message = data['message'];
       final content = message is Map ? message['content'] : null;
-      final text = extractAssistantReply(message);
       final hasToolCall = hasToolCallBlock(content);
+      final text = hasToolCall
+          ? extractAssistantText(message)
+          : extractAssistantReply(message);
       final interrupted = data['interrupted'] == true;
       self.onAssistantFinal
           ?.call(text, interrupted, hasToolCall: hasToolCall);
@@ -65,7 +68,7 @@ void _handleSessionEvent(
       );
       break;
     case 'tool/result':
-      self.onToolResult?.call();
+      self.onToolResult?.call(toolResultFailed(data));
       break;
     case 'turn/end':
       final turnError = _extractTurnError(data);

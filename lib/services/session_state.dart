@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import '../models/connection_health.dart';
 import '../models/pending.dart';
+import '../models/queued_message.dart';
+import '../models/turn_state.dart';
 import 'changes_tracker.dart';
 import 'model_catalog.dart';
 
 part 'session_state_pending.dart';
+part 'session_state_queue.dart';
 part 'session_state_sessions.dart';
 
 /// 库内共享宿主：声明状态中枢各分片（mixin）依赖的字段与方法，
@@ -92,19 +95,27 @@ abstract class _SessionStateCore extends ChangeNotifier {
     return ConnectionHealth.healthy;
   }
 
-  // ── 会话状态 ────────────────────────────────────
+  // ── 会话状态（轮次状态机）──────────────────────
+  //
+  // 轮次相关字段全部收敛到 [TurnState]，唯一写入口是 TurnSupervisor
+  // （经 applyTurnState 原子应用）。这里只暴露只读投影，供 UI/测试读取。
 
   String? _sessionId;
   String _sessionTitle = 'DSH Agent';
-  bool _agentRunning = false;
-  bool _assistantStreaming = false;
+  TurnState _turn = TurnState.initial();
   DateTime? _lastTurnEnd;
   DateTime? _lastActivity;
 
   String? get sessionId => _sessionId;
   String get sessionTitle => _sessionTitle;
-  bool get agentRunning => _agentRunning;
-  bool get assistantStreaming => _assistantStreaming;
+
+  /// 轮次状态快照（含 generation / phase / streaming / activeTool）
+  TurnState get turn => _turn;
+
+  /// 忙 = 发送中 / 排队中 / 运行中（停止按钮与 AppBar 依据它）
+  bool get agentRunning => _turn.busy;
+  bool get assistantStreaming => _turn.streaming;
+  String? get activeTool => _turn.activeTool;
   DateTime? get lastTurnEnd => _lastTurnEnd;
   DateTime? get lastActivity => _lastActivity;
 
@@ -139,16 +150,13 @@ abstract class _SessionStateCore extends ChangeNotifier {
     return a.sameAs(b);
   }
 
-  void setAgentRunning(bool value) {
-    if (_agentRunning == value) return;
-    _agentRunning = value;
-    _lastActivity = DateTime.now();
-    notifyListeners();
-  }
-
-  void setAssistantStreaming(bool value) {
-    if (_assistantStreaming == value) return;
-    _assistantStreaming = value;
+  /// 轮次状态的唯一应用入口：generation CAS 是存储侧最后一道安全闸，
+  /// 迟到/乱序的旧快照（generation 不大于当前）直接丢弃。
+  /// 只有 TurnSupervisor 调用（架构门禁测试锁定调用面）；
+  /// 一个命令一次广播，UI 不见中间帧。
+  void applyTurnState(TurnState next) {
+    if (next.generation <= _turn.generation) return;
+    _turn = next;
     _lastActivity = DateTime.now();
     notifyListeners();
   }
@@ -163,13 +171,15 @@ abstract class _SessionStateCore extends ChangeNotifier {
 /// 状态中枢（与后端无关）：所有关键状态都从这里读取
 ///
 /// 任何模块不能自己猜状态，只能从这个中枢读。
-/// 所有后端事件都必须先进 EventDispatcher，再更新这个中枢。
+/// 所有后端事件都必须先进 EventDispatcher，再更新这个中枢；
+/// 轮次状态（running/streaming/activeTool）则必须经 TurnSupervisor。
 ///
 /// 按职责拆分（part 文件，同库共享私有作用域，对外 API 不变）：
 /// - session_state_pending.dart：审批 / 提问 / 表单（按会话隔离 + 优先级选举）
+/// - session_state_queue.dart：Host 队列快照（按会话隔离）
 /// - session_state_sessions.dart：工具视图 + 会话列表
 class SessionState extends _SessionStateCore
-    with SessionStatePending, SessionStateTools {
+    with SessionStatePending, SessionStateQueue, SessionStateTools {
   // ── 重置 ────────────────────────────────────────
 
   void reset() {
@@ -182,8 +192,7 @@ class SessionState extends _SessionStateCore
     _sessionTitle = 'DSH Agent';
     // 换后端时必须清掉：否则新机器会短暂显示上一台的模型名
     _modelSelection = null;
-    _agentRunning = false;
-    _assistantStreaming = false;
+    _turn = TurnState.initial();
     _lastTurnEnd = null;
     _lastActivity = null;
     _approvals.clear();
@@ -191,8 +200,8 @@ class SessionState extends _SessionStateCore
     _questionDialogOpen = false;
     _forms.clear();
     _formDialogOpen = false;
-    _activeTool = null;
     _changes.clear();
+    _queues.clear();
     _sessions = [];
     _loadingSessions = false;
     _archivedIds = {};

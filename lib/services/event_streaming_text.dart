@@ -29,11 +29,9 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
     _deltaBuffer.clear();
     if (text.isEmpty || _turnClosed) return;
 
-    state.setAssistantStreaming(true);
-    // 只有「本轮还没结束」时才把运行态拉起来。
-    // 否则一个迟到的 chunk（重连补发、乱序）会把 turn/end 刚置好的空闲
-    // 又顶回「进行中」，而且之后不会再有 turn/end 来收尾 —— 按钮就永久卡住。
-    if (!_turnClosed) state.setAgentRunning(true);
+    // 打字机态 + 未收尾则保持运行（supervisor 一次提交；
+    // 迟到的 chunk 不会把 turn/end 刚收好的状态又顶起来 —— 闸门在 supervisor）
+    supervisor.streamTick();
 
     final idx = _currentAssistantId == null
         ? -1
@@ -44,7 +42,8 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
         isStreaming: true,
       );
     } else {
-      state.setActiveTool(null);
+      // 新建流式气泡时工具条退出（与旧实现一致）
+      supervisor.toolResult();
       final id = 'stream-${DateTime.now().microsecondsSinceEpoch}';
       _currentAssistantId = id;
       _messages.add(ChatMessage(
@@ -64,10 +63,9 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
   /// chunk 会重新建一条干净的气泡。
   void onAssistantStreamStart() {
     _clearDelta();
-    _turnClosed = false;
+    // 重新武装闸门 + 结束打字机态 + 回到 running（supervisor 一次提交）
+    supervisor.assistantStreamStart();
     _dropCurrentAssistant();
-    state.setAssistantStreaming(false);
-    state.setAgentRunning(true);
   }
 
   /// `assistant/message` 定稿后的收尾
@@ -85,26 +83,27 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
   }) {
     _clearDelta();
     if (hasToolCall) {
+      // 带 tool-call 的消息是过程步骤：文本固化为过程条目（Web 端
+      // 折叠进过程区），气泡本身不留在消息流里。
+      captureProcessText(text);
       if (!_turnClosed) _dropCurrentAssistant();
-      state.setAssistantStreaming(false);
+      supervisor.assistantSettled();
       if (interrupted) state.setLastTurnEnd(DateTime.now());
       return;
     }
     if (text.isEmpty) {
       // 空定稿：可能只是占位，别把已有内容抹掉
-      state.setAssistantStreaming(false);
+      supervisor.assistantSettled();
       return;
     }
     onAssistantMessage(text);
-    state.setAssistantStreaming(false);
     if (interrupted) state.setLastTurnEnd(DateTime.now());
   }
 
   void onAssistantMessage(String text, {bool hasToolCall = false}) {
     _clearDelta();
 
-    state.setAssistantStreaming(false);
-    state.setActiveTool(null);
+    supervisor.assistantSettled(clearTool: true);
 
     if (hasToolCall) {
       if (!_turnClosed) _dropCurrentAssistant();

@@ -8,18 +8,13 @@ part of 'session_state.dart';
 
 mixin SessionStateTools on _SessionStateCore {
   // ── 工具 ────────────────────────────────────────
+  //
+  // activeTool 已随轮次状态收敛进 TurnState（core 投影），这里只剩
+  // 变更跟踪与工具视图。
 
-  String? _activeTool;
   final ChangesTracker _changes = ChangesTracker();
 
-  String? get activeTool => _activeTool;
   ChangesTracker get changes => _changes;
-
-  void setActiveTool(String? value) {
-    if (_activeTool == value) return;
-    _activeTool = value;
-    notifyListeners();
-  }
 
   void applyToolView({
     required List<Map<String, String?>> diffs,

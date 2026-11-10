@@ -6,6 +6,8 @@
 /// 3. 顶部状态点一直绿色（_sessionsOk == null 被当成健康）
 library;
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dsh_tablet_client/models/connection_health.dart';
 import 'package:dsh_tablet_client/services/session_state.dart';
@@ -100,18 +102,26 @@ void main() {
 
   group('进行中：running:true 受 turn 收尾约束', () {
     late String disp;
+    late String sup;
 
     setUpAll(() {
       disp = readSourceWithParts('lib/services/event_dispatcher.dart');
+      sup = File('lib/services/turn_supervisor.dart').readAsStringSync();
     });
 
-    test('onSessionStatus 里 running:true 必须检查 _turnClosed', () {
+    test('onSessionStatus 委托 supervisor.authorityRunning（闸门唯一实现）', () {
       final idx = disp.indexOf('void onSessionStatus(');
       expect(idx >= 0, isTrue);
       final body = disp.substring(idx, (idx + 700).clamp(0, disp.length));
-      expect(body.contains('_turnClosed'), isTrue,
+      expect(body.contains('supervisor.authorityRunning(running)'), isTrue,
+          reason: '运行态推送必须经 TurnSupervisor（唯一写入口）');
+      // 闸门语义本体锁在 supervisor：running:true 受 turnClosed 约束
+      final gateIdx = sup.indexOf('void authorityRunning(');
+      expect(gateIdx >= 0, isTrue);
+      final gate = sup.substring(gateIdx, (gateIdx + 700).clamp(0, sup.length));
+      expect(gate.contains('turnClosed'), isTrue,
           reason: '重连重放的 running:true 不能顶掉已收尾的会话');
-      expect(body.contains('if (!running || !_turnClosed)'), isTrue,
+      expect(gate.contains('if (running)'), isTrue,
           reason: 'running:false 永远接受；running:true 只在未收尾时接受');
     });
 
@@ -119,8 +129,14 @@ void main() {
       final idx = disp.indexOf('void onUserMessage(');
       expect(idx >= 0, isTrue);
       final body = disp.substring(idx, (idx + 1400).clamp(0, disp.length));
-      expect(body.contains('_turnClosed = false'), isTrue,
-          reason: '用户发了消息就是新一轮开始，必须清掉收尾标记');
+      expect(body.contains('supervisor.userMessageArrived()'), isTrue,
+          reason: '用户发了消息就是新一轮开始，必须经 supervisor 清掉收尾标记');
+      final rearmIdx = sup.indexOf('void userMessageArrived()');
+      expect(rearmIdx >= 0, isTrue);
+      final rearm =
+          sup.substring(rearmIdx, (rearmIdx + 500).clamp(0, sup.length));
+      expect(rearm.contains('turnClosed: false'), isTrue,
+          reason: 'userMessageArrived 必须重新武装闸门');
     });
   });
 }

@@ -26,8 +26,9 @@ class _Recorder {
     onAssistantFinal: finals.add,
     onTurnStart: (_) {},
     onTurnEnd: (_) {},
+    onExecutionFailed: (_, __) {},
     onToolCall: (name, args) => toolCalls.add(name),
-    onToolResult: () {},
+    onToolResult: (bool failed) {},
     onApproval: ({
       required String sessionId,
       required String approvalId,

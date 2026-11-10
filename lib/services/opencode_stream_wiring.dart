@@ -75,6 +75,10 @@ class OpenCodeWiring {
           onTurnEdge();
           ctx.onRefreshSessions();
         },
+        onExecutionFailed: (sid, message) {
+          // mapper 已保证先于 onTurnEnd 到达，错误气泡能赶在闸门关闭前上屏
+          ctx.dispatcher.onSessionError(sid, message ?? '模型执行失败');
+        },
         onToolCall: (name, args) => ctx.dispatcher.onToolCall(name, args),
         onToolResult: ctx.dispatcher.onToolResult,
         onApproval: ({

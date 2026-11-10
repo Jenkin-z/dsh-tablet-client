@@ -2,17 +2,22 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../models/pending.dart';
+import '../models/process_step.dart';
+import '../models/queued_message.dart';
 import 'dsh/mux_history.dart';
 import 'model_catalog.dart';
 import 'notification_service.dart';
 import 'session_idle.dart';
 import 'session_state.dart';
 import 'sound_service.dart';
+import 'turn_supervisor.dart';
 
 part 'event_streaming_text.dart';
 part 'event_message_reconcile.dart';
 part 'event_turn_session.dart';
 part 'event_pending_review.dart';
+part 'event_process_steps.dart';
+part 'event_queue.dart';
 
 /// 库内共享宿主：声明 dispatcher 各分片（mixin）依赖的字段与方法，
 /// 本身不对外暴露。[EventDispatcher] 继承它并混入各职责分片。
@@ -30,7 +35,6 @@ abstract class _EventDispatcherCore {
   /// activeServerId 重建），通知时刻的 activeServerId 就是归属机器。
   String? Function()? get serverIdProvider;
 
-  void Function(String sessionId, String message)? get onSessionError;
   VoidCallback? get onScrollToBottom;
   VoidCallback? get onJumpToLatest;
   VoidCallback? get onShowQuestionDialog;
@@ -62,6 +66,30 @@ abstract class _EventDispatcherCore {
     _messages.removeWhere((m) => m.id == id);
     if (_messages.length != before) _bumpMessages();
   }
+
+  // ── 过程步骤（实现见 event_process_steps.dart）────
+  //
+  // 声明在 core：TurnSession / Messages 两个分片要调用它们，
+  // 而跨 mixin 静态可见性只到共同超接口为止。
+
+  /// 固化过程文本：优先用定稿文本（DSH 的 assistant/message 带 tool-call
+  /// 时整段到达），否则取当前流式气泡 + 未 flush 的增量
+  void captureProcessText(String finalized);
+
+  /// 工具调用到来：固化过程文本 + 追加 running 工具条目
+  void addProcessStep(String toolName, String? arguments);
+
+  /// 工具结果到达：收尾最后一个 running 条目
+  void completeProcessTool(bool failed);
+
+  /// turn 收尾：过程步骤卡收起
+  void collapseProcess();
+
+  /// 新一轮开始：清空上一轮过程条目
+  void resetProcess();
+
+  /// 历史装载 / 重置时静默清理
+  void clearProcessSilently();
 
   /// 丢弃尚未 flush 的增量：工具调用/换轮后，缓冲里的过程文本不能再上屏。
   void _clearDelta() {
@@ -98,10 +126,18 @@ abstract class _EventDispatcherCore {
   /// 影响两件事：历史装载补回时不再显示 pending 态；内容兜底对账的候选。
   final Set<String> _ackedEcho = {};
 
-  /// 本轮是否已经收到 `turn/end`。
-  ///
-  /// 用来挡住迟到的 assistant chunk：它不该把刚结束的运行态又顶起来。
-  bool _turnClosed = false;
+  /// 轮次状态的唯一写入口（Runtime Supervisor）。
+  /// 所有运行态迁移都经它；`_turnClosed` 闸门语义收敛在其内部策略。
+  TurnSupervisor get supervisor;
+
+  /// 本轮是否已收尾（turn/end 已处理）。
+  /// 真源在 supervisor；保留这个 getter 让各分片（含过程步骤卡）
+  /// 的既有判断零改动。
+  bool get _turnClosed => supervisor.turnClosed;
+
+  /// 乐观气泡转确认态（实现见 event_message_reconcile.dart；
+  /// 声明在 core 供 Queue 分片跨 mixin 调用）
+  void confirmLocalUserMessage(String rpcId);
 
   _EventDispatcherCore(this.state);
 }
@@ -111,26 +147,29 @@ abstract class _EventDispatcherCore {
 /// 不要在其他模块里自己处理后端事件。
 /// 所有事件都必须通过这个 dispatcher 分发 —— DSH（mux）与 opencode（SSE）
 /// 走同一套对账/状态迁移逻辑，页面与状态中枢对后端无感。
+/// 轮次运行态（running/streaming/activeTool）的写入统一经 [TurnSupervisor]。
 ///
 /// 按职责拆分（mixin 分片，同库内共享宿主字段，对外 API 不变）：
 /// - event_message_reconcile.dart：消息装载 / 本地乐观气泡对账
 /// - event_streaming_text.dart：流式增量缓冲与 assistant 定稿
 /// - event_turn_session.dart：session 状态 / tool / turn 生命周期 / 投影
 /// - event_pending_review.dart：审批 / 提问 / 表单
+/// - event_process_steps.dart：过程步骤卡（turn 内过程内容）
+/// - event_queue.dart：Host 队列（排队/插话）快照与对账
 class EventDispatcher extends _EventDispatcherCore
     with
         EventDispatcherStreaming,
         EventDispatcherMessages,
         EventDispatcherTurnSession,
-        EventDispatcherPendingReview {
+        EventDispatcherPendingReview,
+        EventDispatcherProcess,
+        EventDispatcherQueue {
   // 回调钩子字段：core 里声明为抽象 getter，这里定义真实字段
-  //（initializing formal 指向它们，同时生成 core getter 需要的 setter）。
+  //（initializing formal 指向子类字段，同时生成 core getter 需要的 setter）。
   @override
   void Function(String sessionId, bool running)? onSessionStatusExternal;
   @override
   String? Function()? serverIdProvider;
-  @override
-  void Function(String sessionId, String message)? onSessionError;
   @override
   VoidCallback? onScrollToBottom;
   @override
@@ -146,11 +185,14 @@ class EventDispatcher extends _EventDispatcherCore
   @override
   void Function(String message)? onShowSnackBar;
 
+  @override
+  final TurnSupervisor supervisor;
+
   EventDispatcher({
     required SessionState state,
+    TurnSupervisor? supervisor,
     this.onSessionStatusExternal,
     this.serverIdProvider,
-    this.onSessionError,
     this.onScrollToBottom,
     this.onJumpToLatest,
     this.onShowQuestionDialog,
@@ -158,19 +200,27 @@ class EventDispatcher extends _EventDispatcherCore
     this.onShowFormDialog,
     this.onPopFormDialog,
     this.onShowSnackBar,
-  }) : super(state);
+  })  : supervisor = supervisor ??
+            // 独立构造（多为测试）：队列判定直接读状态中枢的队列视图
+            TurnSupervisor(
+              state,
+              hasQueuedWork: () => state.queuedCountOf(state.sessionId) > 0,
+            ),
+        super(state);
 
   // ── 重置 ────────────────────────────────────────
 
   void reset() {
     _clearDelta();
-    _turnClosed = false;
+    // 轮次状态一并归零（turnClosed 回到未收尾、phase 回到 idle）
+    supervisor.reset();
     _messages.clear();
     _seenUserSeq.clear();
     _seenUserIds.clear();
     _pendingEcho.clear();
     _ackedEcho.clear();
     _currentAssistantId = null;
+    clearProcessSilently();
     _bumpMessages();
   }
 

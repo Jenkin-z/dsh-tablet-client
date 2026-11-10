@@ -97,10 +97,14 @@ class MuxStream {
   void Function(String rpcId)? onQuestionResolved;
   void Function(ToolViewRecord rec)? onToolView;
   void Function(String toolName, String? arguments)? onToolCall;
-  void Function()? onToolResult;
+
+  /// 工具结果到达；[failed] 取自 tool/result 的 error / isError 标记
+  void Function(bool failed)? onToolResult;
   void Function()? onTurnStart;
   void Function()? onTurnEnd;
-  void Function(List<Map<String, dynamic>> queueItems)? onQueueUpdate;
+  /// `session/control` 的 queue 帧：[sessionId] 会话的完整队列快照
+  /// （`{type, sessionId, items}`，条目形状见 docs/MUX_PROTOCOL.md:272）
+  void Function(String sessionId, List<Map<String, dynamic>> items)? onQueueUpdate;
 
   /// `session/control` 的 jobs 帧（完整替换集）
   void Function(List<Map<String, dynamic>> jobs)? onJobsUpdate;

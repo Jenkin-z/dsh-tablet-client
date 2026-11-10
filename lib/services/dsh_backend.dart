@@ -119,9 +119,7 @@ class DshBackend implements AgentBackend {
       ..onQueueUpdate = dispatcher.onQueueUpdate
       ..onWorkspaceBaseline = dispatcher.onWorkspaceBaseline
       ..onSessionStatus = dispatcher.onSessionStatus
-      ..onSessionError = (sessionId, message) {
-        dispatcher.onSessionError?.call(sessionId, message);
-      }
+      ..onSessionError = dispatcher.onSessionError
       ..onControlBaseline = dispatcher.onControlBaseline
       ..onProjectionChange = dispatcher.onProjectionChange
       ..onReady = () {

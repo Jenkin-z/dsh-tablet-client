@@ -76,6 +76,8 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
     _seenUserSeq.clear();
     _seenUserIds.clear();
     _currentAssistantId = null;
+    // 过程步骤卡只服务当前轮：历史装载后旧轮次不回填
+    clearProcessSilently();
     _messages.addAll(loaded);
     // 快照里没出现、但仍未确认的本地回显要补回去，
     // 否则重连瞬间自己刚发的消息会凭空消失。
@@ -159,8 +161,10 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       final key = 'u$seq';
       if (seq.isNotEmpty) _seenUserSeq.add(key);
       // 回显对账同样是新一轮开始：不重新武装的话，turn/end 之后用户
-      // 马上再发一条，紧随其后的 running:true 会被 _turnClosed 挡掉。
-      _turnClosed = false;
+      // 马上再发一条，紧随其后的 running:true 会被闸门挡掉。
+      // 上一轮已收尾时，过程步骤卡随新一轮退场。
+      if (_turnClosed) resetProcess();
+      supervisor.userMessageArrived();
       _bumpMessages();
       return;
     }
@@ -177,7 +181,8 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
       for (final entry in _pendingEcho.entries.toList()) {
         if (entry.value == text) {
           _reconcileEcho(entry.key, text);
-          _turnClosed = false;
+          if (_turnClosed) resetProcess();
+          supervisor.userMessageArrived();
           _bumpMessages();
           return;
         }
@@ -192,9 +197,11 @@ mixin EventDispatcherMessages on _EventDispatcherCore {
     }
 
     // 用户发了新消息 = 新一轮的开始。
-    // 必须在这里重新武装运行态：本轮消息可能被客户端去重（同内容、
+    // 必须在这里重新武装闸门：本轮消息可能被客户端去重（同内容、
     // 同 seq）而跳过下面那行，但用户的心智模型是「我一发，它就又在跑了」。
-    _turnClosed = false;
+    // 上一轮已收尾时，过程步骤卡随新一轮退场（turn 进行中的排队消息不清）。
+    if (_turnClosed) resetProcess();
+    supervisor.userMessageArrived();
     _messages.add(ChatMessage(
       id: key.isEmpty ? 'u-${DateTime.now().millisecondsSinceEpoch}' : key,
       role: 'user',

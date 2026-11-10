@@ -13,6 +13,7 @@ class OpenCodeEventSink {
     required this.onAssistantFinal,
     required this.onTurnStart,
     required this.onTurnEnd,
+    required this.onExecutionFailed,
     required this.onToolCall,
     required this.onToolResult,
     required this.onApproval,
@@ -29,8 +30,14 @@ class OpenCodeEventSink {
   /// 执行开始/结束（等价 DSH turn/start、turn/end + api-session/status）
   final void Function(String sessionId) onTurnStart;
   final void Function(String sessionId) onTurnEnd;
+
+  /// 执行失败（session.execution.failed）。[message] 取自事件载荷的
+  /// error.message（Session.StructuredError），取不到为 null。
+  final void Function(String sessionId, String? message) onExecutionFailed;
   final void Function(String name, String? argsJson) onToolCall;
-  final void Function() onToolResult;
+
+  /// 工具结果到达；[failed] = session.tool.failed
+  final void Function(bool failed) onToolResult;
 
   /// 待审批（permission.asked / GET /api/permission/request 同构）
   final void Function({
@@ -92,8 +99,25 @@ class OpenCodeMapper {
         break;
       case 'session.execution.succeeded':
       case 'session.execution.interrupted':
-      case 'session.execution.failed':
         if (sid.isNotEmpty) sink.onTurnEnd(sid);
+        break;
+      case 'session.error':
+      case 'session.execution.failed':
+        // 失败不能只当回合结束吞掉：错误消息要在对话流里显示出来。
+        // 顺序必须是「先报错、再收尾」——收尾后 dispatcher 的
+        // _turnClosed 闸门会挡掉迟到的错误上屏（与 DSH 同一约定）。
+        // （session.error 是 opencode 的标准错误事件，某些失败路径
+        // 只发它不发 execution.failed，两条都接。）
+        if (sid.isNotEmpty) {
+          final error = data['error'];
+          final message =
+              error is Map ? error['message'] as String? : error as String?;
+          sink.onExecutionFailed(
+            sid,
+            (message != null && message.isNotEmpty) ? message : null,
+          );
+          sink.onTurnEnd(sid);
+        }
         break;
 
       // ── 工具 ──
@@ -108,8 +132,10 @@ class OpenCodeMapper {
         );
         break;
       case 'session.tool.success':
+        sink.onToolResult(false);
+        break;
       case 'session.tool.failed':
-        sink.onToolResult();
+        sink.onToolResult(true);
         break;
 
       // ── 权限审批 ──
@@ -172,11 +198,16 @@ class OpenCodeMapper {
 
   /// `GET /api/session/{id}/message` 的 data[] → ChatMessage（调用方传 asc 序）
   ///
-  /// 只产 user / assistant 两种气泡：
+  /// 只产 user / assistant / system 三种气泡：
   /// - user：顶层 `text` 字段；
   /// - assistant：`content[]` 里 `type:text` 拼接，reasoning/tool 块跳过
   ///   （与 DSH extractContentBlocks 同一语义）；
-  /// - idle / model-switched / system / skill / shell / compaction 不产气泡。
+  /// - system：顶层 `error` 的 assistant/idle 消息（回合失败的权威记录，
+  ///   实测形如 provider.invalid-request；assistant 与 idle 会带同一份
+  ///   错误，连续重复只落一条）——没有这条兜底，报错回合在历史装载
+  ///   （切会话/重连）后什么痕迹都不剩；
+  /// - idle（无错误）/ model-switched / system / skill / shell / compaction
+  ///   不产气泡。
   static List<ChatMessage> messagesToChat(List<dynamic> raw) {
     final out = <ChatMessage>[];
     for (final m in raw) {
@@ -188,10 +219,24 @@ class OpenCodeMapper {
         if (text.isNotEmpty) {
           out.add(ChatMessage(id: 'u-$id', role: 'user', content: text));
         }
-      } else if (type == 'assistant') {
-        final text = _concatText(m['content']);
-        if (text.isNotEmpty) {
-          out.add(ChatMessage(id: 'a-$id', role: 'assistant', content: text));
+      } else if (type == 'assistant' || type == 'idle') {
+        // 回合失败的权威记录：错误在顶层 error，不在 content
+        final err = m['error'];
+        if (err is Map) {
+          final msg = err['message'];
+          if (msg is String &&
+              msg.isNotEmpty &&
+              !(out.isNotEmpty &&
+                  out.last.role == 'system' &&
+                  out.last.content == msg)) {
+            out.add(ChatMessage(id: 'e-$id', role: 'system', content: msg));
+          }
+        }
+        if (type == 'assistant') {
+          final text = _concatText(m['content']);
+          if (text.isNotEmpty) {
+            out.add(ChatMessage(id: 'a-$id', role: 'assistant', content: text));
+          }
         }
       }
     }

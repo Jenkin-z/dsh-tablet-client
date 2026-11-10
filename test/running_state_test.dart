@@ -116,5 +116,19 @@ void main() {
       dispatcher.onSessionStatus('other', false);
       expect(state.agentRunning, isTrue);
     });
+
+    test('权威侧 running=false 兜底清工具条与打字机态（事件丢失自愈）', () {
+      // 失败路径可能一个收尾事件都不来：5s 轮询发现会话已不在
+      // active 集合，这里必须把「正在调用工具」一并收掉
+      dispatcher.onTurnStart();
+      dispatcher.onToolCall('webfetch', '{"url":"https://x"}');
+      expect(state.activeTool, isNotNull);
+      expect(state.agentRunning, isTrue);
+
+      dispatcher.onSessionStatus('s1', false);
+      expect(state.activeTool, isNull);
+      expect(state.assistantStreaming, isFalse);
+      expect(state.agentRunning, isFalse);
+    });
   });
 }

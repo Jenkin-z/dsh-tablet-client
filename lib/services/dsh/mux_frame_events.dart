@@ -127,8 +127,16 @@ extension on MuxStream {
         }
         break;
       case 'queue':
+        // { type, sessionId, items } —— sessionId 必须带上，
+        // 队列视图按会话隔离，别的会话的队列不能错记到当前会话头上
+        final sid = value['sessionId'];
         final items = value['items'] as List<dynamic>? ?? [];
-        onQueueUpdate?.call(items.whereType<Map<String, dynamic>>().toList());
+        if (sid is String && sid.isNotEmpty) {
+          onQueueUpdate?.call(
+            sid,
+            items.whereType<Map<String, dynamic>>().toList(),
+          );
+        }
         break;
       case 'jobs':
         // 后台作业集合（完整替换集，非增量）

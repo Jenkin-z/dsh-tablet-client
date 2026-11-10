@@ -14,6 +14,7 @@ import 'opencode_backend.dart';
 import 'server_manager.dart';
 import 'session_state.dart';
 import 'settings_service.dart';
+import 'turn_supervisor.dart';
 
 part 'chat_boot.dart';
 part 'chat_messaging.dart';
@@ -36,6 +37,9 @@ abstract class _ChatControllerCore extends ChangeNotifier {
 
   /// 统一事件入口（与 state 同一实例生命周期）
   late final EventDispatcher dispatcher;
+
+  /// 轮次状态唯一写入口（与 dispatcher 内部共享同一实例）
+  TurnSupervisor get supervisor => dispatcher.supervisor;
 
   /// 当前选中的后端（按 kind 选 DshBackend / OpenCodeBackend）
   AgentBackend? _backend;

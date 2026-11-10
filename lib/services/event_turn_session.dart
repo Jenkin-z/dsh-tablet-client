@@ -10,14 +10,15 @@ part of 'event_dispatcher.dart';
 
 mixin EventDispatcherTurnSession on _EventDispatcherCore {
   void onToolCall(String toolName, [String? arguments]) {
-    // 工具调用前的 assistant 文本是过程内容（Web 端折叠进过程区），
-    // 不能留在消息流里和最终回答并排显示。
-    _clearDelta();
-    if (!_turnClosed) _dropCurrentAssistant();
-    state.setAssistantStreaming(false);
-    // 参数是未解析的 JSON 字符串，抽一个能看懂的摘要放进状态栏
-    state.setActiveTool(_toolSummary(toolName, arguments));
-    state.setAgentRunning(true);
+    if (!_turnClosed) {
+      // 工具调用前的 assistant 文本是过程内容：固化为步骤条目
+      // （Web 端折叠进过程区的做法），不再直接丢弃。
+      addProcessStep(toolName, arguments);
+    } else {
+      _clearDelta();
+    }
+    // 结束打字机态 + 工具摘要上状态栏 + 置 running（supervisor 一次提交）
+    supervisor.toolCall(_toolSummary(toolName, arguments));
   }
 
   /// 从工具参数里抽一行摘要（命令 / 路径）
@@ -26,29 +27,55 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     return detail == null || detail.isEmpty ? toolName : '$toolName · $detail';
   }
 
-  void onToolResult() {
-    state.setActiveTool(null);
+  void onToolResult(bool failed) {
+    supervisor.toolResult();
+    completeProcessTool(failed);
+  }
+
+  /// 会话级错误上屏（DSH turn/end reason.kind=error、api-session/error；
+  /// opencode session.execution.failed）
+  ///
+  /// 模型/Provider 报错时 Host 只把运行态收掉，消息流里什么都不留，
+  /// 用户看到的就是「对话中断了却不显示任何东西」。这里把错误落成
+  /// system 气泡（MessageBubble 的红色居中样式），中断必须有据可查。
+  ///
+  /// 调用方必须在 onTurnEnd **之前**触发（DSH 的 mux 分发已是这个顺序）：
+  /// turn 收尾后 [_turnClosed] 置位，重连重放的同一条错误就不会再上屏。
+  void onSessionError(String sessionId, String message) {
+    if (message.isEmpty) return;
+    if (sessionId != state.sessionId) {
+      // 非当前会话没有消息流可落（切走再切回也会被历史装载清掉），
+      // 退而求其次给一条全局提示
+      onShowSnackBar?.call('其他会话出错：$message');
+      return;
+    }
+    if (_turnClosed) return;
+    _clearDelta();
+    _messages.add(ChatMessage(
+      id: 'err-${DateTime.now().microsecondsSinceEpoch}',
+      role: 'system',
+      content: message,
+    ));
+    _bumpMessages();
+    onScrollToBottom?.call();
   }
 
   /// `api-session/status` / control 流的运行状态推送
   ///
-  /// 写入权威中枢，并顺带修正当前会话的 agentRunning，
-  /// 避免轮询（8s）造成的状态滞后。
-  ///
-  /// **`running: true` 必须受 [_turnClosed] 约束。** 这条通道是
-  /// `$events` 的 emit，重连时 Host 会把当前状态重放一遍；如果本轮的
-  /// `turn/end` 已经处理过（`_turnClosed == true`），此时再来的
-  /// `running: true` 是**上一轮的残留**，不是新一轮 —— 真正的新一轮会先发
-  /// `turn/start`，那时 [_turnClosed] 已被清掉。
-  ///
-  /// 不设这道闸，重连一次就会把已收尾的会话顶成「进行中」，
-  /// 而且之后不会再有 `turn/end` 来收尾，按钮就永久卡住。
+  /// 写入权威中枢（会话列表视图），当前会话的运行态迁移则交给
+  /// supervisor 的权威命令：
+  /// - `running:true` 受 turnClosed 闸门约束 —— 这条通道是 `$events`
+  ///   的 emit，重连时 Host 会把当前状态重放一遍；本轮 turn/end 已处理过
+  ///   （turnClosed）时，再来的 running:true 是上一轮的残留，不是新一轮
+  ///   （真正的新一轮会先发 turn/start，那时闸门已重新武装）。不设这道闸，
+  ///   重连一次就会把已收尾的会话顶成「进行中」且再无 turn/end 来收尾。
+  /// - `running:false` 永远接受：失败路径事件全丢时（opencode 中途挂掉
+  ///   实测不发 tool.failed / execution.failed），5s 轮询到这里自愈，
+  ///   工具条/打字机态一并收掉。
   void onSessionStatus(String sessionId, bool running) {
     state.updateSessionStatus(sessionId, running);
     if (sessionId == state.sessionId) {
-      if (!running || !_turnClosed) {
-        state.setAgentRunning(running);
-      }
+      supervisor.authorityRunning(running);
     }
     onSessionStatusExternal?.call(sessionId, running);
   }
@@ -66,18 +93,25 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
   ///
   /// `turn/end` 会把运行态置空闲，但排队消息会让同一轮继续。
   /// Host 的 `api-session/status` 只在**状态变化**时推送，所以不能依赖它
-  /// 把 running 从 false 拉回 true —— 这里用 journal 的 `turn/start` 兜底。
+  /// 把 busy 从空闲拉回来 —— 这里用 journal 的 `turn/start` 兜底。
+  /// 队列非空时 turn/end 落的是 queued 相位，turn/start 到这里转 running。
   void onTurnStart() {
-    _turnClosed = false;
+    // 先重新武装：resetProcess 的 turnClosed 检查才能看到新轮次
+    supervisor.turnStart();
     _clearDelta();
     // 新 turn 的 assistant 气泡必须重新建；上一轮最终回答保留在历史里。
     _currentAssistantId = null;
-    state.setAgentRunning(true);
+    // 上一轮的过程步骤卡随之退场（收起卡只服务当前轮）
+    resetProcess();
   }
 
   void onTurnEnd() {
-    _turnClosed = true;
+    // turnClosed=true + idle/queued（队列非空）+ 收打字机/工具条，
+    // supervisor 一次事务提交，UI 不见中间帧
+    supervisor.turnEnd();
     _clearDelta();
+    // 过程步骤卡收起（条目保留，可展开回看）
+    collapseProcess();
     // 只清当前会话的待办：别的会话的审批/提问不该被本轮结束牵连
     final sid = state.sessionId;
     for (final a in state.approvals.where((a) => a.sessionId == sid).toList()) {
@@ -90,9 +124,6 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
       state.setQuestionDialogOpen(false);
       onPopQuestionDialog?.call();
     }
-    state.setAgentRunning(false);
-    state.setAssistantStreaming(false);
-    state.setActiveTool(null);
     state.setLastTurnEnd(DateTime.now());
 
     var idx = _currentAssistantId == null
@@ -105,10 +136,6 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     _bumpMessages();
   }
 
-  void onQueueUpdate(List<Map<String, dynamic>> queueItems) {
-    // 队列更新，暂不处理
-  }
-
   /// stale-busy 自愈（与后端无关的兜底，供重连/历史装载后调用）
   ///
   /// 「只清不设」：仅当消息流尾部表明最后一轮确实已收尾
@@ -117,11 +144,11 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
   /// DSH 的 control 推送），本方法永远不会把它们顶成「进行中」。
   ///
   /// DSH 的重连不接这条：journal 重放会补发 turn/end，control 推送
-  /// 受 [_turnClosed] 闸门约束，已有权威自愈路径。
+  /// 受 turnClosed 闸门约束，已有权威自愈路径。
   void clearStaleBusyIfIdle(String sessionId) {
     if (sessionId.isEmpty || sessionId != state.sessionId) return;
     if (!isSessionActuallyIdle(_messages)) return;
-    state.setAgentRunning(false);
+    supervisor.settleToIdle();
     state.updateSessionStatus(sessionId, false);
   }
 
@@ -129,9 +156,7 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     state.setArchivedIds(Set.from(archivedSessionIds));
   }
 
-  void onControlBaseline(Map<String, dynamic> baseline) {
-    // 控制基线，暂不处理
-  }
+  // onControlBaseline 的队列消费在 event_queue.dart（本分片不管队列）
 
   void onProjectionChange(String sessionId, String key, dynamic value) {
     // 只关心当前会话的模型选择投影，其余投影暂不消费

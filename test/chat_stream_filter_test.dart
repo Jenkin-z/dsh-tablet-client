@@ -30,7 +30,7 @@ void main() {
   Future<void> flush() =>
       Future<void>.delayed(const Duration(milliseconds: 250));
 
-  test('工具调用丢弃过程文本，最终回答只保留一条', () async {
+  test('工具调用前的过程文本固化进步骤卡，最终回答只保留一条', () async {
     dispatcher.onTurnStart();
     dispatcher.onTextDelta('过程文本');
     await flush();
@@ -38,17 +38,28 @@ void main() {
 
     dispatcher.onAssistantFinal('过程文本', false, hasToolCall: true);
     dispatcher.onToolCall('read');
-    expect(dispatcher.messages, isEmpty);
+    // 消息流里只剩步骤卡哨兵（role: 'steps'），过程文本/工具进条目
+    expect(dispatcher.messages.single.role, 'steps');
+    expect(dispatcher.processEntries, hasLength(2));
+    expect(dispatcher.processEntries.first.text, '过程文本');
+    expect(dispatcher.processEntries.last.toolName, 'read');
+    expect(dispatcher.processEntries.last.isRunning, isTrue);
 
     dispatcher.onTextDelta('最终回答');
     await flush();
     dispatcher.onAssistantFinal('最终回答', false);
     dispatcher.onAssistantFinal('最终回答', false);
+    dispatcher.onTurnEnd();
 
-    expect(dispatcher.messages, hasLength(1));
-    expect(dispatcher.messages.single.role, 'assistant');
-    expect(dispatcher.messages.single.content, '最终回答');
-    expect(dispatcher.messages.single.isStreaming, isFalse);
+    // 哨兵在最终回答之前（时间序：过程 < 回答）
+    expect(dispatcher.messages, hasLength(2));
+    expect(dispatcher.messages.first.role, 'steps');
+    expect(dispatcher.messages.last.role, 'assistant');
+    expect(dispatcher.messages.last.content, '最终回答');
+    expect(dispatcher.messages.last.isStreaming, isFalse);
+    // 收尾后收起，条目保留可回看
+    expect(dispatcher.processCollapsed, isTrue);
+    expect(dispatcher.processEntries, hasLength(2));
   });
 
   test('turn/end 后迟到的 chunk 不新建重复气泡', () async {

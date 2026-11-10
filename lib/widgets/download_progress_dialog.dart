@@ -6,6 +6,10 @@ import '../theme/ios_theme.dart';
 ///
 /// 从 update_dialog.dart 拆出来是为了守住 200 行上限。
 /// 下载/安装的编排逻辑在 [DownloadProgressDialog._start]。
+///
+/// 状态行借鉴 dsh-go marketplace 详情页的 security 面板：
+/// 发布指纹全程可见，校验通过前只显示指纹、通过后给「已校验」，
+/// 兑现「声明 ≠ 已验证」。
 class DownloadProgressDialog extends StatefulWidget {
   final UpdateInfo info;
 
@@ -17,6 +21,7 @@ class DownloadProgressDialog extends StatefulWidget {
 
 class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
   double _progress = 0;
+  UpdateDlPhase _phase = UpdateDlPhase.downloading;
   String? _error;
   bool _done = false;
 
@@ -30,12 +35,18 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
     setState(() {
       _error = null;
       _progress = 0;
+      _phase = UpdateDlPhase.downloading;
     });
     try {
       final file = await UpdateService.download(
         widget.info.url,
         (p) {
           if (mounted) setState(() => _progress = p);
+        },
+        sha256: widget.info.sha256,
+        size: widget.info.size,
+        onPhase: (p) {
+          if (mounted) setState(() => _phase = p);
         },
       );
       if (!mounted) return;
@@ -49,7 +60,7 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('请允许"安装未知应用"后，重新检查更新完成安装'),
+            content: Text('请允许"安装未知应用"后，重新检查更新完成安装（已校验的包会复用，不会重新下载）'),
             duration: Duration(seconds: 5),
           ),
         );
@@ -62,15 +73,24 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
         if (!mounted) return;
         setState(() => _error = '安装失败: $e');
       }
+    } on UpdateVerifyException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '下载失败: $e');
     }
   }
 
+  String get _title {
+    if (_error != null) return '更新失败';
+    if (_done) return '已校验，准备安装';
+    if (_phase == UpdateDlPhase.verifying) return '正在校验完整性…';
+    return '正在下载 ${(_progress * 100).toStringAsFixed(0)}%';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pct = (_progress * 100).toStringAsFixed(0);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
       backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
@@ -78,11 +98,7 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
       title: Text(
-        _error != null
-            ? '更新失败'
-            : _done
-                ? '下载完成'
-                : '正在下载 $pct%',
+        _title,
         style: const TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.w600,
@@ -92,11 +108,12 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
           ? Text(_error!)
           : Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: _progress,
+                    value: _done ? 1 : (_phase == UpdateDlPhase.verifying ? null : _progress),
                     backgroundColor: isDark
                         ? const Color(0xFF3A3A3C)
                         : const Color(0xFFF2F2F7),
@@ -112,6 +129,30 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                     color: IosTheme.iosGray,
                   ),
                 ),
+                if (widget.info.sha256 != null) ...[
+                  const SizedBox(height: IosTheme.spaceS),
+                  Row(
+                    children: [
+                      Icon(
+                        _done ? Icons.verified_outlined : Icons.fingerprint,
+                        size: 16,
+                        color: _done ? IosTheme.iosGreen : IosTheme.iosGray,
+                      ),
+                      const SizedBox(width: IosTheme.spaceS),
+                      Expanded(
+                        child: Text(
+                          _done
+                              ? 'SHA-256 已校验 · ${widget.info.fingerprintShort}'
+                              : '发布指纹 ${widget.info.fingerprintShort} · 下载后逐字节校验',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _done ? IosTheme.iosGreen : IosTheme.iosGray,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: IosTheme.spaceXS),
                 Text(
                   '下载完成后自动调起安装，可在后台继续聊天',

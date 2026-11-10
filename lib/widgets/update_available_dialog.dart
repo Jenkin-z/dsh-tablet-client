@@ -59,6 +59,36 @@ class UpdateAvailableDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: IosTheme.spaceM),
+              if (info.sha256 != null) ...[
+                // 发布完整性可见化（借鉴 dsh-go marketplace 的 security 行）：
+                // 指纹先亮出来，校验在下载完成后做 —— 声明 ≠ 已验证
+                Row(
+                  children: [
+                    Icon(
+                      Icons.fingerprint,
+                      size: 16,
+                      color: IosTheme.iosGray,
+                    ),
+                    const SizedBox(width: IosTheme.spaceS),
+                    Text(
+                      '发布指纹 ${info.fingerprintShort}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: IosTheme.iosGray,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: IosTheme.spaceXS),
+                Text(
+                  '下载完成后将逐字节校验 SHA-256，不匹配拒绝安装',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: IosTheme.iosGray,
+                  ),
+                ),
+                const SizedBox(height: IosTheme.spaceM),
+              ],
               Text(
                 info.changelog,
                 style: const TextStyle(fontSize: 15, height: 1.5),

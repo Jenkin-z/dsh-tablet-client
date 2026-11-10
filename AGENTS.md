@@ -22,8 +22,14 @@ python -m http.server 8099 --bind 0.0.0.0
 
 # 更新检查机制
 # 8099 同目录下需要 version.json：
-# { "versionCode": 29, "versionName": "1.5.2", "size": 52500000, "changelog": "..." }
+# { "versionCode": 29, "versionName": "1.5.2", "size": 52500000,
+#   "sha256": "<apk 的 SHA-256，64 位十六进制，可选但强烈建议>", "changelog": "..." }
 # App 启动时 GET http://<host>:8099/version.json，remoteCode > localCode 则提示更新
+# 生成 sha256（PowerShell）：Get-FileHash app-release.apk -Algorithm SHA256
+#
+# 更新下载为事务式（借鉴 dsh-go 发布模型）：
+# 先下到 *.part 临时文件并流式校验 SHA-256（声明了就 fail-closed，不匹配拒绝安装），
+# 通过后原子替换 dsh-agent.apk，旧包保留为 dsh-agent.last.apk（LKG，同版本免下载重装）。
 ```
 
 ## 文件结构

@@ -25,6 +25,70 @@ class DshRpcException implements Exception {
   String toString() => 'RPC [$code]: $message';
 }
 
+/// 解包 RPC 响应信封（fail-closed：契约见 [DshApi] 类注释）。
+///
+/// 任何形状异常（非法 JSON、缺 result、value/error 类型不对）都转成
+/// 带明确 code 的 [DshRpcException]，绝不把 TypeError/FormatException
+/// 裸抛给业务层。成功返回 result.value（缺省空 Map）。
+/// 纯函数，便于契约测试锁定。
+Map<String, dynamic> unwrapRpcEnvelope(
+  String body, {
+  required int httpStatus,
+}) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    throw DshRpcException(
+      code: 'malformed/json',
+      message: '响应不是合法 JSON',
+      httpStatus: httpStatus,
+    );
+  }
+  if (decoded is! Map<String, dynamic>) {
+    throw DshRpcException(
+      code: 'malformed/envelope',
+      message: '响应信封不是 JSON 对象',
+      httpStatus: httpStatus,
+    );
+  }
+  final result = decoded['result'];
+  if (result is! Map<String, dynamic>) {
+    throw DshRpcException(
+      code: 'malformed/result',
+      message: '响应缺少 result 对象',
+      httpStatus: httpStatus,
+    );
+  }
+  if (result['ok'] == true) {
+    final value = result['value'];
+    if (value == null) return const <String, dynamic>{};
+    if (value is! Map<String, dynamic>) {
+      throw DshRpcException(
+        code: 'malformed/value',
+        message: 'result.value 不是 JSON 对象',
+        httpStatus: httpStatus,
+      );
+    }
+    return value;
+  }
+  final error = result['error'];
+  if (error is! Map<String, dynamic>) {
+    throw DshRpcException(
+      code: 'malformed/error',
+      message: 'ok=false 但缺少 error 对象',
+      httpStatus: httpStatus,
+    );
+  }
+  throw DshRpcException(
+    code: error['code'] is String ? error['code'] as String : 'unknown',
+    message: error['message'] is String
+        ? error['message'] as String
+        : '未知错误',
+    httpStatus: httpStatus,
+  );
+}
+
 /// 库内共享宿主：声明 API 客户端各分片（mixin）依赖的字段与方法，
 /// 本身不对外暴露。[DshApi] 继承它并混入各职责分片。
 ///
@@ -91,17 +155,7 @@ abstract class _DshApiCore {
         httpStatus: resp.statusCode,
       );
     }
-    final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final result = data['result'] as Map<String, dynamic>;
-    if (result['ok'] == true) {
-      return (result['value'] ?? <String, dynamic>{}) as Map<String, dynamic>;
-    }
-    final error = result['error'] as Map<String, dynamic>;
-    throw DshRpcException(
-      code: error['code'] as String? ?? 'unknown',
-      message: error['message'] as String? ?? '未知错误',
-      httpStatus: resp.statusCode,
-    );
+    return unwrapRpcEnvelope(resp.body, httpStatus: resp.statusCode);
   }
 }
 

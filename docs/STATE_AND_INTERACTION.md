@@ -188,3 +188,30 @@ if (!running || !_turnClosed) state.setAgentRunning(running);
 - 覆盖前逐项确认：这个能力在新实现里由谁承担
 - 拿不准就保留，不要删
 - 提交前用 `git diff --stat HEAD` 扫一遍异常缩水的文件
+
+## 十一、轮次状态机与队列（V4）
+
+> 完整设计见 `docs/design/turn-state-v4.md`。这里只列交互纪律。
+
+**轮次状态只有一个写入口。** `TurnSupervisor` 是唯一被允许迁移轮次状态
+（running / streaming / activeTool / 收尾闸门）的组件；EventDispatcher 与
+发送链路都是它的客户端。旧的 `setAgentRunning` / `setAssistantStreaming` /
+`setActiveTool` 已删除——发现哪里需要直接写状态，就是哪里该加 supervisor
+命令，不要恢复 setter。
+
+**一个命令一次广播。** turn/end 这类多字段收尾必须原子提交（supervisor 的
+事务），不许拆成多个 setter 各自 notify——旧实现连广播 6 次，UI 会看到
+「停止→发送→停止」的中间帧。
+
+**排队消息必须可见。** 运行中继续输入是 Host 队列（mode:'queue'）支持的
+能力：乐观气泡发出后，队列快照（`queue` 帧）用 rpcId 把气泡转确认态，
+输入栏上方横幅显示「已排队 N 条 · 插话 M」。队列快照丢弃 = 用户的消息
+石沉大海，属于回归。
+
+**排队中也是忙。** turn/end 时队列非空，轮次相位落 `queued`（busy 的延续），
+停止按钮不闪断；队列清空而新轮未到才回 idle。「排队中显示发送按钮」是
+相位管理的回归。
+
+**三处豁免要记住。** 配对引导页（pair/qr_scan 的 auth 模块）与设置页的
+`backend_ops` 是门面级依赖，架构门禁测试对它们豁免；除此之外 screens/
+import 后端 API/实现即回归。

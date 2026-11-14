@@ -23,7 +23,6 @@ void main() {
           body: Center(
             child: ConsoleMachineCard(
               title: '一台名字非常非常长的开发机器，长到应该被省略',
-              subtitle: 'a.local',
               kind: AgentKind.dsh,
               beats: _beats(8),
               online: true,
@@ -45,7 +44,7 @@ void main() {
     expect(
       size.width,
       lessThanOrEqualTo(
-        ConsoleMachineCard.contentMaxWidth + 28,
+        ConsoleMachineCard.contentMaxWidth + 20,
       ),
       reason: '横向条卡片宽度受 contentMaxWidth 封顶',
     );
@@ -58,7 +57,6 @@ void main() {
           body: Center(
             child: ConsoleMachineCard(
               title: 'PC',
-              subtitle: 'a.local',
               kind: AgentKind.dsh,
               beats: _beats(3),
               online: true,
@@ -75,7 +73,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     final w = tester.getSize(find.byType(ConsoleMachineCard)).width;
-    expect(w, lessThanOrEqualTo(ConsoleMachineCard.contentMaxWidth + 28),
+    expect(w, lessThanOrEqualTo(ConsoleMachineCard.contentMaxWidth + 20),
         reason: '短名按内容收缩（flutter_test 用 Ahem 字体，每字宽=字号，真机会更窄）');
     expect(w, greaterThanOrEqualTo(80), reason: '点击目标别缩得太离谱');
   });
@@ -91,7 +89,6 @@ void main() {
                 alignment: Alignment.centerLeft,
                 child: ConsoleMachineCard(
                   title: '一台名字非常非常长的开发机器，长到应该被省略',
-                  subtitle: 'a.local',
                   kind: AgentKind.dsh,
                   beats: _beats(8),
                   online: true,
@@ -114,7 +111,7 @@ void main() {
     expect(size.width, lessThan(320),
         reason: '横屏竖栏卡片不再满宽拉伸——「卡片还是很长」的回归防线');
     expect(size.width,
-        lessThanOrEqualTo(ConsoleMachineCard.contentMaxWidth + 28),
+        lessThanOrEqualTo(ConsoleMachineCard.contentMaxWidth + 20),
         reason: '内容宽度受 contentMaxWidth 封顶');
   });
 
@@ -125,7 +122,6 @@ void main() {
           body: Center(
             child: ConsoleMachineCard(
               title: '工作台',
-              subtitle: 'a.local',
               kind: AgentKind.dsh,
               beats: _beats(3),
               online: true,
@@ -154,7 +150,6 @@ void main() {
           body: Center(
             child: ConsoleMachineCard(
               title: '工作台',
-              subtitle: 'a.local',
               kind: AgentKind.opencode,
               beats: _beats(0),
               online: true,

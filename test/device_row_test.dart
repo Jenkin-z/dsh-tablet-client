@@ -66,9 +66,10 @@ void main() {
           reason: '旧版 minWidth 132 会把短名也撑长（回归防线）');
     });
 
-    test('第一行是别名，空名退回地址', () {
+    test('第一行是别名，空名退回地址；卡片不展示设备地址', () {
       expect(card.contains('this.title'), isTrue);
-      expect(card.contains('this.subtitle'), isTrue);
+      expect(card.contains('this.subtitle'), isFalse,
+          reason: '设备 ID / 地址不再上卡（2026-11 交互反馈：卡片紧凑化）');
       expect(devices.contains('final name = group.server.name'), isTrue);
       expect(devices.contains("host.isNotEmpty ? host : 'PC'"), isTrue,
           reason: '防御旧数据：空名退回地址');

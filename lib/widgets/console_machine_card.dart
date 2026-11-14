@@ -4,15 +4,14 @@ import '../models/poll_beat.dart';
 import '../theme/ios_theme.dart';
 import 'poll_pulse.dart';
 
-/// 设备卡（DESIGN.md §6 + 原型 m-console.html 的 mcard 四行结构）
+/// 设备卡（DESIGN.md §6，紧凑版：不带设备地址）
 ///
-/// ① 状态点 + 机器名
-/// ② 后端徽标（DSH / opencode）+ 地址（等宽）
-/// ③ 心跳刻度（签名动作）+「8s 轮询」cap
-/// ④ 待办行：审批 / 提问计数（无待办时退回运行数或错误）
+/// ① 状态点 + 机器名 + 后端徽标（DSH / opencode）
+/// ② 心跳刻度（签名动作）
+/// ③ 状态文案（在心跳行下方）+ 运行数
+/// ④ 待办行：审批 / 提问计数（有待办才显示）
 class ConsoleMachineCard extends StatelessWidget {
   final String title;
-  final String subtitle;
 
   /// 后端类型徽标（DSH / opencode）
   final AgentKind kind;
@@ -29,15 +28,14 @@ class ConsoleMachineCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// 卡片固定高度：横向条与纵向栏里多台机器高度一致
-  static const double cardHeight = 124;
+  static const double cardHeight = 96;
 
   /// 内容区宽度上限；**不设下限**——按内容收缩，短名卡片自然变窄
-  static const double contentMaxWidth = 200;
+  static const double contentMaxWidth = 168;
 
   const ConsoleMachineCard({
     super.key,
     required this.title,
-    required this.subtitle,
     required this.kind,
     required this.beats,
     required this.online,
@@ -86,7 +84,7 @@ class ConsoleMachineCard extends StatelessWidget {
             child: SizedBox(
               height: cardHeight,
               child: Padding(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(10),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
                     maxWidth: contentMaxWidth,
@@ -97,12 +95,12 @@ class ConsoleMachineCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _titleRow(p, statusColor),
-                      const SizedBox(height: 7),
-                      _metaRow(p),
-                      const SizedBox(height: 12),
-                      _pulseRow(p),
+                      const SizedBox(height: 6),
+                      PollPulse(beats: beats),
+                      const SizedBox(height: 4),
+                      _statusRow(p),
                       if (pendingApprovals + pendingQuestions > 0) ...[
-                        const SizedBox(height: 7),
+                        const SizedBox(height: 6),
                         _pendingRow(p),
                       ],
                     ],
@@ -116,8 +114,12 @@ class ConsoleMachineCard extends StatelessWidget {
     );
   }
 
-  /// ① 状态点 + 机器名
+  /// ① 状态点 + 机器名 + 后端徽标
   Widget _titleRow(IosPalette p, Color statusColor) {
+    final label = switch (kind) {
+      AgentKind.dsh => 'DSH',
+      AgentKind.opencode => 'opencode',
+    };
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -136,19 +138,7 @@ class ConsoleMachineCard extends StatelessWidget {
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  /// ② 后端徽标 + 地址
-  Widget _metaRow(IosPalette p) {
-    final label = switch (kind) {
-      AgentKind.dsh => 'DSH',
-      AgentKind.opencode => 'opencode',
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+        const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
@@ -166,33 +156,15 @@ class ConsoleMachineCard extends StatelessWidget {
             ),
           ),
         ),
-        if (subtitle.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: IosType.mono,
-                fontSize: IosType.caption,
-                color: p.label2,
-                height: 1.3,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }
 
-  /// ③ 心跳刻度 + cap（离线退回错误文本）
-  Widget _pulseRow(IosPalette p) {
+  /// ③ 状态文案（心跳行下方）+ 运行数
+  Widget _statusRow(IosPalette p) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PollPulse(beats: beats),
-        const SizedBox(width: 7),
         Flexible(
           child: Text(
             online ? '8s 轮询' : (error ?? '离线'),

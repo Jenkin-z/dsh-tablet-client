@@ -70,7 +70,6 @@ class ConsoleDevices extends StatelessWidget {
     return ConsoleMachineCard(
       // 别名优先，空名退回地址（防御旧数据）
       title: name.isNotEmpty ? name : (host.isNotEmpty ? host : 'PC'),
-      subtitle: host,
       kind: group.server.kind,
       beats: group.monitor.heartbeat,
       online: group.monitor.online,

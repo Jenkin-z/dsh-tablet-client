@@ -62,6 +62,31 @@ void main() {
       expect(items.length, 1);
       expect(items[0].id, 'ok');
     });
+
+    test('脏数据 fail-soft：只有缺 id 跳过，其余形状异常都兜住', () {
+      final items = parseQueuedItems([
+        {'id': 'no-message'},
+        {'id': 'bad-placement', 'placement': '???', 'message': {'content': 'x'}},
+        {'id': 'rpc-not-string', 'rpcId': 42, 'message': {'content': 'y'}},
+        {
+          'id': 'blocks',
+          'message': {
+            'content': [
+              {'type': 'text', 'text': 'a'},
+              {'type': 'image'},
+              {'type': 'text', 'text': 'b'},
+            ],
+          },
+        },
+      ]);
+      expect(items.length, 4, reason: 'fail-soft：单条脏数据不能清空横幅');
+      expect(items[0].content, isEmpty);
+      expect(items[1].placement, QueuePlacement.queued,
+          reason: '未知 placement 回落 queued');
+      expect(items[2].rpcId, isNull, reason: 'rpcId 非字符串不采纳');
+      expect(items[3].content, 'a\nb',
+          reason: '非文本块拍平时跳过，文本块按行拼接');
+    });
   });
 
   group('队列对账与相位联动', () {
@@ -154,6 +179,25 @@ void main() {
       final afterFirst = notifies;
       dispatcher.onQueueUpdate('s1', [item('q1')]);
       expect(notifies, afterFirst, reason: 'queue 帧可能重放同快照，内容未变不广播');
+    });
+
+    test('快照只改内容（updateQueue edit）也必须广播', () {
+      dispatcher.onQueueUpdate('s1', [item('q1', text: '原文')]);
+      var notifies = 0;
+      state.addListener(() => notifies++);
+      dispatcher.onQueueUpdate('s1', [item('q1', text: '改后')]);
+      expect(notifies, 1,
+          reason: '_sameQueue 漏比 content 会让编辑后的横幅不刷新');
+      expect(state.queueFor('s1').first.content, '改后');
+    });
+
+    test('快照 rpcId 变化也广播（对账钥匙不能丢）', () {
+      dispatcher.onQueueUpdate('s1', [item('q1')]);
+      var notifies = 0;
+      state.addListener(() => notifies++);
+      dispatcher.onQueueUpdate('s1', [item('q1', rpcId: 'rpc-1')]);
+      expect(notifies, 1);
+      expect(state.queueFor('s1').first.rpcId, 'rpc-1');
     });
 
     test('完整体验流：运行中插话 → 停止按钮全程在场', () {

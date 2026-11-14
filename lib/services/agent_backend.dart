@@ -42,11 +42,16 @@ abstract class AgentBackend {
   /// 新建会话，返回会话 id
   Future<String> createSession({String? cwd});
 
-  /// 发送消息；[requestId] 为本地乐观气泡的 rpcId，用于回执对账
+  /// 发送消息；[requestId] 为本地乐观气泡的 rpcId，用于回执对账。
+  ///
+  /// [mode] 对齐 DSH `session/prompt` 的 `'queue' | 'steer'`：
+  /// 默认恒为 `'queue'`（忙闲由 Host 排队裁决，客户端不区分）；
+  /// `'steer'` 仅作为透传能力保留，opencode 实现接受但忽略。
   Future<void> sendPrompt({
     required String sessionId,
     required String text,
     required String requestId,
+    String mode = 'queue',
   });
 
   /// 中断（对应 DSH cancel）

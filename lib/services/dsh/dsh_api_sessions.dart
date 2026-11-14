@@ -63,14 +63,18 @@ mixin DshApiSessions on _DshApiCore {
   ///
   /// [requestId] 由调用方预先给出，这样本地乐观气泡与 durable 消息
   /// 用的是同一个 id，回显才能精确对账（而不是靠内容去重）。
+  ///
+  /// [mode] 对齐协议 `SessionPromptRequest.mode`（types.ts:311-320）：
+  /// `'queue'` 排队（默认，纪律见 docs/design/turn-state-v4.md）、
+  /// `'steer'` 插话注入当前轮。
   Future<String> sendPrompt(String sessionId, String text,
-      {String? requestId}) async {
+      {String? requestId, String mode = 'queue'}) async {
     final rid = requestId ?? _uuid.v4();
     await rpc('session/prompt', {
       'request': {
         'requestId': rid,
         'sessionId': sessionId,
-        'mode': 'queue',
+        'mode': mode,
         'content': [
           {'type': 'text', 'text': text}
         ],

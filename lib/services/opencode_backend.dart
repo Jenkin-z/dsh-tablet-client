@@ -204,6 +204,9 @@ class OpenCodeBackend implements AgentBackend {
     required String sessionId,
     required String text,
     required String requestId,
+    // opencode 无 DSH 的 queue/steer 队列语义（无队列帧），接受但忽略：
+    // 参数只为对齐 [AgentBackend] 接口，透传能力保留给将来的 DSH 侧。
+    String mode = 'queue',
   }) async {
     final inboxId = await api.sendPrompt(sessionId, text);
     _lastSentInboxId = inboxId.isNotEmpty ? inboxId : null;

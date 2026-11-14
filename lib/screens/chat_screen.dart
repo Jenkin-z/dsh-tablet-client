@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/queued_message.dart';
 import '../services/chat_controller.dart';
 import '../services/session_state.dart';
 import '../services/model_catalog.dart';
@@ -252,6 +253,23 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // ── 队列管理（横幅行内操作 → ChatController 门面，仅接线）──
+
+  /// 队列操作接线：会话 id 取当前会话，RPC 细节在 ChatController 门面
+  Future<void> _queueOp(Future<bool> Function(String sessionId) op) async {
+    final sid = _ctrl.state.sessionId;
+    if (sid != null) await op(sid);
+  }
+
+  Future<void> _steerQueued(QueuedMessage m) =>
+      _queueOp((sid) => _ctrl.steerQueuedItem(sid, m.id));
+
+  Future<void> _removeQueued(QueuedMessage m) =>
+      _queueOp((sid) => _ctrl.removeQueuedItem(sid, m.id));
+
+  Future<void> _editQueued(QueuedMessage m, String content) =>
+      _queueOp((sid) => _ctrl.editQueuedItem(sid, m.id, content));
+
   void _openChanges() {
     final state = _scaffoldKey.currentState;
     if (state == null) {
@@ -383,6 +401,9 @@ class _ChatScreenState extends State<ChatScreen> {
             queue: _ctrl.state.queueFor(sessionId),
             onSend: _send,
             onStop: _stop,
+            onQueueSteer: _steerQueued,
+            onQueueRemove: _removeQueued,
+            onQueueEdit: _editQueued,
           ),
         ],
       ),

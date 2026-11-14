@@ -20,6 +20,12 @@ class ChatInputSection extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onStop;
 
+  /// 队列条目操作（仅 DSH 会用到；opencode 无队列帧横幅不渲染）。
+  /// 缺省 = 横幅不显示对应动作按钮。
+  final Future<void> Function(QueuedMessage item)? onQueueSteer;
+  final Future<void> Function(QueuedMessage item)? onQueueRemove;
+  final Future<void> Function(QueuedMessage item, String content)? onQueueEdit;
+
   const ChatInputSection({
     super.key,
     required this.controller,
@@ -28,6 +34,9 @@ class ChatInputSection extends StatelessWidget {
     required this.queue,
     required this.onSend,
     required this.onStop,
+    this.onQueueSteer,
+    this.onQueueRemove,
+    this.onQueueEdit,
   });
 
   @override
@@ -35,7 +44,12 @@ class ChatInputSection extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        QueueBanner(queue: queue),
+        QueueBanner(
+          queue: queue,
+          onSteer: onQueueSteer,
+          onRemove: onQueueRemove,
+          onEdit: onQueueEdit,
+        ),
         ChatInputBar(
           controller: controller,
           connected: connected,

@@ -159,8 +159,9 @@ class DshBackend implements AgentBackend {
     required String sessionId,
     required String text,
     required String requestId,
+    String mode = 'queue',
   }) =>
-      _api.sendPrompt(sessionId, text, requestId: requestId);
+      _api.sendPrompt(sessionId, text, requestId: requestId, mode: mode);
 
   @override
   Future<void> cancel(String sessionId) => _api.cancelSession(sessionId);
@@ -189,6 +190,21 @@ class DshBackend implements AgentBackend {
     final ok = await _mux?.cancelQuestion(rpcId);
     return ok ?? false;
   }
+
+  // ── 队列管理（DSH 独有；opencode 无对应物）───────
+
+  /// 把一条排队消息提前为插话（session/updateQueue action: steer）
+  Future<bool> steerQueueItem(String sessionId, String itemId) =>
+      _api.steerQueuedItem(sessionId, itemId);
+
+  /// 删除一条排队/插话消息（session/updateQueue action: remove）
+  Future<bool> removeQueueItem(String sessionId, String itemId) =>
+      _api.removeQueuedItem(sessionId, itemId);
+
+  /// 编辑一条排队消息的内容（session/updateQueue action: edit）
+  Future<bool> editQueueItem(
+          String sessionId, String itemId, String content) =>
+      _api.editQueuedItem(sessionId, itemId, content);
 
   @override
   Future<void> dispose() async {

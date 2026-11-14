@@ -22,7 +22,10 @@ mixin ChatMessaging on _ChatControllerCore {
   /// 空窗里按钮先进入「进行中」，否则那一下 RTT 用户看到的是假空闲。
   /// 方向安全：权威侧随时可以纠正 —— running=false 的推送不受
   /// [_turnClosed] 闸门拦截（event_turn_session.onSessionStatus）。
-  Future<void> send(String text) async {
+  ///
+  /// [mode] 透传给后端（DSH 的 'queue' | 'steer'）；默认恒为 'queue' ——
+  /// 发送纪律是不区分忙闲，一律交给 Host 排队裁决，界面行为不变。
+  Future<void> send(String text, {String mode = 'queue'}) async {
     final backend = _backend;
     if (backend == null) throw StateError('未连接，消息已保留');
     if (!state.connected) throw StateError('未连接，消息已保留');
@@ -41,6 +44,7 @@ mixin ChatMessaging on _ChatControllerCore {
         sessionId: sessionId,
         text: text,
         requestId: rpcId,
+        mode: mode,
       );
     } catch (e) {
       supervisor.failLocalSend();
@@ -127,13 +131,74 @@ mixin ChatMessaging on _ChatControllerCore {
   }
 
   /// 放弃回答 opencode 表单：通知 Agent 后本地移除
-  Future<void> cancelForm(String formId) async {
+  Future<void> cancelForm(String formId, {String? message}) async {
     // 先从界面移除，不让用户对着已放弃的表单继续操作
     state.removeForm(formId);
     if (state.formDialogOpen) {
       state.setFormDialogOpen(false);
     }
     final oc = _backend is OpenCodeBackend ? _backend as OpenCodeBackend : null;
-    await oc?.cancelForm(formId, message: '用户放弃回答');
+    await oc?.cancelForm(formId, message: message);
+  }
+
+  // ── 队列管理（DSH 独有；opencode 无队列帧，横幅恒不渲染）──
+
+  /// 把一条排队消息提前为插话（注入当前轮）
+  Future<bool> steerQueuedItem(String sessionId, String itemId) =>
+      _mutateQueuedItem(
+        '转插话',
+        sessionId,
+        itemId,
+        (dsh) => dsh.steerQueueItem(sessionId, itemId),
+      );
+
+  /// 删除一条排队/插话消息
+  Future<bool> removeQueuedItem(String sessionId, String itemId) =>
+      _mutateQueuedItem(
+        '删除',
+        sessionId,
+        itemId,
+        (dsh) => dsh.removeQueueItem(sessionId, itemId),
+      );
+
+  /// 编辑一条排队消息的内容
+  Future<bool> editQueuedItem(
+    String sessionId,
+    String itemId,
+    String content,
+  ) =>
+      _mutateQueuedItem(
+        '编辑',
+        sessionId,
+        itemId,
+        (dsh) => dsh.editQueueItem(sessionId, itemId, content),
+      );
+
+  /// 队列条目变更的公共收口：连接检查 + try-catch + 失败提示。
+  ///
+  /// 成功**不做**乐观改动 —— Host 受理后会推新的 queue 帧（权威快照），
+  /// 本地 replaceQueue 自然刷新横幅；失败经 dispatcher.onShowSnackBar
+  /// 提示（与其它异步提示共用同一钩子）。
+  Future<bool> _mutateQueuedItem(
+    String actionLabel,
+    String sessionId,
+    String itemId,
+    Future<bool> Function(DshBackend dsh) call,
+  ) async {
+    final dsh = _backend is DshBackend ? _backend as DshBackend : null;
+    if (dsh == null || !state.connected) {
+      dispatcher.onShowSnackBar?.call('未连接，无法$actionLabel');
+      return false;
+    }
+    if (sessionId.isEmpty || itemId.isEmpty) {
+      dispatcher.onShowSnackBar?.call('没有可用会话或队列条目');
+      return false;
+    }
+    try {
+      return await call(dsh);
+    } catch (e) {
+      dispatcher.onShowSnackBar?.call('$actionLabel失败：$e');
+      return false;
+    }
   }
 }

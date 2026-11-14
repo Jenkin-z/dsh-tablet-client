@@ -36,7 +36,12 @@ mixin SessionStateQueue on _SessionStateCore {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].placement != b[i].placement) return false;
+      final x = a[i];
+      final y = b[i];
+      // id/placement/content/rpcId 全比：edit/updateQueue 后 Host 推的
+      // 快照只有内容变了（id 不变），漏比会导致横幅不刷新
+      if (x.id != y.id || x.placement != y.placement) return false;
+      if (x.rpcId != y.rpcId || x.content != y.content) return false;
     }
     return true;
   }

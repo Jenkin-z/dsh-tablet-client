@@ -34,9 +34,14 @@ mixin DshApiExtras on _DshApiCore {
     return {'title': value['title'], 'seq': value['seq']};
   }
 
-  /// 队列管理：编辑/删除待处理消息
+  /// 队列管理：编辑/删除/转插话待处理消息
   ///
-  /// action: { kind: 'edit', content: [...] } | { kind: 'remove' }
+  /// 信封依据：DSH_REMOTE_STREAM_MUX_PROTOCOL.md L2075
+  /// `{ request: { sessionId, itemId, action } }` → `{ accepted: true }`。
+  /// action 是按 kind 判别的联合：
+  /// `{ kind: 'edit', content: [...] }` | `{ kind: 'remove' }` | `{ kind: 'steer' }`
+  /// （edit/remove 形状见本文件历史注释；steer 依据 docs/DSH_WEB_ANALYSIS.md:43
+  /// 「action: edit|remove|steer」，同族判别式形状类推为 `{ kind: 'steer' }`）
   Future<bool> updateQueue(
     String sessionId,
     String itemId,
@@ -50,5 +55,24 @@ mixin DshApiExtras on _DshApiCore {
       },
     });
     return value['accepted'] == true;
+  }
+
+  /// 把排队条目提前为插话（注入当前轮）
+  Future<bool> steerQueuedItem(String sessionId, String itemId) =>
+      updateQueue(sessionId, itemId, const {'kind': 'steer'});
+
+  /// 删除排队条目
+  Future<bool> removeQueuedItem(String sessionId, String itemId) =>
+      updateQueue(sessionId, itemId, const {'kind': 'remove'});
+
+  /// 编辑排队条目内容（content 按协议 PromptContentPart 数组下线）
+  Future<bool> editQueuedItem(
+      String sessionId, String itemId, String content) {
+    return updateQueue(sessionId, itemId, {
+      'kind': 'edit',
+      'content': [
+        {'type': 'text', 'text': content},
+      ],
+    });
   }
 }

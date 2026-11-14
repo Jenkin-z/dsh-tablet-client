@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
@@ -14,27 +15,36 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 测试钩子：web 端加 ?a11y=1 时构建语义树（Playwright/读屏可查询 DOM 文本）。
+  // 其他平台 Uri.base 无该参数，零影响。
+  if (Uri.base.queryParameters['a11y'] == '1') {
+    WidgetsBinding.instance.ensureSemantics();
+  }
+
   final settings = SettingsService();
   await settings.init();
 
-  await WakelockPlus.toggle(enable: settings.keepScreenOn);
+  if (!kIsWeb) {
+    // 以下都是 Android 平台能力（前台服务/通知/保活），web 端跳过
+    await WakelockPlus.toggle(enable: settings.keepScreenOn);
 
-  // Android 13+ 需要运行时请求通知权限
-  await ForegroundStarter.requestPermissions();
+    // Android 13+ 需要运行时请求通知权限
+    await ForegroundStarter.requestPermissions();
 
-  // 初始化本地通知（审批/提问/完成时弹出 heads-up 通知）
-  await NotificationService.init();
-  // 分类开关：通知出口读设置里的实时值（闭包持有 settings，非快照）
-  NotificationService.categoryFilter = (kind) => switch (kind) {
-        NotifyKind.approval => settings.notifyApproval,
-        NotifyKind.question => settings.notifyQuestion,
-        NotifyKind.form => settings.notifyForm,
-        NotifyKind.completion => settings.notifyCompletion,
-      };
+    // 初始化本地通知（审批/提问/完成时弹出 heads-up 通知）
+    await NotificationService.init();
+    // 分类开关：通知出口读设置里的实时值（闭包持有 settings，非快照）
+    NotificationService.categoryFilter = (kind) => switch (kind) {
+          NotifyKind.approval => settings.notifyApproval,
+          NotifyKind.question => settings.notifyQuestion,
+          NotifyKind.form => settings.notifyForm,
+          NotifyKind.completion => settings.notifyCompletion,
+        };
 
-  // 前台保活：启动即拉起，否则切到后台后进程被冻结，轮询停了就不会有通知
-  KeepAliveService.init();
-  await KeepAliveService.start();
+    // 前台保活：启动即拉起，否则切到后台后进程被冻结，轮询停了就不会有通知
+    KeepAliveService.init();
+    await KeepAliveService.start();
+  }
 
   // 注意：这里**不再**把 ServerManager 的轮询结果接进 SessionState。
   //

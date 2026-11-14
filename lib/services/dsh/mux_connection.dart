@@ -19,7 +19,8 @@ extension on MuxStream {
     _revision++;
 
     try {
-      _channel = IOWebSocketChannel.connect(
+      // IO 平台带 Cookie 头 + 心跳；Web 用浏览器原生 WebSocket（无自定义头）
+      _channel = connectMuxChannel(
         Uri.parse('$wsBaseUrl/api/remote.mux'),
         headers: _headers,
         pingInterval: const Duration(seconds: 20),

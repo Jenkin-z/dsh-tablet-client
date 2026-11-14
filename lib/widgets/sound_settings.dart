@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/settings_service.dart';
@@ -18,59 +19,60 @@ class SoundTogglesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         SwitchListTile(
           secondary: Icon(
             Icons.volume_up_outlined,
-            color: IosTheme.iosBlue,
+            color: p.accent,
             size: 22,
           ),
           title: const Text('提示音'),
           subtitle: const Text(
             '需确认与完成时播放',
-            style: TextStyle(fontSize: 13),
+            style: TextStyle(fontSize: IosType.footnotePlus),
           ),
           value: settings.soundEnabled,
           onChanged: (v) => settings.setSoundEnabled(v),
-          activeThumbColor: IosTheme.iosGreen,
+          activeThumbColor: p.ok,
         ),
         const SoundSettingsDivider(),
         SwitchListTile(
           secondary: Icon(
             Icons.notification_important_outlined,
-            color: IosTheme.iosOrange,
+            color: p.warnTint,
             size: 22,
           ),
           title: const Text('需确认提示音'),
           subtitle: const Text(
             '审批 / 问题请求到达时',
-            style: TextStyle(fontSize: 13),
+            style: TextStyle(fontSize: IosType.footnotePlus),
           ),
           value: settings.approvalSound,
           onChanged: settings.soundEnabled
               ? (v) => settings.setApprovalSound(v)
               : null,
-          activeThumbColor: IosTheme.iosGreen,
+          activeThumbColor: p.ok,
         ),
         const SoundSettingsDivider(),
         SwitchListTile(
           secondary: Icon(
             Icons.task_alt_outlined,
-            color: IosTheme.iosGreen,
+            color: p.ok,
             size: 22,
           ),
           title: const Text('完成提示音'),
           subtitle: const Text(
             'Agent 一轮回答结束时',
-            style: TextStyle(fontSize: 13),
+            style: TextStyle(fontSize: IosType.footnotePlus),
           ),
           value: settings.completionSound,
           onChanged: settings.soundEnabled
               ? (v) => settings.setCompletionSound(v)
               : null,
-          activeThumbColor: IosTheme.iosGreen,
+          activeThumbColor: p.ok,
         ),
         const SoundSettingsDivider(),
         ListTile(
@@ -82,7 +84,7 @@ class SoundTogglesSection extends StatelessWidget {
           title: const Text('试听'),
           subtitle: const Text(
             '逐个播放，确认平板有声',
-            style: TextStyle(fontSize: 13),
+            style: TextStyle(fontSize: IosType.footnotePlus),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -154,6 +156,15 @@ class SoundActions {
 
   static Future<void> pick(
       BuildContext context, SettingsService settings, String name) async {
+    if (kIsWeb) {
+      // Web 端没有本地文件系统：自定义铃声是 Android 专属能力
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Web 端不支持自定义铃声')),
+        );
+      }
+      return;
+    }
     try {
       final picked = await FilePicker.pickFile(type: FileType.audio);
       if (picked == null) return;

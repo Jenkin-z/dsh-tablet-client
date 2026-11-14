@@ -243,17 +243,18 @@ class OpenCodeMapper {
     return out;
   }
 
-  /// assistant content 块拼纯文本（跳过 reasoning / tool）
+  /// assistant content 块拼纯文本（跳过 reasoning / tool；
+  /// 多块空行连接，与 DSH extractContentBlocks 对齐，不再黏连）
   static String _concatText(dynamic content) {
     if (content is! List) return '';
-    final buf = StringBuffer();
+    final parts = <String>[];
     for (final part in content) {
       if (part is Map && part['type'] == 'text') {
         final t = part['text'] as String? ?? '';
-        if (t.isNotEmpty) buf.write(t);
+        if (t.isNotEmpty) parts.add(t);
       }
     }
-    return buf.toString();
+    return parts.join('\n\n');
   }
 
   /// Session.Info → 归一化会话 map（侧栏/控制台/SessionMonitor 共用）：

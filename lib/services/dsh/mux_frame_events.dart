@@ -13,6 +13,8 @@ extension on MuxStream {
       msg = jsonDecode(data) as Map<String, dynamic>;
     } catch (e) {
       debugPrint('MuxStream parse failed: $e');
+      // 非 JSON 帧：至少让用户知道连接数据出了问题（断线横幅/状态点可见）
+      onError?.call('收到无法解析的数据帧');
       return;
     }
 
@@ -24,11 +26,37 @@ extension on MuxStream {
       if (value == null) return;
       _handleItem(streamId ?? '', value);
     } else if (type == 'error') {
-      final error = msg['error'] as Map<String, dynamic>?;
-      debugPrint('MuxStream stream error [$streamId]: ${error?['message']}');
+      _handleStreamError(streamId, msg['error']);
     } else if (type == 'end') {
       debugPrint('MuxStream stream ended [$streamId]');
     }
+  }
+
+  /// 外层 error 帧（RemoteStreamFailure：`{code, message, details}`）
+  ///
+  /// 之前只 debugPrint，用户侧毫无感知。session/follow（fol）的失败是
+  /// 会话级错误（历史/打字机流断了，如 revision 跳号），走 onSessionError
+  /// 上屏成 system 气泡；其余流（$events/control/workspace）没有会话位置，
+  /// 交给 onError → setConnectionError（断线横幅 / 状态点 tooltip 可见）。
+  void _handleStreamError(String? streamId, dynamic error) {
+    final message = _describeStreamFailure(error);
+    debugPrint('MuxStream stream error [$streamId]: $message');
+    final sid = sessionId;
+    if (streamId == 'fol' && sid != null && sid.isNotEmpty) {
+      onSessionError?.call(sid, message);
+      return;
+    }
+    onError?.call('[$streamId] $message');
+  }
+
+  String _describeStreamFailure(dynamic error) {
+    if (error is Map) {
+      final message = error['message'];
+      if (message is String && message.isNotEmpty) return message;
+      final code = error['code'];
+      if (code is String && code.isNotEmpty) return code;
+    }
+    return '数据流错误';
   }
 
   void _handleItem(String streamId, Map<String, dynamic> value) {

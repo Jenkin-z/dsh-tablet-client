@@ -96,6 +96,11 @@ mixin EventDispatcherStreaming on _EventDispatcherCore {
       supervisor.assistantSettled();
       return;
     }
+    if (interrupted) {
+      // 与历史装载（parseHistory）共用同一文案（Web §14.7 的
+      // message.stopped）：中断必须留下痕迹，重连后也不消失。
+      text = '$text$interruptedSuffix';
+    }
     onAssistantMessage(text);
     if (interrupted) state.setLastTurnEnd(DateTime.now());
   }

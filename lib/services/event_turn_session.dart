@@ -32,15 +32,21 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
     completeProcessTool(failed);
   }
 
+  /// 同一条错误文本 5 秒内只上屏一次（去重窗口）
+  String? _lastErrorText;
+  DateTime? _lastErrorAt;
+
   /// 会话级错误上屏（DSH turn/end reason.kind=error、api-session/error；
-  /// opencode session.execution.failed）
+  /// opencode session.execution.failed / session.error）
   ///
   /// 模型/Provider 报错时 Host 只把运行态收掉，消息流里什么都不留，
   /// 用户看到的就是「对话中断了却不显示任何东西」。这里把错误落成
   /// system 气泡（MessageBubble 的红色居中样式），中断必须有据可查。
   ///
-  /// 调用方必须在 onTurnEnd **之前**触发（DSH 的 mux 分发已是这个顺序）：
-  /// turn 收尾后 [_turnClosed] 置位，重连重放的同一条错误就不会再上屏。
+  /// 不设 turnClosed 闸门：错误完全可能在 turn/end **之后**到达
+  /// （api-session/error 与 turn/end reason 的双投递、乱序/重放），
+  /// 之前的早退让这些错误全部静默消失。改用 5 秒窗口按文本去重——
+  /// 同一条错误（双投递 / 重连重放）只上屏一次。
   void onSessionError(String sessionId, String message) {
     if (message.isEmpty) return;
     if (sessionId != state.sessionId) {
@@ -49,7 +55,14 @@ mixin EventDispatcherTurnSession on _EventDispatcherCore {
       onShowSnackBar?.call('其他会话出错：$message');
       return;
     }
-    if (_turnClosed) return;
+    final now = DateTime.now();
+    if (message == _lastErrorText &&
+        _lastErrorAt != null &&
+        now.difference(_lastErrorAt!) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastErrorText = message;
+    _lastErrorAt = now;
     _clearDelta();
     _messages.add(ChatMessage(
       id: 'err-${DateTime.now().microsecondsSinceEpoch}',

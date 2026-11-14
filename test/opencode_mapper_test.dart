@@ -254,7 +254,8 @@ void main() {
       expect(msgs[0].content, '帮我查一下');
       expect(msgs[1].role, 'assistant');
       expect(msgs[1].id, 'a-m2');
-      expect(msgs[1].content, '第一部第二部');
+      // 多 text 块空行连接（与 DSH extractContentBlocks 对齐，不再黏连）
+      expect(msgs[1].content, '第一部\n\n第二部');
       expect(msgs[1].content.contains('内部推理'), isFalse);
     });
 

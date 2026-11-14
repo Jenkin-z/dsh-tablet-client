@@ -52,13 +52,25 @@ extension on MuxStream {
     onAssistantStreamStart?.call();
     final stream = attempt['stream'];
     if (stream is List) {
-      final text = StringBuffer();
-      for (final item in stream) {
-        if (item is Map<String, dynamic> && item['type'] == 'text-delta') {
-          text.write(item['text'] as String? ?? '');
+      // 基线解码（协议 AssistantStreamRecord，见 mux_history_baseline.dart）：
+      // reasoning 增量先于 text 重放（生成分块的时间序），经 side-channel
+      // 标记走 onTextDelta 通道分流进过程条目。
+      final chunks = decodeAssistantBaselineStream(stream);
+      String joinText(bool reasoning) {
+        final buf = StringBuffer();
+        for (final c in chunks) {
+          if (c.isReasoning == reasoning) buf.write(c.text);
         }
+        return buf.toString();
       }
-      if (text.isNotEmpty) onTextDelta?.call(text.toString());
+
+      final reasoning = joinText(true);
+      if (reasoning.isNotEmpty) {
+        muxNextTextDeltaIsReasoning = true;
+        onTextDelta?.call(reasoning);
+      }
+      final text = joinText(false);
+      if (text.isNotEmpty) onTextDelta?.call(text);
     }
   }
 
@@ -138,9 +150,18 @@ extension on MuxStream {
         }
 
         final chunk = frameDyn['chunk'];
-        if (chunk is Map<String, dynamic> && chunk['type'] == 'text-delta') {
+        if (chunk is Map<String, dynamic>) {
+          final chunkType = chunk['type'] as String? ?? '';
           final text = chunk['text'] as String? ?? '';
-          if (text.isNotEmpty) onTextDelta?.call(text);
+          if (text.isEmpty) break;
+          if (chunkType == 'text-delta') {
+            onTextDelta?.call(text);
+          } else if (chunkType == 'reasoning-delta') {
+            // reasoning 是可见块（Web 端折叠进过程区）：经 side-channel
+            // 标记走 onTextDelta 通道，dispatcher 分流进过程条目
+            muxNextTextDeltaIsReasoning = true;
+            onTextDelta?.call(text);
+          }
         }
         break;
 

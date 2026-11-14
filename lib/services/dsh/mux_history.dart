@@ -3,7 +3,56 @@ library;
 
 import 'dart:convert';
 
+import '../../models/process_step.dart';
+
 part 'mux_history_messages.dart';
+part 'mux_history_baseline.dart';
+
+// ── mux → dispatcher 的同微任务 side-channel ─────────────────
+//
+// MuxStream 的回调字段类型锁定在 mux_stream.dart（本任务禁区），无法为
+// reasoning 增量 / 工具中断新增第二参数。这里用库级变量做 side-channel：
+// 写与读发生在**同一个事件循环微任务**里（先写后读、读后即清），
+// 不存在跨事件串扰。
+
+/// 下一次 onTextDelta 实为 reasoning 增量（assistant-stream 的
+/// reasoning-delta chunk / 重连基线的 reasoning-chunks 记录）。
+bool muxNextTextDeltaIsReasoning = false;
+
+/// 最近一次 tool/result 是否因「用户停止」中断（error.code ==
+/// 'interrupted'）；Web 端 §9.1 的优先级是 stopped > error。
+bool muxToolResultWasInterrupted = false;
+
+/// 被停止的 assistant 消息的尾部标记（Web 端 §14.7 的 message.stopped）。
+/// 实时定稿（onAssistantFinal）与历史装载（parseHistory）共用同一文案。
+const String interruptedSuffix = '（已停止）';
+
+/// 从 turn/end 的 reason 字段提取错误信息（如有）
+///
+/// `reason.kind == 'error'` 时取 `reason.error.message`；error 不是对象
+/// 或没有 message 时按「未知错误」处理。实时分发（mux_session_handler）
+/// 与历史装载（parseHistory）共用，保证 turn-error 上屏文本一致。
+String? extractTurnEndError(dynamic data) {
+  if (data is! Map<String, dynamic>) return null;
+  final reason = data['reason'];
+  if (reason is! Map<String, dynamic>) return null;
+  if (reason['kind'] != 'error') return null;
+  final error = reason['error'];
+  if (error is Map<String, dynamic>) {
+    return error['message'] as String? ?? '未知错误';
+  }
+  return '未知错误';
+}
+
+/// 工具结果是否因「用户停止」而中断（error.code == 'interrupted'）
+///
+/// Web 端的行状态优先级是 stopped > error > ok（§9.1：
+/// `error?.code === 'interrupted' ? 'stopped' : isError ? 'error' : 'ok'`）。
+bool toolResultStopped(dynamic data) {
+  if (data is! Map) return false;
+  final error = data['error'];
+  return error is Map && error['code'] == 'interrupted';
+}
 
 /// 从 assistant/message 的 message 字段提取纯文本
 String extractAssistantText(dynamic message) {
@@ -34,20 +83,22 @@ String extractAssistantReply(dynamic message) {
   return extractContentBlocks(content);
 }
 
-String extractContentBlocks(dynamic content, {bool lastOnly = false}) {
+/// 从 content 块列表提取纯文本：只取 type == 'text' 的块，
+/// 多块用空行（'\n\n'）连接。
+///
+/// 之前的实现有两种丢/黏问题：lastOnly 只留最后一个块（用户消息的
+/// 多段输入被丢），非 lastOnly 直接 buf.write 把多块黏成一段
+/// （assistant 多段回答没有分隔）。与 Web 端按块渲染的观感对齐。
+String extractContentBlocks(dynamic content) {
   if (content is! List) return '';
-  final buf = StringBuffer();
-  String? lastText;
+  final parts = <String>[];
   for (final part in content) {
     if (part is Map<String, dynamic> && part['type'] == 'text') {
       final t = part['text'] as String? ?? '';
-      if (t.isNotEmpty) {
-        lastText = t;
-        if (!lastOnly) buf.write(t);
-      }
+      if (t.isNotEmpty) parts.add(t);
     }
   }
-  return lastOnly ? (lastText ?? '') : buf.toString();
+  return parts.join('\n\n');
 }
 
 typedef ToolViewRecord = ({

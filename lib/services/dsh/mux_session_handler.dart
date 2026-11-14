@@ -5,19 +5,6 @@ part of 'mux_stream.dart';
 /// 从 session/follow 的 journal event 中提取并分发到对应回调。
 /// 独立文件以便维护，与 MuxStream 共享私有作用域。
 
-/// 从 turn/end 的 reason 字段提取错误信息（如有）
-String? _extractTurnError(dynamic data) {
-  if (data is! Map<String, dynamic>) return null;
-  final reason = data['reason'];
-  if (reason is! Map<String, dynamic>) return null;
-  if (reason['kind'] != 'error') return null;
-  final error = reason['error'];
-  if (error is Map<String, dynamic>) {
-    return error['message'] as String? ?? '未知错误';
-  }
-  return '未知错误';
-}
-
 void _handleSessionEvent(
     MuxStream self,
     String type,
@@ -29,7 +16,8 @@ void _handleSessionEvent(
       // runtime-context / skill-catalog / time-context 等注入上下文不上屏。
       if (!isHumanUserMessage(data) || !isAppendSurface(event)) break;
       final source = data['source'];
-      final text = extractContentBlocks(data['content'], lastOnly: true);
+      // 用户消息取全部 text 块（多块 '\n\n' 连接），与历史装载一致
+      final text = extractContentBlocks(data['content']);
       final rpcId = source['rpcId'] as String?;
       final messageId = data['id'] as String?;
       final seq = '${event['seq'] ?? ''}';
@@ -68,10 +56,14 @@ void _handleSessionEvent(
       );
       break;
     case 'tool/result':
+      // stopped（error.code == 'interrupted'）经 side-channel 传递：
+      // onToolResult 的字段类型锁定为 void Function(bool)，见 mux_history.dart
+      muxToolResultWasInterrupted = toolResultStopped(data);
       self.onToolResult?.call(toolResultFailed(data));
       break;
     case 'turn/end':
-      final turnError = _extractTurnError(data);
+      // 先报错再收尾：错误上屏（onSessionError）不能被 turn 收尾闸门吞掉
+      final turnError = extractTurnEndError(data);
       if (turnError != null) {
         self.onSessionError?.call(self.sessionId ?? '', turnError);
       }

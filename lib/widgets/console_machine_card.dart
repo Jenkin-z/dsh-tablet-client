@@ -6,10 +6,11 @@ import 'poll_pulse.dart';
 
 /// 设备卡（DESIGN.md §6，紧凑版：不带设备地址）
 ///
-/// ① 状态点 + 机器名 + 后端徽标（DSH / opencode）
-/// ② 心跳刻度（签名动作）
-/// ③ 状态文案（在心跳行下方）+ 运行数
-/// ④ 待办行：审批 / 提问计数（有待办才显示）
+/// ① 状态点 + 机器名
+/// ② 后端徽标（DSH / opencode）
+/// ③ 心跳刻度（签名动作）
+/// ④ 状态文案（在心跳行下方，宽度不超过刻度行）+ 运行数
+/// ⑤ 待办行：审批 / 提问计数（有待办才显示）
 class ConsoleMachineCard extends StatelessWidget {
   final String title;
 
@@ -28,7 +29,7 @@ class ConsoleMachineCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// 卡片固定高度：横向条与纵向栏里多台机器高度一致
-  static const double cardHeight = 96;
+  static const double cardHeight = 108;
 
   /// 内容区宽度上限；**不设下限**——按内容收缩，短名卡片自然变窄
   static const double contentMaxWidth = 168;
@@ -95,12 +96,14 @@ class ConsoleMachineCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _titleRow(p, statusColor),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
+                      _kindBadge(p),
+                      const SizedBox(height: 4),
                       PollPulse(beats: beats),
                       const SizedBox(height: 4),
                       _statusRow(p),
                       if (pendingApprovals + pendingQuestions > 0) ...[
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         _pendingRow(p),
                       ],
                     ],
@@ -114,12 +117,8 @@ class ConsoleMachineCard extends StatelessWidget {
     );
   }
 
-  /// ① 状态点 + 机器名 + 后端徽标
+  /// ① 状态点 + 机器名
   Widget _titleRow(IosPalette p, Color statusColor) {
-    final label = switch (kind) {
-      AgentKind.dsh => 'DSH',
-      AgentKind.opencode => 'opencode',
-    };
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -138,58 +137,68 @@ class ConsoleMachineCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: p.accentSoft,
-            borderRadius: BorderRadius.circular(IosTheme.radiusPill),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontFamily: IosType.mono,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: p.accent,
-              height: 1.3,
-            ),
-          ),
-        ),
       ],
     );
   }
 
-  /// ③ 状态文案（心跳行下方）+ 运行数
-  Widget _statusRow(IosPalette p) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            online ? '8s 轮询' : (error ?? '离线'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 10,
-              color: online ? p.label3 : p.bad,
-              height: 1.3,
-            ),
-          ),
+  /// ② 后端徽标（DSH / opencode）
+  Widget _kindBadge(IosPalette p) {
+    final label = switch (kind) {
+      AgentKind.dsh => 'DSH',
+      AgentKind.opencode => 'opencode',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: p.accentSoft,
+        borderRadius: BorderRadius.circular(IosTheme.radiusPill),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: IosType.mono,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: p.accent,
+          height: 1.3,
         ),
-        if (running > 0) ...[
-          const SizedBox(width: 6),
-          Text(
-            '$running 运行中',
-            style: TextStyle(
-              fontSize: 10,
-              color: p.ok,
-              fontWeight: FontWeight.w500,
-              height: 1.3,
+      ),
+    );
+  }
+
+  /// ④ 状态文案（宽度钳制在心跳刻度行内）+ 运行数
+  Widget _statusRow(IosPalette p) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: PollPulse.rowWidth),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              online ? '8s 轮询' : (error ?? '离线'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: online ? p.label3 : p.bad,
+                height: 1.3,
+              ),
             ),
           ),
+          if (running > 0) ...[
+            const SizedBox(width: 6),
+            Text(
+              '$running 运行中',
+              style: TextStyle(
+                fontSize: 10,
+                color: p.ok,
+                fontWeight: FontWeight.w500,
+                height: 1.3,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 

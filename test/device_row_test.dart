@@ -66,6 +66,15 @@ void main() {
           reason: '旧版 minWidth 132 会把短名也撑长（回归防线）');
     });
 
+    test('徽标独立成行在名称下，状态文案钳制在心跳行宽度内', () {
+      expect(card.contains('_kindBadge'), isTrue,
+          reason: '后端徽标独立成行（2026-11 反馈：徽标放设备名下方）');
+      expect(card.contains('PollPulse.rowWidth'), isTrue,
+          reason: '状态文案宽度不超过心跳刻度行');
+      expect(pulse.contains('static const double rowWidth'), isTrue,
+          reason: '心跳行宽度需要是可引用常量');
+    });
+
     test('第一行是别名，空名退回地址；卡片不展示设备地址', () {
       expect(card.contains('this.title'), isTrue);
       expect(card.contains('this.subtitle'), isFalse,

@@ -14,6 +14,14 @@ class PollPulse extends StatelessWidget {
   static const double cellWidth = 10;
   static const double cellHeight = 5;
 
+  /// 格间隙
+  static const double gap = 3;
+
+  /// 整行宽度（capacity 格 + capacity-1 个间隙）；
+  /// 卡片上状态文案以它钳制宽度，与刻度行右缘对齐
+  static const double rowWidth =
+      PollBeat.capacity * cellWidth + (PollBeat.capacity - 1) * gap;
+
   const PollPulse({super.key, required this.beats});
 
   @override
@@ -44,7 +52,7 @@ class PollPulse extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < cells.length; i++) ...[
-            if (i > 0) const SizedBox(width: 3),
+            if (i > 0) const SizedBox(width: PollPulse.gap),
             cells[i],
           ],
         ],

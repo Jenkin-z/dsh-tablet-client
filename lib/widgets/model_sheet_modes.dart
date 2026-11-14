@@ -28,6 +28,7 @@ class ModeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -42,7 +43,10 @@ class ModeSection extends StatelessWidget {
             ),
             child: Text(
               error!,
-              style: const TextStyle(fontSize: 13, color: IosTheme.iosRed),
+              style: TextStyle(
+                fontSize: IosType.footnotePlus,
+                color: p.bad,
+              ),
             ),
           )
         else

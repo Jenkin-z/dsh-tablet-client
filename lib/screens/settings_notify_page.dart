@@ -16,6 +16,7 @@ class SettingsNotifyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
+    final p = IosPalette.of(context);
     return SettingsSubPage(
       title: '通知与声音',
       children: [
@@ -24,7 +25,7 @@ class SettingsNotifyPage extends StatelessWidget {
           children: [
             _NotifySwitch(
               icon: Icons.approval_outlined,
-              color: IosTheme.iosOrange,
+              color: p.warnTint,
               title: '审批提醒',
               subtitle: '工具调用需要确认时',
               value: s.notifyApproval,
@@ -32,7 +33,7 @@ class SettingsNotifyPage extends StatelessWidget {
             ),
             _NotifySwitch(
               icon: Icons.help_outline,
-              color: IosTheme.iosBlue,
+              color: p.accent,
               title: '提问提醒',
               subtitle: 'Agent 向你提问时',
               value: s.notifyQuestion,
@@ -48,7 +49,7 @@ class SettingsNotifyPage extends StatelessWidget {
             ),
             _NotifySwitch(
               icon: Icons.check_circle_outline,
-              color: IosTheme.iosGreen,
+              color: p.ok,
               title: '完成提醒',
               subtitle: '会话一轮跑完时',
               value: s.notifyCompletion,
@@ -70,17 +71,17 @@ class SettingsNotifyPage extends StatelessWidget {
             ListTile(
               leading: Icon(
                 Icons.notifications_active_outlined,
-                color: IosTheme.iosBlue,
+                color: p.accent,
               ),
               title: const Text('发送测试通知'),
               subtitle: const Text(
                 '验证系统通知是否正常弹出（含声音+震动）',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
-              trailing: const Icon(
+              trailing: Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
               onTap: () async {
                 await NotificationService.show(
@@ -123,8 +124,8 @@ class _NotifySwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: color),
-      title: Text(title, style: const TextStyle(fontSize: 15)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      title: Text(title, style: const TextStyle(fontSize: IosType.body)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: IosType.footnote)),
       trailing: Switch(value: value, onChanged: onChanged),
     );
   }

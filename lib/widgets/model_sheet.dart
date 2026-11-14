@@ -142,13 +142,13 @@ class _ModelSheetState extends State<ModelSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.78,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+        color: p.elevated,
         borderRadius: const BorderRadius.vertical(
           top: Radius.circular(IosTheme.radiusCard),
         ),

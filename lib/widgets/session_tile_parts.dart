@@ -22,6 +22,7 @@ class SessionGroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -36,7 +37,7 @@ class SessionGroupHeader extends StatelessWidget {
               Icon(
                 cwd.isEmpty ? Icons.inbox_outlined : Icons.folder_outlined,
                 size: 20,
-                color: IosTheme.iosBlue,
+                color: p.accent,
               ),
               const SizedBox(width: IosTheme.spaceM),
               Expanded(
@@ -49,7 +50,7 @@ class SessionGroupHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                        fontSize: IosType.body,
                       ),
                     ),
                     if (cwd.isNotEmpty)
@@ -58,8 +59,8 @@ class SessionGroupHeader extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
-                          color: IosTheme.iosGray,
+                          fontSize: IosType.footnote,
+                          color: p.label,
                         ),
                       ),
                   ],
@@ -67,10 +68,10 @@ class SessionGroupHeader extends StatelessWidget {
               ),
               if (onCreate != null)
                 IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.add,
                     size: 18,
-                    color: IosTheme.iosBlue,
+                    color: p.accent,
                   ),
                   tooltip: '在此目录新建会话',
                   onPressed: onCreate,
@@ -78,7 +79,7 @@ class SessionGroupHeader extends StatelessWidget {
               Icon(
                 isExpanded ? Icons.expand_less : Icons.expand_more,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
             ],
           ),
@@ -106,6 +107,7 @@ class SessionMoreTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -121,16 +123,16 @@ class SessionMoreTile extends StatelessWidget {
             children: [
               Text(
                 showAll ? '收起' : '显示全部 $total 条',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: IosTheme.iosBlue,
+                  color: p.accent,
                 ),
               ),
               const SizedBox(width: IosTheme.spaceXS),
               Icon(
                 showAll ? Icons.expand_less : Icons.expand_more,
                 size: 18,
-                color: IosTheme.iosBlue,
+                color: p.accent,
               ),
             ],
           ),

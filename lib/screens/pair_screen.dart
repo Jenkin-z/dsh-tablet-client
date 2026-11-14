@@ -223,11 +223,11 @@ class _PairScreenState extends State<PairScreen> {
   }
 
   /// 输入框公共样式（地址 / 配对码 / 名称共用，别复制三份）
-  InputDecoration _field(String hint, bool isDark) => InputDecoration(
+  InputDecoration _field(String hint, IosPalette p) => InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: IosTheme.iosGray),
+        hintStyle: TextStyle(color: p.label3),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+        fillColor: p.surface2,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(IosTheme.radiusInput),
           borderSide: BorderSide.none,
@@ -240,14 +240,14 @@ class _PairScreenState extends State<PairScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
+      backgroundColor: p.bg,
       appBar: AppBar(
         title: const Text(
           '添加 / 授权 PC',
           style: TextStyle(
-            fontSize: 17,
+            fontSize: IosType.title3,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -258,7 +258,7 @@ class _PairScreenState extends State<PairScreen> {
           // 输入区域
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              color: p.surface,
               borderRadius: BorderRadius.circular(IosTheme.radiusCard),
               boxShadow: IosTheme.shadowS,
             ),
@@ -269,29 +269,32 @@ class _PairScreenState extends State<PairScreen> {
                 const Text(
                   'PC 地址',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: IosType.footnotePlus,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: IosTheme.spaceS),
                 TextField(
                   controller: _paste,
-                  style: const TextStyle(fontSize: 16),
+                  style: const TextStyle(fontSize: IosType.callout),
                   decoration:
-                      _field('IP 或主机名:端口，如 192.168.10.171:3080', isDark),
+                      _field('IP 或主机名:端口，如 192.168.10.171:3080', p),
                 ),
                 const SizedBox(height: IosTheme.spaceL),
                 TextField(
                   controller: _code,
                   keyboardType: TextInputType.number,
-                  style: const TextStyle(fontSize: 16, letterSpacing: 4),
-                  decoration: _field('配对码：PC 管理页 / 面板上显示的 4 位数字', isDark),
+                  style: const TextStyle(
+                    fontSize: IosType.callout,
+                    letterSpacing: 4,
+                  ),
+                  decoration: _field('配对码：PC 管理页 / 面板上显示的 4 位数字', p),
                 ),
                 const SizedBox(height: IosTheme.spaceL),
                 TextField(
                   controller: _name,
-                  style: const TextStyle(fontSize: 16),
-                  decoration: _field('名称（可选）：首页显示的别名，留空用地址', isDark),
+                  style: const TextStyle(fontSize: IosType.callout),
+                  decoration: _field('名称（可选）：首页显示的别名，留空用地址', p),
                 ),
                 const SizedBox(height: IosTheme.spaceL),
                 // 按钮区域
@@ -348,10 +351,10 @@ class _PairScreenState extends State<PairScreen> {
                 ),
                 if (_busy) ...[
                   const SizedBox(height: IosTheme.spaceL),
-                  const Center(
+                  Center(
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: IosTheme.iosBlue,
+                      color: p.accent,
                     ),
                   ),
                 ],
@@ -364,22 +367,22 @@ class _PairScreenState extends State<PairScreen> {
             Container(
               padding: const EdgeInsets.all(IosTheme.spaceM),
               decoration: BoxDecoration(
-                color: IosTheme.iosRed.withValues(alpha: 0.1),
+                color: p.badSoft,
                 borderRadius: BorderRadius.circular(IosTheme.radiusS),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.error_outline,
-                    color: IosTheme.iosRed,
+                    color: p.bad,
                     size: 20,
                   ),
                   const SizedBox(width: IosTheme.spaceS),
                   Expanded(
                     child: Text(
                       _error!,
-                      style: const TextStyle(
-                        color: IosTheme.iosRed,
+                      style: TextStyle(
+                        color: p.bad,
                         fontSize: 14,
                       ),
                     ),

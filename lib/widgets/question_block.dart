@@ -26,6 +26,7 @@ class QuestionBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     final header = q['header'] as String?;
     final question = q['question'] as String? ?? '';
     final detail = q['detail'] as String?;
@@ -43,18 +44,18 @@ class QuestionBlock extends StatelessWidget {
           if (header != null && header.isNotEmpty)
             Text(
               header,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: IosTheme.iosGray,
+                fontSize: IosType.footnotePlus,
+                color: p.label,
               ),
             ),
           const SizedBox(height: IosTheme.spaceXS),
           Text(
             question,
             style: TextStyle(
-              fontSize: 15,
-              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+              fontSize: IosType.body,
+              color: p.label,
             ),
           ),
           if (detail != null && detail.isNotEmpty) ...[
@@ -62,8 +63,8 @@ class QuestionBlock extends StatelessWidget {
             Text(
               detail,
               style: TextStyle(
-                fontSize: 13,
-                color: IosTheme.iosGray,
+                fontSize: IosType.footnotePlus,
+                color: p.label,
               ),
             ),
           ],
@@ -72,14 +73,14 @@ class QuestionBlock extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(IosTheme.spaceM),
               decoration: BoxDecoration(
-                color: IosTheme.iosBlue.withValues(alpha: 0.1),
+                color: p.accentSoft,
                 borderRadius: BorderRadius.circular(IosTheme.radiusXS),
               ),
               child: Text(
                 '计划评审：${intent['approve'] ?? ''}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: IosTheme.iosBlue,
+                style: TextStyle(
+                  fontSize: IosType.footnotePlus,
+                  color: p.accent,
                 ),
               ),
             ),
@@ -97,14 +98,12 @@ class QuestionBlock extends StatelessWidget {
           const SizedBox(height: IosTheme.spaceM),
           TextField(
             controller: controller,
-            style: const TextStyle(fontSize: 15),
+            style: const TextStyle(fontSize: IosType.body),
             decoration: InputDecoration(
               hintText: '补充说明（可选）',
-              hintStyle: TextStyle(color: IosTheme.iosGray),
+              hintStyle: TextStyle(color: p.label3),
               filled: true,
-              fillColor: isDark
-                  ? const Color(0xFF3A3A3C)
-                  : const Color(0xFFF2F2F7),
+              fillColor: p.surface2,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(IosTheme.radiusInput),
                 borderSide: BorderSide.none,

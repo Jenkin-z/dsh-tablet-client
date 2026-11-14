@@ -24,7 +24,10 @@ class SettingsAppearancePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('主题', style: TextStyle(fontSize: 16)),
+                  const Text(
+                    '主题',
+                    style: TextStyle(fontSize: IosType.callout),
+                  ),
                   const SizedBox(height: IosTheme.spaceM),
                   SegmentedButton<String>(
                     segments: const [

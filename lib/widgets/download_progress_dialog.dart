@@ -91,16 +91,16 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      backgroundColor: p.elevated,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
       title: Text(
         _title,
         style: const TextStyle(
-          fontSize: 17,
+          fontSize: IosType.title3,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -114,10 +114,8 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: _done ? 1 : (_phase == UpdateDlPhase.verifying ? null : _progress),
-                    backgroundColor: isDark
-                        ? const Color(0xFF3A3A3C)
-                        : const Color(0xFFF2F2F7),
-                    color: IosTheme.iosBlue,
+                    backgroundColor: p.surface2,
+                    color: p.accent,
                     minHeight: 6,
                   ),
                 ),
@@ -126,7 +124,7 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                   '${widget.info.versionName} · ${widget.info.sizeText}',
                   style: TextStyle(
                     fontSize: 14,
-                    color: IosTheme.iosGray,
+                    color: p.label,
                   ),
                 ),
                 if (widget.info.sha256 != null) ...[
@@ -136,7 +134,7 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                       Icon(
                         _done ? Icons.verified_outlined : Icons.fingerprint,
                         size: 16,
-                        color: _done ? IosTheme.iosGreen : IosTheme.iosGray,
+                        color: _done ? p.ok : p.label,
                       ),
                       const SizedBox(width: IosTheme.spaceS),
                       Expanded(
@@ -145,8 +143,8 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                               ? 'SHA-256 已校验 · ${widget.info.fingerprintShort}'
                               : '发布指纹 ${widget.info.fingerprintShort} · 下载后逐字节校验',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: _done ? IosTheme.iosGreen : IosTheme.iosGray,
+                            fontSize: IosType.footnote,
+                            color: _done ? p.ok : p.label2,
                           ),
                         ),
                       ),
@@ -157,8 +155,8 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                 Text(
                   '下载完成后自动调起安装，可在后台继续聊天',
                   style: TextStyle(
-                    fontSize: 12,
-                    color: IosTheme.iosGray,
+                    fontSize: IosType.footnote,
+                    color: p.label2,
                   ),
                 ),
               ],
@@ -170,16 +168,16 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
             child: Text(
               '取消',
               style: TextStyle(
-                color: IosTheme.iosBlue,
-                fontSize: 17,
+                color: p.accent,
+                fontSize: IosType.title3,
               ),
             ),
           ),
           FilledButton(
             onPressed: _start,
             style: FilledButton.styleFrom(
-              backgroundColor: IosTheme.iosBlue,
-              foregroundColor: Colors.white,
+              backgroundColor: p.accent,
+              foregroundColor: p.onAccent,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(IosTheme.radiusButton),
               ),

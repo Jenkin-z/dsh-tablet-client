@@ -16,6 +16,7 @@ class SettingsUpdatePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
+    final p = IosPalette.of(context);
     return SettingsSubPage(
       title: '应用更新',
       children: [
@@ -26,13 +27,13 @@ class SettingsUpdatePage extends StatelessWidget {
               builder: (context, snap) => ListTile(
                 leading: Icon(
                   Icons.info_outline,
-                  color: IosTheme.iosGray,
+                  color: p.label,
                   size: 22,
                 ),
                 title: const Text('当前版本'),
                 subtitle: Text(
                   snap.data ?? '…',
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(fontSize: IosType.footnotePlus),
                 ),
                 trailing: IosButton(
                   label: '检查更新',
@@ -50,17 +51,17 @@ class SettingsUpdatePage extends StatelessWidget {
             SwitchListTile(
               secondary: Icon(
                 Icons.system_update_outlined,
-                color: IosTheme.iosBlue,
+                color: p.accent,
                 size: 22,
               ),
               title: const Text('启动时自动检查'),
               subtitle: const Text(
                 '局域网小文件请求，无更新不打扰',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
               value: s.updateAutoCheck,
               onChanged: (v) => s.setUpdateAutoCheck(v),
-              activeThumbColor: IosTheme.iosGreen,
+              activeThumbColor: p.ok,
             ),
           ],
         ),

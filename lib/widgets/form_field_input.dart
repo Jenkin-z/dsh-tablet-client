@@ -27,6 +27,7 @@ class FormFieldInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     final options = (field['options'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
@@ -38,13 +39,16 @@ class FormFieldInput extends StatelessWidget {
         );
       case 'integer':
       case 'number':
-        return _numberInput(type == 'integer');
+        return _numberInput(p, type == 'integer');
       case 'multiselect':
         return _chips(options, multi: true);
       case 'external':
         return SelectableText(
           field['url'] as String? ?? '',
-          style: const TextStyle(fontSize: 13, color: IosTheme.iosBlue),
+          style: TextStyle(
+            fontSize: IosType.footnotePlus,
+            color: p.accent,
+          ),
         );
       case 'string':
       default:
@@ -56,30 +60,30 @@ class FormFieldInput extends StatelessWidget {
               // custom=true：选项之外允许自填
               if (field['custom'] == true) ...[
                 const SizedBox(height: IosTheme.spaceS),
-                _textInput(TextInputType.text),
+                _textInput(p, TextInputType.text),
               ],
             ],
           );
         }
-        return _textInput(TextInputType.text);
+        return _textInput(p, TextInputType.text);
     }
   }
 
-  Widget _textInput(TextInputType keyboard) {
+  Widget _textInput(IosPalette p, TextInputType keyboard) {
     return TextField(
       controller: controller,
       keyboardType: keyboard,
-      decoration: _deco(),
+      decoration: _deco(p),
       onChanged: onChanged,
     );
   }
 
-  Widget _numberInput(bool isInt) {
+  Widget _numberInput(IosPalette p, bool isInt) {
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.-]'))],
-      decoration: _deco(),
+      decoration: _deco(p),
       onChanged: (v) {
         final n = isInt ? int.tryParse(v) : double.tryParse(v);
         if (n != null) onChanged(n);
@@ -87,11 +91,11 @@ class FormFieldInput extends StatelessWidget {
     );
   }
 
-  InputDecoration _deco() {
+  InputDecoration _deco(IosPalette p) {
     return InputDecoration(
       hintText: field['placeholder'] as String? ?? '',
       filled: true,
-      fillColor: const Color(0xFFF2F2F7),
+      fillColor: p.surface2,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusInput),
         borderSide: BorderSide.none,

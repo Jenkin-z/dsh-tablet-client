@@ -18,6 +18,7 @@ class ServerListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<SettingsService, ServerManager>(
       builder: (context, settings, manager, _) {
+        final p = IosPalette.of(context);
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -26,18 +27,18 @@ class ServerListCard extends StatelessWidget {
             ListTile(
               leading: Icon(
                 Icons.key_outlined,
-                color: IosTheme.iosBlue,
+                color: p.accent,
                 size: 22,
               ),
               title: const Text('添加 / 授权 PC'),
               subtitle: const Text(
                 '用 DSH 启动令牌换取 30 天授权',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
-              trailing: const Icon(
+              trailing: Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const PairScreen()),
@@ -52,12 +53,12 @@ class ServerListCard extends StatelessWidget {
               title: const Text('添加 opencode'),
               subtitle: const Text(
                 '粘贴授权链接，或填局域网地址 + 服务密码',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
-              trailing: const Icon(
+              trailing: Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
               onTap: () => _addOpenCode(context),
             ),
@@ -100,9 +101,10 @@ class ServerListCard extends StatelessWidget {
     final status = s.unpaired
         ? '需重新授权'
         : (mon?.online == true ? '在线' : (mon?.error ?? '离线'));
+    final p = IosPalette.of(context);
     final statusColor = s.unpaired
-        ? IosTheme.iosOrange
-        : (mon?.online == true ? IosTheme.iosGreen : IosTheme.iosGray);
+        ? p.warnTint
+        : (mon?.online == true ? p.ok : p.label2);
     final isOpenCode = s.kind == AgentKind.opencode;
     return ListTile(
       leading: Container(
@@ -126,7 +128,7 @@ class ServerListCard extends StatelessWidget {
       ),
       subtitle: Text(
         '${s.displayAddress} · $status',
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: IosType.footnotePlus),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -139,7 +141,7 @@ class ServerListCard extends StatelessWidget {
             IconButton(
               icon: Icon(
                 Icons.key_outlined,
-                color: IosTheme.iosOrange,
+                color: p.warnTint,
                 size: 20,
               ),
               tooltip: '重新授权',
@@ -156,9 +158,9 @@ class ServerListCard extends StatelessWidget {
               },
             ),
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.edit_outlined,
-              color: IosTheme.iosBlue,
+              color: p.accent,
               size: 20,
             ),
             tooltip: '重命名',
@@ -167,7 +169,7 @@ class ServerListCard extends StatelessWidget {
           IconButton(
             icon: Icon(
               Icons.delete_outline,
-              color: IosTheme.iosRed.withValues(alpha: 0.7),
+              color: p.bad.withValues(alpha: 0.7),
               size: 20,
             ),
             tooltip: '删除',

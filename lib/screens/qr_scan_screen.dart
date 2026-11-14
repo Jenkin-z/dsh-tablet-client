@@ -92,7 +92,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(_invalidHint),
-        backgroundColor: IosTheme.iosRed,
+        backgroundColor: IosPalette.of(context).bad,
       ));
   }
 
@@ -107,7 +107,10 @@ class _QrScanScreenState extends State<QrScanScreen> {
       appBar: AppBar(
         title: const Text(
           '扫码连接',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: IosType.title3,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,

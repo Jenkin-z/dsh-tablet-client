@@ -35,6 +35,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
+    final p = IosPalette.of(context);
     final servers = s.servers;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -50,14 +51,14 @@ class SettingsScreen extends StatelessWidget {
             children: [
               SettingsEntryTile(
                 icon: Icons.dns_outlined,
-                iconColor: IosTheme.iosBlue,
+                iconColor: p.accent,
                 title: '设备管理',
                 value: servers.isEmpty ? '未添加' : '${servers.length} 台',
                 onTap: () => _push(context, const SettingsServersPage()),
               ),
               SettingsEntryTile(
                 icon: Icons.lightbulb_outline,
-                iconColor: IosTheme.iosOrange,
+                iconColor: p.warnTint,
                 title: '平板常驻',
                 value: s.keepScreenOn ? '常亮开' : '常亮关',
                 onTap: () => _push(context, const SettingsResidentPage()),
@@ -70,7 +71,7 @@ class SettingsScreen extends StatelessWidget {
             children: [
               SettingsEntryTile(
                 icon: Icons.notifications_outlined,
-                iconColor: IosTheme.iosGreen,
+                iconColor: p.ok,
                 title: '通知与声音',
                 value: s.soundEnabled ? '提示音开' : '提示音关',
                 onTap: () => _push(context, const SettingsNotifyPage()),
@@ -99,7 +100,7 @@ class SettingsScreen extends StatelessWidget {
                 future: UpdateService.currentVersion(),
                 builder: (context, snap) => SettingsEntryTile(
                   icon: Icons.system_update_outlined,
-                  iconColor: IosTheme.iosBlue,
+                  iconColor: p.accent,
                   title: '应用更新',
                   value: snap.data ?? '…',
                   onTap: () => _push(context, const SettingsUpdatePage()),

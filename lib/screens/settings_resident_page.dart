@@ -17,6 +17,7 @@ class SettingsResidentPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
+    final p = IosPalette.of(context);
     return SettingsSubPage(
       title: '平板常驻',
       children: [
@@ -26,36 +27,36 @@ class SettingsResidentPage extends StatelessWidget {
             SwitchListTile(
               secondary: Icon(
                 Icons.lightbulb_outline,
-                color: IosTheme.iosOrange,
+                color: p.warnTint,
                 size: 22,
               ),
               title: const Text('屏幕常亮'),
               subtitle: const Text(
                 '防止平板自动锁屏熄屏',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
               value: s.keepScreenOn,
               onChanged: (v) async {
                 await s.setKeepScreenOn(v);
                 await WakelockPlus.toggle(enable: v);
               },
-              activeThumbColor: IosTheme.iosGreen,
+              activeThumbColor: p.ok,
             ),
             const ForegroundServiceTile(),
             SwitchListTile(
               secondary: Icon(
                 Icons.autorenew,
-                color: IosTheme.iosGreen,
+                color: p.ok,
                 size: 22,
               ),
               title: const Text('断线自动重连'),
               subtitle: const Text(
                 '网络恢复后自动连回 DSH',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
               value: s.autoReconnect,
               onChanged: (v) => s.setAutoReconnect(v),
-              activeThumbColor: IosTheme.iosGreen,
+              activeThumbColor: p.ok,
             ),
           ],
         ),

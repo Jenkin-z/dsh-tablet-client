@@ -12,16 +12,16 @@ class UpdateAvailableDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      backgroundColor: p.elevated,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
       title: Text(
         '发现新版本 ${info.versionName}',
         style: const TextStyle(
-          fontSize: 17,
+          fontSize: IosType.title3,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -35,9 +35,7 @@ class UpdateAvailableDialog extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(IosTheme.spaceM),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF3A3A3C)
-                      : const Color(0xFFF2F2F7),
+                  color: p.surface2,
                   borderRadius: BorderRadius.circular(IosTheme.radiusXS),
                 ),
                 child: Row(
@@ -45,14 +43,14 @@ class UpdateAvailableDialog extends StatelessWidget {
                     Icon(
                       Icons.archive_outlined,
                       size: 18,
-                      color: IosTheme.iosGray,
+                      color: p.label,
                     ),
                     const SizedBox(width: IosTheme.spaceS),
                     Text(
                       '大小：${info.sizeText}',
                       style: TextStyle(
                         fontSize: 14,
-                        color: IosTheme.iosGray,
+                        color: p.label,
                       ),
                     ),
                   ],
@@ -67,14 +65,14 @@ class UpdateAvailableDialog extends StatelessWidget {
                     Icon(
                       Icons.fingerprint,
                       size: 16,
-                      color: IosTheme.iosGray,
+                      color: p.label,
                     ),
                     const SizedBox(width: IosTheme.spaceS),
                     Text(
                       '发布指纹 ${info.fingerprintShort}',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: IosTheme.iosGray,
+                        fontSize: IosType.footnotePlus,
+                        color: p.label,
                       ),
                     ),
                   ],
@@ -83,15 +81,15 @@ class UpdateAvailableDialog extends StatelessWidget {
                 Text(
                   '下载完成后将逐字节校验 SHA-256，不匹配拒绝安装',
                   style: TextStyle(
-                    fontSize: 11,
-                    color: IosTheme.iosGray,
+                    fontSize: IosType.caption,
+                    color: p.label2,
                   ),
                 ),
                 const SizedBox(height: IosTheme.spaceM),
               ],
               Text(
                 info.changelog,
-                style: const TextStyle(fontSize: 15, height: 1.5),
+                style: const TextStyle(fontSize: IosType.body, height: 1.5),
               ),
             ],
           ),
@@ -104,16 +102,16 @@ class UpdateAvailableDialog extends StatelessWidget {
             child: Text(
               '稍后',
               style: TextStyle(
-                color: IosTheme.iosBlue,
-                fontSize: 17,
+                color: p.accent,
+                fontSize: IosType.title3,
               ),
             ),
           ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
           style: FilledButton.styleFrom(
-            backgroundColor: IosTheme.iosBlue,
-            foregroundColor: Colors.white,
+            backgroundColor: p.accent,
+            foregroundColor: p.onAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(IosTheme.radiusButton),
             ),

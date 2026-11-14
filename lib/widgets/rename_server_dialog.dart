@@ -43,15 +43,18 @@ class _RenameServerDialogState extends State<RenameServerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      backgroundColor: p.elevated,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
       title: const Text(
         '重命名设备',
-        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: IosType.title3,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       content: TextField(
         controller: _controller,
@@ -70,14 +73,14 @@ class _RenameServerDialogState extends State<RenameServerDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
             '取消',
-            style: TextStyle(color: IosTheme.iosGray, fontSize: 17),
+            style: TextStyle(color: p.label, fontSize: IosType.title3),
           ),
         ),
         FilledButton(
           onPressed: _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: IosTheme.iosBlue,
-            foregroundColor: Colors.white,
+            backgroundColor: p.accent,
+            foregroundColor: p.onAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(IosTheme.radiusButton),
             ),

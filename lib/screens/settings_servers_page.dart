@@ -42,6 +42,7 @@ class _SettingsServersPageState extends State<SettingsServersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return SettingsSubPage(
       title: '设备管理',
       children: [
@@ -52,7 +53,7 @@ class _SettingsServersPageState extends State<SettingsServersPage> {
             ListTile(
               leading: Icon(
                 Icons.wifi,
-                color: IosTheme.iosBlue,
+                color: p.accent,
                 size: 22,
               ),
               title: Text(
@@ -62,19 +63,17 @@ class _SettingsServersPageState extends State<SettingsServersPage> {
                   ? Text(
                       _testResult!,
                       style: TextStyle(
-                        color: _testResult!.contains('✓')
-                            ? IosTheme.iosGreen
-                            : IosTheme.iosRed,
+                        color: _testResult!.contains('✓') ? p.ok : p.bad,
                       ),
                     )
                   : null,
               trailing: _testing
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: IosTheme.iosBlue,
+                        color: p.accent,
                       ),
                     )
                   : IosButton(

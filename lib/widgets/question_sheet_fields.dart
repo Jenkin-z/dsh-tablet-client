@@ -23,6 +23,7 @@ class QuestionChipsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Wrap(
       spacing: IosTheme.spaceS,
       runSpacing: IosTheme.spaceS,
@@ -38,8 +39,8 @@ class QuestionChipsRow extends StatelessWidget {
                     selected: isSel,
                     onSelected: (v) => onMultiSelect(label, v),
                     tooltip: desc,
-                    selectedColor: IosTheme.iosBlue.withValues(alpha: 0.15),
-                    checkmarkColor: IosTheme.iosBlue,
+                    selectedColor: p.accentSoft,
+                    checkmarkColor: p.accent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(IosTheme.radiusChip),
                     ),
@@ -49,7 +50,7 @@ class QuestionChipsRow extends StatelessWidget {
                     selected: isSel,
                     onSelected: (_) => onChoiceSelect(label),
                     tooltip: desc,
-                    selectedColor: IosTheme.iosBlue.withValues(alpha: 0.15),
+                    selectedColor: p.accentSoft,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(IosTheme.radiusChip),
                     ),

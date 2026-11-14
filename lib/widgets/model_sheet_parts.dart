@@ -13,7 +13,7 @@ class ModelSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -24,10 +24,10 @@ class ModelSectionTitle extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          fontSize: 11,
+          fontSize: IosType.caption,
           letterSpacing: 0.6,
           fontWeight: FontWeight.w600,
-          color: isDark ? Colors.white38 : Colors.black38,
+          color: p.label3,
         ),
       ),
     );
@@ -49,7 +49,7 @@ class ModelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -66,9 +66,9 @@ class ModelTile extends StatelessWidget {
                   Text(
                     model.name,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: IosType.body,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                      color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                      color: p.label,
                     ),
                   ),
                   if (model.description != null &&
@@ -79,16 +79,15 @@ class ModelTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black45,
+                        fontSize: IosType.footnote,
+                        color: p.label3,
                       ),
                     ),
                   ],
                 ],
               ),
             ),
-            if (selected)
-              const Icon(Icons.check, size: 20, color: IosTheme.iosBlue),
+            if (selected) Icon(Icons.check, size: 20, color: p.accent),
           ],
         ),
       ),
@@ -111,7 +110,7 @@ class ReasoningChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -120,22 +119,18 @@ class ReasoningChip extends StatelessWidget {
           vertical: IosTheme.spaceS,
         ),
         decoration: BoxDecoration(
-          color: active
-              ? IosTheme.iosBlue.withValues(alpha: 0.14)
-              : (isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7)),
+          color: active ? p.accentSoft : p.surface2,
           borderRadius: BorderRadius.circular(IosTheme.radiusButton),
           border: Border.all(
-            color: active ? IosTheme.iosBlue : Colors.transparent,
+            color: active ? p.accent : Colors.transparent,
           ),
         ),
         child: Text(
           effort.name,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: IosType.footnotePlus,
             fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-            color: active
-                ? IosTheme.iosBlue
-                : (isDark ? Colors.white70 : const Color(0xFF1C1C1E)),
+            color: active ? p.accent : p.label,
           ),
         ),
       ),
@@ -150,7 +145,7 @@ class CatalogFailureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: IosTheme.spaceL,
@@ -159,14 +154,14 @@ class CatalogFailureRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, size: 16, color: IosTheme.iosOrange),
+          Icon(Icons.error_outline, size: 16, color: p.warnTint),
           const SizedBox(width: IosTheme.spaceS),
           Expanded(
             child: RichText(
               text: TextSpan(
                 style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: IosType.footnotePlus,
+                  color: p.label2,
                 ),
                 children: [
                   TextSpan(

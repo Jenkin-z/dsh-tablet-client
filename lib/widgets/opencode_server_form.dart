@@ -32,7 +32,7 @@ class OpenCodeServerForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return SizedBox(
       width: 420,
       child: SingleChildScrollView(
@@ -58,18 +58,23 @@ class OpenCodeServerForm extends StatelessWidget {
                   busy ? null : (v) => onModeChanged(v.first),
             ),
             const SizedBox(height: IosTheme.spaceL),
-            if (linkMode) ..._linkFields(isDark) else ..._manualFields(isDark),
+            if (linkMode) ..._linkFields(p) else ..._manualFields(p),
             const SizedBox(height: IosTheme.spaceM),
             _field(
               controller: name,
               hint: '留空则用地址',
               label: '名称（可选）',
-              isDark: isDark,
+              p: p,
             ),
             if (error != null) ...[
               const SizedBox(height: IosTheme.spaceM),
-              Text(error!,
-                  style: const TextStyle(fontSize: 13, color: IosTheme.iosRed)),
+              Text(
+                error!,
+                style: TextStyle(
+                  fontSize: IosType.footnotePlus,
+                  color: p.bad,
+                ),
+              ),
             ],
           ],
         ),
@@ -77,27 +82,30 @@ class OpenCodeServerForm extends StatelessWidget {
     );
   }
 
-  List<Widget> _linkFields(bool isDark) => [
+  List<Widget> _linkFields(IosPalette p) => [
         _field(
           controller: link,
           hint: 'https://xxxx.opencode.run/auth/connect/abc123',
           label: '授权链接',
-          isDark: isDark,
+          p: p,
           scan: true,
         ),
         const SizedBox(height: IosTheme.spaceS),
-        const Text(
+        Text(
           'PC 上运行 opencode pair --remote 生成，300 秒内有效；也可直接扫授权二维码',
-          style: TextStyle(fontSize: 12, color: IosTheme.iosGray),
+          style: TextStyle(
+            fontSize: IosType.footnote,
+            color: p.label2,
+          ),
         ),
       ];
 
-  List<Widget> _manualFields(bool isDark) => [
+  List<Widget> _manualFields(IosPalette p) => [
         _field(
           controller: url,
           hint: 'http://IP:4096，任意 IP 或主机名',
           label: '地址',
-          isDark: isDark,
+          p: p,
           scan: true,
         ),
         const SizedBox(height: IosTheme.spaceM),
@@ -105,13 +113,16 @@ class OpenCodeServerForm extends StatelessWidget {
           controller: password,
           hint: '服务密码',
           label: '密码',
-          isDark: isDark,
+          p: p,
           obscure: true,
         ),
         const SizedBox(height: IosTheme.spaceS),
-        const Text(
+        Text(
           '局域网直连需 PC 端 opencode serve --hostname 0.0.0.0',
-          style: TextStyle(fontSize: 12, color: IosTheme.iosGray),
+          style: TextStyle(
+            fontSize: IosType.footnote,
+            color: p.label2,
+          ),
         ),
       ];
 
@@ -119,7 +130,7 @@ class OpenCodeServerForm extends StatelessWidget {
     required TextEditingController controller,
     required String hint,
     required String label,
-    required bool isDark,
+    required IosPalette p,
     bool obscure = false,
     bool scan = false,
   }) {
@@ -127,13 +138,16 @@ class OpenCodeServerForm extends StatelessWidget {
       controller: controller,
       obscureText: obscure,
       enabled: !busy,
-      style: const TextStyle(fontSize: 15),
+      style: const TextStyle(fontSize: IosType.body),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        hintStyle: const TextStyle(fontSize: 13, color: IosTheme.iosGray),
+        hintStyle: TextStyle(
+          fontSize: IosType.footnotePlus,
+          color: p.label3,
+        ),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+        fillColor: p.surface2,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(IosTheme.radiusInput),
           borderSide: BorderSide.none,
@@ -141,7 +155,7 @@ class OpenCodeServerForm extends StatelessWidget {
         suffixIcon: scan && onScan != null
             ? IconButton(
                 icon: const Icon(Icons.qr_code_scanner, size: 22),
-                color: IosTheme.iosBlue,
+                color: p.accent,
                 tooltip: '扫码填入',
                 onPressed: busy ? null : onScan,
               )

@@ -92,16 +92,19 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     final fields = _logic.visibleFields(widget.form);
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      backgroundColor: p.elevated,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
       title: Text(
         widget.form.title,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        style: const TextStyle(
+          fontSize: IosType.title3,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       content: SizedBox(
         width: double.maxFinite,
@@ -116,7 +119,7 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
                   padding: const EdgeInsets.only(top: IosTheme.spaceM),
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: IosTheme.iosRed, fontSize: 14),
+                    style: TextStyle(color: p.bad, fontSize: 14),
                   ),
                 ),
             ],
@@ -128,25 +131,25 @@ class _OpenCodeFormSheetState extends State<OpenCodeFormSheet> {
           onPressed: _submitting ? null : _cancel,
           child: Text(
             '放弃回答',
-            style: TextStyle(color: IosTheme.iosRed, fontSize: 17),
+            style: TextStyle(color: p.bad, fontSize: IosType.title3),
           ),
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: IosTheme.iosBlue,
-            foregroundColor: Colors.white,
+            backgroundColor: p.accent,
+            foregroundColor: p.onAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(IosTheme.radiusButton),
             ),
           ),
           child: _submitting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: p.onAccent,
                   ),
                 )
               : const Text('提交'),

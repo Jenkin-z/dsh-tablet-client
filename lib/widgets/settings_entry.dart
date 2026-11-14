@@ -31,7 +31,7 @@ class SettingsEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -58,14 +58,17 @@ class SettingsEntryTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(title, style: const TextStyle(fontSize: 16)),
+                    Text(
+                      title,
+                      style: const TextStyle(fontSize: IosType.callout),
+                    ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
                         style: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? IosTheme.iosGray2 : IosTheme.iosGray,
+                          fontSize: IosType.footnotePlus,
+                          color: p.label2,
                         ),
                       ),
                     ],
@@ -83,16 +86,16 @@ class SettingsEntryTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 14,
-                      color: isDark ? IosTheme.iosGray2 : IosTheme.iosGray,
+                      color: p.label2,
                     ),
                   ),
                 ),
               ],
               const SizedBox(width: IosTheme.spaceXS),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
             ],
           ),
@@ -111,8 +114,7 @@ class SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final p = IosPalette.of(context);
     final radius = BorderRadius.circular(IosTheme.radiusCard);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -126,7 +128,7 @@ class SettingsGroup extends StatelessWidget {
             boxShadow: IosTheme.shadowS,
           ),
           child: Material(
-            color: cardColor,
+            color: p.surface,
             borderRadius: radius,
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -136,9 +138,7 @@ class SettingsGroup extends StatelessWidget {
                   if (i > 0)
                     Container(
                       height: 0.5,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : const Color(0xFFF0F0F0),
+                      color: p.separator,
                       margin: const EdgeInsets.only(left: 56),
                     ),
                   children[i],

@@ -47,9 +47,9 @@ class _SessionDrawerState extends State<SessionDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Drawer(
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      backgroundColor: p.elevated,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,9 +65,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
             // 分隔线
             Container(
               height: 0.5,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.06),
+              color: p.separator,
             ),
             // 会话列表
             Expanded(
@@ -79,14 +77,14 @@ class _SessionDrawerState extends State<SessionDrawer> {
                           Icon(
                             Icons.chat_bubble_outline,
                             size: 48,
-                            color: IosTheme.iosGray3,
+                            color: p.label3,
                           ),
                           const SizedBox(height: IosTheme.spaceM),
                           Text(
                             '暂无会话',
                             style: TextStyle(
-                              fontSize: 16,
-                              color: IosTheme.iosGray,
+                              fontSize: IosType.callout,
+                              color: p.label,
                             ),
                           ),
                         ],
@@ -108,6 +106,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
   }
 
   List<Widget> _buildGroups(SettingsService settings) {
+    final p = IosPalette.of(context);
     final currentCwd = _currentCwd();
     final order = <String>[];
     final byCwd = <String, List<Map<String, dynamic>>>{};
@@ -167,9 +166,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
       widgets.add(
         Container(
           height: 0.5,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
+          color: p.separator,
           margin: const EdgeInsets.only(left: IosTheme.spaceL),
         ),
       );

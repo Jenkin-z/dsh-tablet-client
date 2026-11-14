@@ -33,6 +33,7 @@ class CustomSoundTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     final custom = settings.customSoundPath(name);
     final fileName =
         custom == null ? null : custom.split('/').last.split('\\').last;
@@ -47,7 +48,7 @@ class CustomSoundTile extends StatelessWidget {
         custom == null
             ? '$desc · 内置默认'
             : '$desc · 自定义：$fileName',
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: IosType.footnotePlus),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -55,7 +56,7 @@ class CustomSoundTile extends StatelessWidget {
           TextButton(
             onPressed: onPick,
             style: TextButton.styleFrom(
-              foregroundColor: IosTheme.iosBlue,
+              foregroundColor: p.accent,
               padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceS),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -65,7 +66,7 @@ class CustomSoundTile extends StatelessWidget {
           if (custom != null)
             IconButton(
               icon: const Icon(Icons.restore, size: 18),
-              color: IosTheme.iosGray,
+              color: p.label,
               tooltip: '恢复内置',
               onPressed: onReset,
             ),

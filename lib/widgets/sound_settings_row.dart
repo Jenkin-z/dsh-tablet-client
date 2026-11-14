@@ -13,9 +13,7 @@ class SoundSettingsDivider extends StatelessWidget {
     return Container(
       height: 0.5,
       margin: const EdgeInsets.only(left: 56),
-      color: Theme.of(context).brightness == Brightness.dark
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.black.withValues(alpha: 0.06),
+      color: IosPalette.of(context).separator,
     );
   }
 }
@@ -38,7 +36,7 @@ class SoundPreviewButton extends StatelessWidget {
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
-        foregroundColor: IosTheme.iosBlue,
+        foregroundColor: IosPalette.of(context).accent,
         padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceS),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

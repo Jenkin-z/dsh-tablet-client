@@ -30,18 +30,18 @@ class ModelSheetView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _header(isDark),
+        _header(p),
         if (busy) const LinearProgressIndicator(minHeight: 2),
-        Flexible(child: _body(isDark)),
+        Flexible(child: _body(p)),
       ],
     );
   }
 
-  Widget _header(bool isDark) {
+  Widget _header(IosPalette p) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -55,9 +55,9 @@ class ModelSheetView extends StatelessWidget {
             child: Text(
               '切换模型',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: IosType.title3,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                color: p.label,
               ),
             ),
           ),
@@ -72,7 +72,7 @@ class ModelSheetView extends StatelessWidget {
     );
   }
 
-  Widget _body(bool isDark) {
+  Widget _body(IosPalette p) {
     if (loading) {
       return const Padding(
         padding: EdgeInsets.all(IosTheme.spaceXXXL),
@@ -81,16 +81,16 @@ class ModelSheetView extends StatelessWidget {
     }
     final c = catalog;
     if (c == null) {
-      return _errorBlock(isDark, error ?? '加载失败');
+      return _errorBlock(p, error ?? '加载失败');
     }
     if (c.isEmpty && c.failures.isEmpty) {
-      return _errorBlock(isDark, '这个部署没有可路由的模型。');
+      return _errorBlock(p, '这个部署没有可路由的模型。');
     }
     return ListView(
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: IosTheme.spaceXL),
       children: [
-        if (error != null) _inlineError(error!),
+        if (error != null) _inlineError(p, error!),
         ..._effortSection(),
         for (final g in c.groups)
           if (g.models.isNotEmpty) ..._group(g),
@@ -160,7 +160,7 @@ class ModelSheetView extends StatelessWidget {
     ];
   }
 
-  Widget _inlineError(String message) {
+  Widget _inlineError(IosPalette p, String message) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -170,25 +170,28 @@ class ModelSheetView extends StatelessWidget {
       ),
       child: Text(
         message,
-        style: const TextStyle(fontSize: 13, color: IosTheme.iosRed),
+        style: TextStyle(
+          fontSize: IosType.footnotePlus,
+          color: p.bad,
+        ),
       ),
     );
   }
 
-  Widget _errorBlock(bool isDark, String message) {
+  Widget _errorBlock(IosPalette p, String message) {
     return Padding(
       padding: const EdgeInsets.all(IosTheme.spaceXXL),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cloud_off, size: 32, color: IosTheme.iosGray),
+          Icon(Icons.cloud_off, size: 32, color: p.label),
           const SizedBox(height: IosTheme.spaceM),
           Text(
             message,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: isDark ? Colors.white70 : Colors.black54,
+              color: p.label2,
             ),
           ),
           const SizedBox(height: IosTheme.spaceL),

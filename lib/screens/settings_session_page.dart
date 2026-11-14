@@ -34,6 +34,7 @@ class SettingsSessionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
+    final p = IosPalette.of(context);
     return SettingsSubPage(
       title: '会话',
       children: [
@@ -49,26 +50,26 @@ class SettingsSessionPage extends StatelessWidget {
               subtitle: Text(
                 s.sessionId ?? '无',
                 style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
+                  fontFamily: IosType.mono,
+                  fontSize: IosType.footnotePlus,
                 ),
               ),
             ),
             ListTile(
               leading: Icon(
                 Icons.add_circle_outline,
-                color: IosTheme.iosGreen,
+                color: p.ok,
                 size: 22,
               ),
               title: const Text('新建会话'),
               subtitle: const Text(
                 '另起一段对话，旧记录保留在 PC 端',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: IosType.footnotePlus),
               ),
-              trailing: const Icon(
+              trailing: Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: IosTheme.iosGray3,
+                color: p.label3,
               ),
               onTap: () => _newSession(context),
             ),

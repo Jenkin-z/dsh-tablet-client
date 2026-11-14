@@ -30,4 +30,12 @@ tool/
 # test_shots 脚本运行时产物（.cookie 是真实凭据，绝不入库）
 test_shots/_ui.xml
 test_shots/.cookie
+test_shots/*.png
 .workbuddy/
+
+# 本地调试产物（SSE 抓包 / 临时测试页 / 工具配置）
+.zcode/
+oc_msg*.json
+oc_sessions.json
+oc_sse_debug*.txt
+pelican_rider.html

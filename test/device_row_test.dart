@@ -66,6 +66,15 @@ void main() {
           reason: '旧版 minWidth 132 会把短名也撑长（回归防线）');
     });
 
+    test('竖栏充满侧边栏宽度，横排条保持收缩', () {
+      expect(card.contains('this.expand'), isTrue,
+          reason: '设备卡支持 expand 模式（2026-11 反馈：竖栏充满侧边栏）');
+      expect(devices.contains('expand: true'), isTrue,
+          reason: '竖栏列表传 expand: true');
+      expect(devices.contains('Alignment.centerLeft'), isFalse,
+          reason: '竖栏不再左对齐收缩');
+    });
+
     test('徽标独立成行在名称下，状态文案钳制在心跳行宽度内', () {
       expect(card.contains('_kindBadge'), isTrue,
           reason: '后端徽标独立成行（2026-11 反馈：徽标放设备名下方）');

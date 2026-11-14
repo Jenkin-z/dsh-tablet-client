@@ -28,6 +28,9 @@ class ConsoleMachineCard extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
+  /// 充满可用宽度（竖栏侧边栏用）；默认 false——横排条按内容收缩
+  final bool expand;
+
   /// 卡片固定高度：横向条与纵向栏里多台机器高度一致
   static const double cardHeight = 108;
 
@@ -47,6 +50,7 @@ class ConsoleMachineCard extends StatelessWidget {
     required this.active,
     this.error,
     this.onTap,
+    this.expand = false,
   });
 
   String get _statusLabel {
@@ -87,9 +91,10 @@ class ConsoleMachineCard extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: contentMaxWidth,
-                  ),
+                  // 横排条按内容收缩（封顶）；竖栏侧边栏 expand 充满可用宽度
+                  constraints: expand
+                      ? const BoxConstraints()
+                      : const BoxConstraints(maxWidth: contentMaxWidth),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,

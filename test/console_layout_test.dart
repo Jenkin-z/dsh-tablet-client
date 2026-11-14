@@ -78,26 +78,24 @@ void main() {
     expect(w, greaterThanOrEqualTo(80), reason: '点击目标别缩得太离谱');
   });
 
-  testWidgets('竖栏里的卡片不满宽拉伸，长别名在钳制宽度内省略', (tester) async {
+  testWidgets('竖栏侧边栏卡片充满整行宽度（expand）', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
               width: 320,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ConsoleMachineCard(
-                  title: '一台名字非常非常长的开发机器，长到应该被省略',
-                  kind: AgentKind.dsh,
-                  beats: _beats(8),
-                  online: true,
-                  needsAuth: false,
-                  pendingApprovals: 1,
-                  pendingQuestions: 1,
-                  running: 12,
-                  active: true,
-                ),
+              child: ConsoleMachineCard(
+                title: '一台名字非常非常长的开发机器，长到应该被省略',
+                kind: AgentKind.dsh,
+                beats: _beats(8),
+                online: true,
+                needsAuth: false,
+                pendingApprovals: 1,
+                pendingQuestions: 1,
+                running: 12,
+                active: true,
+                expand: true,
               ),
             ),
           ),
@@ -108,11 +106,8 @@ void main() {
     expect(tester.takeException(), isNull);
     final size = tester.getSize(find.byType(ConsoleMachineCard));
     expect(size.height, ConsoleMachineCard.cardHeight);
-    expect(size.width, lessThan(320),
-        reason: '横屏竖栏卡片不再满宽拉伸——「卡片还是很长」的回归防线');
-    expect(size.width,
-        lessThanOrEqualTo(ConsoleMachineCard.contentMaxWidth + 20),
-        reason: '内容宽度受 contentMaxWidth 封顶');
+    expect(size.width, 320,
+        reason: '2026-11 反馈：横屏竖栏设备卡要充满侧边栏宽度');
   });
 
   testWidgets('心跳刻度恒渲染 8 格（不足补空格）', (tester) async {

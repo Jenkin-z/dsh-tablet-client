@@ -43,9 +43,8 @@ class ConsoleDevices extends StatelessWidget {
         ),
         itemCount: groups.length,
         separatorBuilder: (_, __) => const SizedBox(height: IosTheme.spaceS),
-        // 左对齐：卡片按内容收缩，不满宽拉伸（ListView 默认会撑满）
-        itemBuilder: (context, i) =>
-            Align(alignment: Alignment.centerLeft, child: _card(context, i)),
+        // 侧边栏：卡片充满整行宽度（2026-11 反馈：横屏设备卡没充满侧边栏）
+        itemBuilder: (context, i) => _card(context, i, expand: true),
       );
     }
 
@@ -62,7 +61,7 @@ class ConsoleDevices extends StatelessWidget {
     );
   }
 
-  Widget _card(BuildContext context, int i) {
+  Widget _card(BuildContext context, int i, {bool expand = false}) {
     final group = groups[i];
     final name = group.server.name;
     final host = group.server.host;
@@ -80,6 +79,7 @@ class ConsoleDevices extends StatelessWidget {
       active: group.server.id == activeServerId,
       error: group.monitor.error,
       onTap: () => onTapDevice(group.server.id),
+      expand: expand,
     );
   }
 }

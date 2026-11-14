@@ -5,6 +5,7 @@ import '../services/notification_service.dart';
 import '../services/server_manager.dart';
 import '../services/session_router.dart';
 import '../services/settings_service.dart';
+import '../theme/ios_theme.dart';
 import '../widgets/update_dialog.dart';
 import 'chat_screen.dart';
 import 'console_screen.dart';
@@ -142,8 +143,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         decoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: Theme.of(context).dividerTheme.color ??
-                  const Color(0xFFC6C6C8),
+              color: IosPalette.of(context).separator,
               width: 0.5,
             ),
           ),

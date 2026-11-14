@@ -25,6 +25,7 @@ class IosListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Material(
       color: backgroundColor ?? Colors.transparent,
       child: InkWell(
@@ -63,7 +64,7 @@ class IosListTile extends StatelessWidget {
                 Icon(
                   Icons.chevron_right,
                   size: 18,
-                  color: IosTheme.iosGray3,
+                  color: p.label3,
                 ),
               ],
             ],
@@ -91,14 +92,14 @@ class IosCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Container(
       margin: margin ?? const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
       decoration: BoxDecoration(
-        color: backgroundColor ??
-            (isDark ? const Color(0xFF1E1E1E) : Colors.white),
+        color: backgroundColor ?? p.surface,
         borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-        boxShadow: IosTheme.shadowS,
+        border: p.isDark ? Border.all(color: p.separator, width: 0.5) : null,
+        boxShadow: p.isDark ? null : IosTheme.shadowM,
       ),
       clipBehavior: Clip.antiAlias,
       child: child,
@@ -106,11 +107,17 @@ class IosCard extends StatelessWidget {
   }
 }
 
-/// 极简按钮
+/// 设计规范按钮（DESIGN.md §6）
+///
+/// 主=accent 实心 / 次=fill / 危=danger 描边 / 破坏性=danger 文字；高度 44。
 class IosButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
+
+  /// true=实心（主），false=fill（次）
   final bool filled;
+
+  /// true=danger 描边（危险操作）
   final bool destructive;
   final IconData? icon;
 
@@ -125,56 +132,66 @@ class IosButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive ? IosTheme.iosRed : IosTheme.iosBlue;
+    final p = IosPalette.of(context);
+    // 高度 44（DESIGN.md §6）；宽度按内容/父约束收缩，不设固定宽
+    const minHeight44 = Size(0, 44);
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 18),
+          const SizedBox(width: IosTheme.spaceS),
+        ],
+        Text(label),
+      ],
+    );
+
+    // 破坏性/danger：描边
+    if (destructive) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: p.bad,
+          side: BorderSide(color: p.bad.withValues(alpha: 0.45)),
+          minimumSize: minHeight44,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(IosTheme.radiusButton),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+        ),
+        child: row,
+      );
+    }
+    // 主：accent 实心
     if (filled) {
       return FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
+          backgroundColor: p.accent,
+          foregroundColor: p.onAccent,
+          minimumSize: minHeight44,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(IosTheme.radiusButton),
           ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: IosTheme.spaceL,
-            vertical: IosTheme.spaceM,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 18),
-              const SizedBox(width: IosTheme.spaceS),
-            ],
-            Text(label),
-          ],
-        ),
+        child: row,
       );
     }
-    return OutlinedButton(
+    // 次：fill
+    return FilledButton.tonal(
       onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: color,
-        side: BorderSide(color: color.withValues(alpha: 0.25)),
+      style: FilledButton.styleFrom(
+        backgroundColor: p.fill,
+        foregroundColor: p.label,
+        minimumSize: minHeight44,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(IosTheme.radiusButton),
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: IosTheme.spaceL,
-          vertical: IosTheme.spaceM,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18),
-            const SizedBox(width: IosTheme.spaceS),
-          ],
-          Text(label),
-        ],
-      ),
+      child: row,
     );
   }
 }

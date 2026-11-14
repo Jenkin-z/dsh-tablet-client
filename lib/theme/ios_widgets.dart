@@ -19,17 +19,9 @@ class IosGroupedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark
-        ? IosTheme.iosDarkGroupedBg
-        : IosTheme.iosGroupedBg;
-    final cardColor = isDark
-        ? const Color(0xFF1E1E1E)
-        : Colors.white;
-
+    final p = IosPalette.of(context);
     return ColoredBox(
-      color: bgColor,
+      color: p.bg,
       child: ListView(
         padding: padding ??
             const EdgeInsets.symmetric(
@@ -43,9 +35,12 @@ class IosGroupedList extends StatelessWidget {
           ],
           Container(
             decoration: BoxDecoration(
-              color: cardColor,
+              color: p.surface,
               borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-              boxShadow: IosTheme.shadowS,
+              border: p.isDark
+                  ? Border.all(color: p.separator, width: 0.5)
+                  : null,
+              boxShadow: p.isDark ? null : IosTheme.shadowM,
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -55,9 +50,7 @@ class IosGroupedList extends StatelessWidget {
                   if (i > 0)
                     Container(
                       height: 0.5,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : const Color(0xFFF0F0F0),
+                      color: p.separator,
                       margin: const EdgeInsets.only(left: 56),
                     ),
                   children[i],
@@ -88,6 +81,7 @@ class IosPageTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceXL,
@@ -100,8 +94,10 @@ class IosPageTitle extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              style: TextStyle(
+                color: p.label,
+                fontSize: IosType.title1,
+                fontWeight: FontWeight.w600,
                 letterSpacing: -0.5,
               ),
             ),
@@ -124,6 +120,7 @@ class IosSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.only(
         left: IosTheme.spaceL + 4,
@@ -132,8 +129,10 @@ class IosSectionHeader extends StatelessWidget {
       ),
       child: Text(
         title.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: IosTheme.iosGray,
+        style: TextStyle(
+          color: p.label2,
+          fontSize: IosType.caption,
+          fontWeight: FontWeight.w500,
           letterSpacing: 0.5,
         ),
       ),

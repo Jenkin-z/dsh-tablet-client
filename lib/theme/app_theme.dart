@@ -4,195 +4,214 @@ import 'ios_theme.dart';
 
 /// 应用主题：亮/暗两套 Material 3 主题
 ///
-/// 从 main.dart 抽出：入口文件只负责启动与 Provider 装配，
-/// 主题细节集中在这里，改配色不用翻入口文件。
-///
-/// 颜色/间距/圆角全部取自 [IosTheme]（低饱和度极简风格），
+/// DESIGN.md：冷石墨中性色 + teal 强调，深浅同等第一公民。
+/// 颜色/间距/圆角全部取自 [IosPalette]/[IosTheme]，
 /// 这里只做 Material 主题的组装，不新增色值。
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light() => ThemeData(
-        colorSchemeSeed: IosTheme.iosBlue,
-        useMaterial3: true,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: IosTheme.iosGroupedBg,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: IosTheme.iosGroupedBg,
-          foregroundColor: Colors.black,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-            color: Colors.black,
-            fontSize: 17,
+  /// 设计字阶（DESIGN.md §4：正文 1.5 行高，UI 标签 1.2）
+  static TextTheme _textTheme(IosPalette p) => TextTheme(
+        displayLarge: TextStyle(
+            fontSize: IosType.largeTitle,
             fontWeight: FontWeight.w600,
-            letterSpacing: -0.2,
-          ),
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          height: 56,
-          backgroundColor: Colors.white.withValues(alpha: 0.94),
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: IosTheme.iosBlue.withValues(alpha: 0.12),
-          labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const TextStyle(
-                color: IosTheme.iosBlue,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              );
-            }
-            return TextStyle(
-              color: IosTheme.iosGray,
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-            );
-          }),
-          iconTheme: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const IconThemeData(color: IosTheme.iosBlue, size: 22);
-            }
-            return const IconThemeData(color: IosTheme.iosGray, size: 22);
-          }),
-        ),
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 0,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-          ),
-        ),
-        switchTheme: SwitchThemeData(
-          thumbColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return Colors.white;
-            }
-            return Colors.white;
-          }),
-          trackColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return IosTheme.iosGreen;
-            }
-            return IosTheme.iosGray3;
-          }),
-        ),
-        listTileTheme: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
-        ),
-        dividerTheme: const DividerThemeData(
-          thickness: 0.5,
-          color: Color(0xFFC6C6C8),
-          space: 0.5,
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF1C1C1E),
-          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusS),
-          ),
-        ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: Colors.white,
-          elevation: 20,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusM),
-          ),
-        ),
+            color: p.label,
+            letterSpacing: -0.8),
+        titleLarge: TextStyle(
+            fontSize: IosType.title1,
+            fontWeight: FontWeight.w600,
+            color: p.label,
+            letterSpacing: -0.5),
+        titleMedium: TextStyle(
+            fontSize: IosType.title2,
+            fontWeight: FontWeight.w600,
+            color: p.label,
+            letterSpacing: -0.4),
+        titleSmall: TextStyle(
+            fontSize: IosType.title3,
+            fontWeight: FontWeight.w600,
+            color: p.label,
+            letterSpacing: -0.3),
+        bodyLarge: TextStyle(
+            fontSize: IosType.callout,
+            fontWeight: FontWeight.w400,
+            color: p.label,
+            height: 1.5),
+        bodyMedium: TextStyle(
+            fontSize: IosType.body,
+            fontWeight: FontWeight.w400,
+            color: p.label,
+            height: 1.5),
+        bodySmall: TextStyle(
+            fontSize: IosType.footnotePlus,
+            fontWeight: FontWeight.w400,
+            color: p.label2,
+            height: 1.4),
+        labelLarge: TextStyle(
+            fontSize: IosType.body,
+            fontWeight: FontWeight.w500,
+            color: p.label,
+            height: 1.2),
+        labelMedium: TextStyle(
+            fontSize: IosType.footnote,
+            fontWeight: FontWeight.w400,
+            color: p.label2,
+            height: 1.2),
+        labelSmall: TextStyle(
+            fontSize: IosType.caption,
+            fontWeight: FontWeight.w400,
+            color: p.label3,
+            height: 1.2),
       );
 
-  static ThemeData dark() => ThemeData(
-        colorSchemeSeed: IosTheme.iosBlue,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: IosTheme.iosDarkGroupedBg,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: IosTheme.iosDarkGroupedBg,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.2,
-          ),
+  static ThemeData _base(IosPalette p) {
+    final text = _textTheme(p);
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: p.accent,
+        brightness: p.isDark ? Brightness.dark : Brightness.light,
+      ).copyWith(
+        primary: p.accent,
+        onPrimary: p.onAccent,
+        secondary: p.accent,
+        surface: p.surface,
+        onSurface: p.label,
+        error: p.bad,
+        onError: p.onAccent,
+      ),
+      useMaterial3: true,
+      scaffoldBackgroundColor: p.bg,
+      textTheme: text,
+      appBarTheme: AppBarTheme(
+        backgroundColor: p.bg,
+        foregroundColor: p.label,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: p.label,
+          fontSize: IosType.title3,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
         ),
-        navigationBarTheme: NavigationBarThemeData(
-          height: 56,
-          backgroundColor: const Color(0xFF1C1C1E).withValues(alpha: 0.94),
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: IosTheme.iosBlue.withValues(alpha: 0.24),
-          labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const TextStyle(
-                color: IosTheme.iosBlue,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              );
-            }
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 56,
+        backgroundColor: p.surface.withValues(alpha: p.isDark ? 0.96 : 0.94),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: p.accentSoft,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return TextStyle(
-              color: IosTheme.iosGray2,
+              color: p.accent,
               fontSize: 10,
-              fontWeight: FontWeight.w400,
+              fontWeight: FontWeight.w600,
             );
-          }),
-          iconTheme: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const IconThemeData(color: IosTheme.iosBlue, size: 22);
-            }
-            return const IconThemeData(color: IosTheme.iosGray2, size: 22);
-          }),
+          }
+          return TextStyle(
+            color: p.label2,
+            fontSize: 10,
+            fontWeight: FontWeight.w400,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(color: p.accent, size: 22);
+          }
+          return IconThemeData(color: p.label2, size: 22);
+        }),
+      ),
+      cardTheme: CardThemeData(
+        color: p.surface,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusCard),
         ),
-        cardTheme: CardThemeData(
-          color: const Color(0xFF1C1C1E),
-          elevation: 0,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-          ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: const WidgetStatePropertyAll(Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return p.accent;
+          return p.isDark ? p.surface2 : p.fill;
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.transparent;
+          return p.label3;
+        }),
+      ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: p.surface2,
+        hintStyle: TextStyle(color: p.label3, fontSize: IosType.body),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: IosTheme.spaceM,
+          vertical: IosTheme.spaceM,
         ),
-        switchTheme: SwitchThemeData(
-          thumbColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return Colors.white;
-            }
-            return Colors.white;
-          }),
-          trackColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return IosTheme.iosGreen;
-            }
-            return IosTheme.iosGray;
-          }),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusInput),
+          borderSide: BorderSide.none,
         ),
-        listTileTheme: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusInput),
+          borderSide: BorderSide.none,
         ),
-        dividerTheme: const DividerThemeData(
-          thickness: 0.5,
-          color: Color(0xFF38383A),
-          space: 0.5,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusInput),
+          borderSide: BorderSide(color: p.accent, width: 1.5),
         ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF2C2C2E),
-          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusS),
-          ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: p.fill,
+        selectedColor: p.accentSoft,
+        labelStyle: TextStyle(color: p.label, fontSize: IosType.footnotePlus),
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusPill),
         ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: const Color(0xFF2C2C2E),
-          elevation: 20,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(IosTheme.radiusM),
-          ),
+      ),
+      dividerTheme: DividerThemeData(
+        thickness: 0.5,
+        color: p.separator,
+        space: 0.5,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF23262C),
+        contentTextStyle: const TextStyle(
+          color: Color(0xFFF0F2F5),
+          fontSize: IosType.body,
         ),
-      );
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusS),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: p.elevated,
+        elevation: 20,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(IosTheme.radiusM),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: const Color(0xFF23262C),
+          borderRadius: BorderRadius.circular(IosTheme.radiusS),
+        ),
+        textStyle: const TextStyle(
+          color: Color(0xFFF0F2F5),
+          fontSize: IosType.footnotePlus,
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: p.accent),
+    );
+  }
+
+  static ThemeData light() => _base(IosPalette.light);
+
+  static ThemeData dark() => _base(IosPalette.dark);
 }

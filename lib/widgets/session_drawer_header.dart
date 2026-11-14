@@ -17,6 +17,7 @@ class SessionDrawerTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceXL,
@@ -26,31 +27,32 @@ class SessionDrawerTitleBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               '会话',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
+                fontSize: IosType.title2,
+                fontWeight: FontWeight.w600,
                 letterSpacing: -0.5,
+                color: p.label,
               ),
             ),
           ),
           if (loading)
-            const SizedBox(
+            SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: IosTheme.iosBlue,
+                color: p.accent,
               ),
             )
           else
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.refresh,
                 size: 22,
-                color: IosTheme.iosBlue,
+                color: p.accent,
               ),
               tooltip: '刷新',
               onPressed: onRefresh,
@@ -71,25 +73,26 @@ class SessionNewSessionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: IosTheme.spaceL,
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: IosTheme.iosBlue.withValues(alpha: 0.1),
+          color: p.accentSoft,
           borderRadius: BorderRadius.circular(IosTheme.radiusS),
         ),
         child: ListTile(
-          leading: const Icon(
+          leading: Icon(
             Icons.add_circle_outline,
-            color: IosTheme.iosBlue,
+            color: p.accent,
             size: 22,
           ),
-          title: const Text(
+          title: Text(
             '新建会话',
             style: TextStyle(
-              color: IosTheme.iosBlue,
+              color: p.accent,
               fontWeight: FontWeight.w500,
             ),
           ),

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/process_step.dart';
 import '../theme/ios_theme.dart';
+import 'adaptive_selectable_text.dart';
 
 part 'process_steps_card_parts.dart';
 
-/// 过程步骤卡：当前 turn 的执行过程（对齐 Web 端的过程区）
+/// 过程步骤卡：当前 turn 的执行过程（DESIGN.md §6：垂直时间线）
 ///
-/// 运行中展开实时显示（过程文本 + 工具调用及状态），
+/// 运行中展开实时显示（过程文本 + 思考 + 工具调用及状态），
 /// turn 收尾后收起成一行摘要，可点击展开回看。
 class ProcessStepsCard extends StatefulWidget {
   final List<ProcessEntry> entries;
@@ -40,7 +41,7 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -54,21 +55,15 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
           right: IosTheme.spaceXXXL,
         ),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-          borderRadius: BorderRadius.circular(IosTheme.radiusM),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: p.surface,
+          borderRadius: BorderRadius.circular(IosTheme.radiusS),
+          border: p.isDark ? Border.all(color: p.separator, width: 0.5) : null,
         ),
         child: Material(
           color: Colors.transparent,
           child: _expanded
-              ? _buildExpanded(context, isDark: isDark)
-              : _buildCollapsedHeader(context, isDark: isDark),
+              ? _buildExpanded(context, p)
+              : _buildCollapsedHeader(context, p),
         ),
       ),
     );
@@ -76,11 +71,11 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
 
   // ── 收起态：一行摘要 ────────────────────────────
 
-  Widget _buildCollapsedHeader(BuildContext context, {required bool isDark}) {
+  Widget _buildCollapsedHeader(BuildContext context, IosPalette p) {
     final toolCount =
         widget.entries.where((e) => e.kind == ProcessEntryKind.tool).length;
     return InkWell(
-      borderRadius: BorderRadius.circular(IosTheme.radiusM),
+      borderRadius: BorderRadius.circular(IosTheme.radiusS),
       onTap: () => setState(() => _userExpanded = true),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -93,34 +88,29 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
             Icon(
               Icons.bolt_outlined,
               size: 16,
-              color: IosTheme.iosBlue.withValues(alpha: 0.8),
+              color: p.accent,
             ),
             const SizedBox(width: IosTheme.spaceS),
             Flexible(
               child: Text(
                 '执行过程 · $toolCount 次工具调用',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : IosTheme.iosGray,
-                    ),
+                style: TextStyle(
+                  color: p.label2,
+                  fontSize: IosType.footnotePlus,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Icon(
-              Icons.expand_more,
-              size: 18,
-              color: IosTheme.iosGray.withValues(alpha: 0.6),
-            ),
+            Icon(Icons.expand_more, size: 18, color: p.label3),
           ],
         ),
       ),
     );
   }
 
-  // ── 展开态：步骤列表 ────────────────────────────
+  // ── 展开态：垂直时间线 ──────────────────────────
 
-  Widget _buildExpanded(BuildContext context, {required bool isDark}) {
+  Widget _buildExpanded(BuildContext context, IosPalette p) {
     return Padding(
       padding: const EdgeInsets.symmetric(
         vertical: IosTheme.spaceS,
@@ -130,8 +120,11 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final entry in widget.entries)
-            _ProcessEntryRow(entry: entry, isDark: isDark),
+          for (var i = 0; i < widget.entries.length; i++)
+            _ProcessTimelineRow(
+              entry: widget.entries[i],
+              isLast: i == widget.entries.length - 1 && !widget.collapsed,
+            ),
           if (widget.collapsed)
             // 收起但被用户点开：给一个收回去的入口
             TextButton(
@@ -143,9 +136,7 @@ class _ProcessStepsCardState extends State<ProcessStepsCard> {
               ),
               child: Text(
                 '收起',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: IosTheme.iosBlue,
-                    ),
+                style: TextStyle(color: p.accent, fontSize: IosType.footnote),
               ),
             ),
         ],

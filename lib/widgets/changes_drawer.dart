@@ -23,9 +23,9 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
   @override
   Widget build(BuildContext context) {
     final items = widget.tracker.items;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Drawer(
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      backgroundColor: p.surface,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -38,12 +38,13 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
                 IosTheme.spaceL,
                 IosTheme.spaceXS,
               ),
-              child: const Text(
+              child: Text(
                 '变更',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                  fontSize: IosType.title2,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: -0.5,
+                  color: p.label,
                 ),
               ),
             ),
@@ -60,18 +61,13 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
                     ? '本会话暂无文件变更'
                     : '${items.length} 个文件${widget.tracker.pendingCount > 0 ? '（${widget.tracker.pendingCount} 待执行）' : ''}',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: IosTheme.iosGray,
+                  fontSize: IosType.footnotePlus,
+                  color: p.label2,
                 ),
               ),
             ),
             // 分隔线
-            Container(
-              height: 0.5,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.06),
-            ),
+            Container(height: 0.5, color: p.separator),
             // 变更列表
             Expanded(
               child: items.isEmpty
@@ -82,14 +78,14 @@ class _ChangesDrawerState extends State<ChangesDrawer> {
                           Icon(
                             Icons.check_circle_outline,
                             size: 48,
-                            color: IosTheme.iosGreen.withValues(alpha: 0.5),
+                            color: p.ok.withValues(alpha: 0.5),
                           ),
                           const SizedBox(height: IosTheme.spaceM),
                           Text(
                             '没有变更',
                             style: TextStyle(
-                              fontSize: 16,
-                              color: IosTheme.iosGray,
+                              fontSize: IosType.callout,
+                              color: p.label3,
                             ),
                           ),
                         ],

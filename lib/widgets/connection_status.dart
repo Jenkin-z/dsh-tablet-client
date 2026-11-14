@@ -20,7 +20,7 @@ class ConnectionStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SessionState>(
       builder: (context, state, _) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final p = IosPalette.of(context);
         final health = state.health;
 
         final Color color;
@@ -62,11 +62,13 @@ class ConnectionStatus extends StatelessWidget {
           }}');
         if (detail != null) diagnostic.write('\n$detail');
 
-        final dot = Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        );
+        final Widget dot;
+        if (health == ConnectionHealth.connecting) {
+          // connecting 橙呼吸（DESIGN.md §6 四态）
+          dot = IosBreathingDot(color: p.warnTint);
+        } else {
+          dot = IosStatusDot(color: color);
+        }
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -81,8 +83,8 @@ class ConnectionStatus extends StatelessWidget {
               Text(
                 text,
                 style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: IosType.footnotePlus,
+                  color: p.label2,
                 ),
               ),
             ],

@@ -42,16 +42,18 @@ class _QuestionSheetState extends State<QuestionSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      backgroundColor: p.elevated,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IosTheme.radiusM),
       ),
-      title: const Text(
+      title: Text(
         '需要回答',
         style: TextStyle(
-          fontSize: 17,
+          fontSize: IosType.title3,
           fontWeight: FontWeight.w600,
+          color: p.label,
         ),
       ),
       content: SizedBox(
@@ -92,7 +94,7 @@ class _QuestionSheetState extends State<QuestionSheet> {
                   padding: const EdgeInsets.only(top: IosTheme.spaceM),
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: IosTheme.iosRed, fontSize: 14),
+                    style: TextStyle(color: p.bad, fontSize: IosType.body),
                   ),
                 ),
             ],
@@ -105,27 +107,27 @@ class _QuestionSheetState extends State<QuestionSheet> {
           child: Text(
             '放弃回答',
             style: TextStyle(
-              color: IosTheme.iosRed,
-              fontSize: 17,
+              color: p.bad,
+              fontSize: IosType.title3,
             ),
           ),
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: IosTheme.iosBlue,
-            foregroundColor: Colors.white,
+            backgroundColor: p.accent,
+            foregroundColor: p.onAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(IosTheme.radiusButton),
             ),
           ),
           child: _submitting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: p.onAccent,
                   ),
                 )
               : const Text('提交'),

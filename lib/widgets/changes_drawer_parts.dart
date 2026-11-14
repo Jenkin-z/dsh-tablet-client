@@ -23,6 +23,7 @@ class ChangesFileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = change;
+    final p = IosPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -41,9 +42,7 @@ class ChangesFileRow extends StatelessWidget {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: e.done
-                          ? IosTheme.iosGreen.withValues(alpha: 0.12)
-                          : IosTheme.iosOrange.withValues(alpha: 0.12),
+                      color: e.done ? p.okSoft : p.warnSoft,
                       borderRadius:
                           BorderRadius.circular(IosTheme.radiusXS),
                     ),
@@ -52,7 +51,7 @@ class ChangesFileRow extends StatelessWidget {
                           ? Icons.note_add_outlined
                           : Icons.edit_outlined,
                       size: 16,
-                      color: e.done ? IosTheme.iosGreen : IosTheme.iosOrange,
+                      color: e.done ? p.ok : p.warnTint,
                     ),
                   ),
                   const SizedBox(width: IosTheme.spaceM),
@@ -64,10 +63,11 @@ class ChangesFileRow extends StatelessWidget {
                           e.path,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 13,
+                          style: TextStyle(
+                            fontFamily: IosType.mono,
+                            fontSize: IosType.footnotePlus,
                             fontWeight: FontWeight.w500,
+                            color: p.label,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -76,8 +76,8 @@ class ChangesFileRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: IosTheme.iosGray,
+                            fontSize: IosType.footnote,
+                            color: p.label2,
                           ),
                         ),
                       ],
@@ -86,7 +86,7 @@ class ChangesFileRow extends StatelessWidget {
                   Icon(
                     isOpen ? Icons.expand_less : Icons.expand_more,
                     size: 20,
-                    color: IosTheme.iosGray3,
+                    color: p.label3,
                   ),
                 ],
               ),
@@ -109,7 +109,7 @@ class ChangesDiffBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     final lines = unifiedDiff(change.oldText, change.newText);
     // 宽行不换行（换行会毁掉代码缩进和 diff 对齐），整块横向滚动；
     // 行宽按 monospace 字符数估算，超出估算的极长行截断显示。
@@ -122,14 +122,9 @@ class ChangesDiffBlock extends StatelessWidget {
         IosTheme.spaceM,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF8F8FA),
+        color: p.surface2,
         borderRadius: BorderRadius.circular(IosTheme.radiusXS),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 0.5,
-        ),
+        border: Border.all(color: p.separator, width: 0.5),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -144,7 +139,7 @@ class ChangesDiffBlock extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final l in lines) _diffLine(l, isDark),
+                  for (final l in lines) _diffLine(l, p),
                 ],
               ),
             ),
@@ -172,23 +167,23 @@ class ChangesDiffBlock extends StatelessWidget {
     return (maxLen + 1) * charWidth + IosTheme.spaceM * 2;
   }
 
-  Widget _diffLine(DiffLine l, bool isDark) {
+  Widget _diffLine(DiffLine l, IosPalette p) {
     Color? bg;
     Color? textColor;
     String prefix = '  ';
     switch (l.op) {
       case DiffOp.add:
-        bg = IosTheme.iosGreen.withValues(alpha: 0.1);
-        textColor = IosTheme.iosGreen;
+        bg = p.okSoft;
+        textColor = p.ok;
         prefix = '+ ';
         break;
       case DiffOp.del:
-        bg = IosTheme.iosRed.withValues(alpha: 0.1);
-        textColor = IosTheme.iosRed;
+        bg = p.badSoft;
+        textColor = p.bad;
         prefix = '- ';
         break;
       case DiffOp.same:
-        textColor = isDark ? Colors.white70 : Colors.black54;
+        textColor = p.label2;
         prefix = '  ';
         break;
     }
@@ -204,8 +199,8 @@ class ChangesDiffBlock extends StatelessWidget {
         '$prefix${l.text}',
         maxLines: 1,
         style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
+          fontFamily: IosType.mono,
+          fontSize: IosType.footnote,
           height: 1.4,
           color: textColor,
         ),

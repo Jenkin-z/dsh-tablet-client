@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/message.dart';
 import '../theme/ios_theme.dart';
+import 'message_markdown.dart';
+import 'adaptive_selectable_text.dart';
+import 'streaming_caret.dart';
 
-/// 单条消息气泡：用户消息纯文本，Agent 消息按 Markdown 渲染
+/// 单条消息气泡（DESIGN.md §6）
 ///
-/// iOS 风格：用户消息蓝色圆角气泡，Agent 消息白色/深色背景，
-/// 系统消息（错误等）淡红背景居中显示。
+/// 用户气泡 = accent 填充右对齐；Agent 气泡 = surface-2 左对齐；
+/// system 消息（错误）= bad 软底卡，错误是真实信息不是装饰。
 class MessageBubble extends StatefulWidget {
   final ChatMessage message;
 
@@ -49,7 +51,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     final message = widget.message;
     final isUser = message.role == 'user';
     final isSystem = message.role == 'system';
-    final theme = Theme.of(context);
+    final p = IosPalette.ofBrightness(isDark ? Brightness.dark : Brightness.light);
 
     return Align(
       alignment: isUser
@@ -73,127 +75,106 @@ class _MessageBubbleState extends State<MessageBubble> {
         ),
         decoration: BoxDecoration(
           color: isSystem
-              ? (isDark
-                  ? IosTheme.iosRed.withValues(alpha: 0.15)
-                  : IosTheme.iosRed.withValues(alpha: 0.08))
+              ? p.badSoft
               : isUser
-                  ? IosTheme.iosBlue
-                  : (isDark ? const Color(0xFF1C1C1E) : Colors.white),
-          borderRadius: BorderRadius.circular(IosTheme.radiusM),
+                  ? p.accent
+                  : p.surface2,
+          borderRadius: BorderRadius.circular(IosTheme.radiusS),
           border: isSystem
-              ? Border.all(
-                  color: IosTheme.iosRed.withValues(alpha: 0.3),
-                  width: 1,
-                )
+              ? Border.all(color: p.bad.withValues(alpha: 0.3), width: 0.5)
               : null,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (isSystem)
-              SelectableText(
-                message.content,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: isDark
-                      ? IosTheme.iosRed.withValues(alpha: 0.9)
-                      : IosTheme.iosRed,
-                  height: 1.5,
-                  fontSize: 14,
-                ),
-              )
+              _systemContent(context, message, p)
             else if (isUser)
-              SelectableText(
+              AdaptiveSelectableText(
                 message.content,
-                style: theme.textTheme.bodyLarge?.copyWith(
+                style: TextStyle(
                   // 未确认的乐观气泡先淡化，Host 回执后恢复实心
                   color: message.pending
-                      ? Colors.white.withValues(alpha: 0.65)
-                      : Colors.white,
+                      ? p.onAccent.withValues(alpha: 0.65)
+                      : p.onAccent,
                   height: 1.5,
-                  fontSize: 16,
+                  fontSize: IosType.body,
                 ),
               )
             else
-              MarkdownBody(
-                data: message.content,
-                selectable: true,
-                styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                  p: theme.textTheme.bodyLarge?.copyWith(
-                    color: isDark ? Colors.white : const Color(0xFF1C1C1E),
-                    height: 1.5,
-                    fontSize: 16,
-                  ),
-                  code: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 14,
-                    color: IosTheme.iosBlue,
-                    backgroundColor: isDark
-                        ? const Color(0xFF2C2C2E)
-                        : const Color(0xFFF2F2F7),
-                  ),
-                  codeblockDecoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF2C2C2E)
-                        : const Color(0xFFF2F2F7),
-                    borderRadius: BorderRadius.circular(IosTheme.radiusXS),
-                  ),
-                  codeblockPadding: const EdgeInsets.all(IosTheme.spaceM),
-                  tableBorder: TableBorder.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.06),
-                    width: 0.5,
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: IosTheme.iosBlue.withValues(alpha: 0.5),
-                        width: 3,
-                      ),
-                    ),
-                  ),
-                  blockquotePadding: const EdgeInsets.only(
-                    left: IosTheme.spaceM,
-                    top: IosTheme.spaceXS,
-                    bottom: IosTheme.spaceXS,
-                  ),
-                ),
-              ),
-            if (message.isStreaming)
-              Padding(
-                padding: const EdgeInsets.only(top: IosTheme.spaceS),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: isUser ? Colors.white : IosTheme.iosBlue,
-                      ),
-                    ),
-                    const SizedBox(width: IosTheme.spaceS),
-                    Text(
-                      '正在输入…',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: isUser
-                            ? Colors.white.withValues(alpha: 0.8)
-                            : IosTheme.iosGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              MessageMarkdown(data: message.content),
+            if (message.isStreaming) _streamingFooter(context, isUser, p),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 错误卡内容：图标 + 单行标签 + 错误正文
+  Widget _systemContent(BuildContext context, ChatMessage message, IosPalette p) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.error_outline, size: 16, color: p.bad),
+        const SizedBox(width: IosTheme.spaceS),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '出错了',
+                style: TextStyle(
+                  color: p.bad,
+                  fontSize: IosType.footnotePlus,
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              AdaptiveSelectableText(
+                message.content,
+                style: TextStyle(
+                  color: p.bad.withValues(alpha: 0.85),
+                  height: 1.5,
+                  fontSize: IosType.footnotePlus,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 流式脚注：Agent 用光标（§7），用户乐观气泡不显示
+  Widget _streamingFooter(BuildContext context, bool isUser, IosPalette p) {
+    if (isUser) {
+      return Padding(
+        padding: const EdgeInsets.only(top: IosTheme.spaceXS),
+        child: SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: p.onAccent.withValues(alpha: 0.8),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StreamingCaret(color: p.accent),
+          const SizedBox(width: IosTheme.spaceS),
+          Text(
+            '正在输入',
+            style: TextStyle(color: p.label3, fontSize: IosType.caption),
+          ),
+        ],
       ),
     );
   }

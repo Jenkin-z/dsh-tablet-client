@@ -7,7 +7,7 @@ import '../utils/session_format.dart';
 export 'session_tile_parts.dart'
     show SessionGroupHeader, SessionMoreTile, dirLabel;
 
-/// 单个会话条目 —— iOS 风格
+/// 单个会话条目（DESIGN.md §6 会话行：状态点 · 标题 · 相对时间 · NEW 徽标）
 ///
 /// 分组头部与「显示全部」按钮拆到 session_tile_parts.dart，
 /// 让本文件守住 200 行上限；对外仍从 session_tile.dart 导入即可。
@@ -40,16 +40,15 @@ class SessionListTile extends StatelessWidget {
     final selected = id == activeId;
     final running = session['running'] == true;
     final hasPending = pendingKind != null;
-    // 待办优先于运行中
-    final iconColor = hasPending
-        ? IosTheme.iosOrange
+    final p = IosPalette.of(context);
+    // 待办优先于运行中（状态点四态词汇）
+    final dotColor = hasPending
+        ? p.warnTint
         : running
-            ? IosTheme.iosGreen
-            : (selected ? IosTheme.iosBlue : IosTheme.iosGray);
+            ? p.ok
+            : (selected ? p.accent : p.label3);
     return Material(
-      color: selected
-          ? IosTheme.iosBlue.withValues(alpha: 0.1)
-          : Colors.transparent,
+      color: selected ? p.accentSoft : Colors.transparent,
       child: InkWell(
         onTap: () => onSelect(id),
         child: Padding(
@@ -61,17 +60,7 @@ class SessionListTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                hasPending
-                    ? Icons.error_outline
-                    : running
-                        ? Icons.sync
-                        : (session['blank'] == true
-                            ? Icons.chat_bubble_outline
-                            : Icons.chat_bubble),
-                size: 20,
-                color: iconColor,
-              ),
+              IosStatusDot(color: dotColor),
               const SizedBox(width: IosTheme.spaceM),
               Expanded(
                 child: Column(
@@ -82,16 +71,17 @@ class SessionListTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: IosType.body,
+                        color: p.label,
                         fontWeight:
-                            selected || running ? FontWeight.w600 : FontWeight.normal,
+                            selected || running ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                     Text(
                       timeAgoOf(session['updatedAt'] as int?),
                       style: TextStyle(
-                        fontSize: 13,
-                        color: IosTheme.iosGray,
+                        fontSize: IosType.caption,
+                        color: p.label3,
                       ),
                     ),
                   ],
@@ -100,7 +90,7 @@ class SessionListTile extends StatelessWidget {
               Consumer<SettingsService>(
                 builder: (_, settings, __) => settings.unviewedIds
                         .contains(settings.seenKey(serverId, id))
-                    ? IosBadge(showDot: true)
+                    ? const IosNewBadge()
                     : const SizedBox.shrink(),
               ),
             ],

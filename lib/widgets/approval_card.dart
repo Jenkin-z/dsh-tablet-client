@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/pending.dart';
 import '../theme/ios_theme.dart';
+import 'adaptive_selectable_text.dart';
 
 export '../models/pending.dart' show PendingApproval;
 
-/// 审批确认卡 —— iOS 风格
+/// 审批卡（DESIGN.md §6：描述 + 等宽块 + 「允许」accent 实心 /「拒绝」danger 描边）
 ///
 /// 固定在输入栏上方，允许一次 / 拒绝。
 class ApprovalCard extends StatefulWidget {
@@ -30,9 +31,11 @@ class _ApprovalCardState extends State<ApprovalCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     final approval = widget.approval;
+    // headline：reason 原文优先，否则工具越权描述（对齐 Web 端词汇）
+    final headline =
+        (approval.reason?.isNotEmpty ?? false) ? approval.reason! : '工具 ${approval.toolName} 请求越权执行';
     return Container(
       margin: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -42,72 +45,47 @@ class _ApprovalCardState extends State<ApprovalCard> {
       ),
       padding: const EdgeInsets.all(IosTheme.spaceM),
       decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF3A1A0A)
-            : IosTheme.iosOrange.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-        border: Border.all(
-          color: IosTheme.iosOrange.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
+        color: p.surface,
+        borderRadius: BorderRadius.circular(IosTheme.radiusS),
+        border: Border.all(color: p.warnTint.withValues(alpha: 0.4), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: IosTheme.iosOrange.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(IosTheme.radiusXS),
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 18,
-                  color: IosTheme.iosOrange,
-                ),
-              ),
-              const SizedBox(width: IosTheme.spaceM),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '需要确认',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: IosTheme.iosOrange,
-                      ),
-                    ),
-                    Text(
-                      approval.toolName,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? Colors.white : const Color(0xFF1C1C1E),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _warningStrip(p),
+          const SizedBox(height: IosTheme.spaceS),
+          Text(
+            headline,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: IosType.body,
+              fontWeight: FontWeight.w500,
+              color: p.label,
+              height: 1.4,
+            ),
           ),
-          if (approval.reason != null && approval.reason!.isNotEmpty) ...[
-            const SizedBox(height: IosTheme.spaceS),
-            Text(
-              approval.reason!,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+          const SizedBox(height: IosTheme.spaceS),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: IosTheme.spaceM,
+              vertical: IosTheme.spaceS,
+            ),
+            decoration: BoxDecoration(
+              color: p.surface2,
+              borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+            ),
+            child: AdaptiveSelectableText(
+              approval.toolName,
               style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.white70 : Colors.black54,
+                fontFamily: IosType.mono,
+                fontSize: IosType.footnotePlus,
+                color: p.label2,
               ),
             ),
-          ],
+          ),
           const SizedBox(height: IosTheme.spaceM),
           Row(
             children: [
@@ -120,19 +98,16 @@ class _ApprovalCardState extends State<ApprovalCard> {
               else ...[
                 Expanded(
                   child: IosButton(
-                    label: '允许一次',
-                    icon: Icons.check_circle_outline,
-                    onPressed: _answering ? null : () => _answer(true),
+                    label: '拒绝',
+                    destructive: true,
+                    onPressed: _answering ? null : () => _answer(false),
                   ),
                 ),
                 const SizedBox(width: IosTheme.spaceM),
                 Expanded(
                   child: IosButton(
-                    label: '拒绝',
-                    icon: Icons.cancel_outlined,
-                    destructive: true,
-                    filled: false,
-                    onPressed: _answering ? null : () => _answer(false),
+                    label: '允许一次',
+                    onPressed: _answering ? null : () => _answer(true),
                   ),
                 ),
               ],
@@ -140,6 +115,25 @@ class _ApprovalCardState extends State<ApprovalCard> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 警告条：等待审批 + 呼吸点
+  Widget _warningStrip(IosPalette p) {
+    return Row(
+      children: [
+        IosBreathingDot(color: p.warnTint, size: 8),
+        const SizedBox(width: IosTheme.spaceS),
+        Text(
+          '等待审批',
+          style: TextStyle(
+            fontSize: IosType.caption,
+            fontWeight: FontWeight.w600,
+            color: p.warnText,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ],
     );
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/ios_theme.dart';
 
-/// 工具调用中的状态条 —— iOS 风格
+/// 工具调用中的状态条
 class ToolStatusBar extends StatelessWidget {
   final String toolName;
 
@@ -9,7 +9,7 @@ class ToolStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(
         vertical: IosTheme.spaceXS,
@@ -20,10 +20,8 @@ class ToolStatusBar extends StatelessWidget {
         horizontal: IosTheme.spaceL,
       ),
       decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF1C2A3A)
-            : IosTheme.iosBlue.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+        color: p.accentSoft,
+        borderRadius: BorderRadius.circular(IosTheme.radiusS),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -33,16 +31,16 @@ class ToolStatusBar extends StatelessWidget {
             height: 14,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: IosTheme.iosBlue,
+              color: p.accent,
             ),
           ),
           const SizedBox(width: IosTheme.spaceM),
           Flexible(
             child: Text(
               '正在调用工具: $toolName …',
-              style: const TextStyle(
-                fontSize: 14,
-                color: IosTheme.iosBlue,
+              style: TextStyle(
+                fontSize: IosType.footnotePlus,
+                color: p.accent,
                 fontWeight: FontWeight.w500,
               ),
               overflow: TextOverflow.ellipsis,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/agent_server.dart';
+import '../models/poll_beat.dart';
 import '../utils/constants.dart';
 import '../utils/session_format.dart';
 import 'app_visibility.dart';
@@ -39,6 +40,18 @@ class SessionMonitor {
   bool online = false;
   String? error;
   DateTime? lastRefresh;
+
+  /// 心跳刻度：最近 [PollBeat.capacity] 轮轮询的结果
+  ///（DESIGN.md §2：每格 = 一轮 8 秒轮询，绿=成功 / 橙=数据异常 / 红=missed）
+  final List<PollBeat> _beats = [];
+  List<PollBeat> get heartbeat => List.unmodifiable(_beats);
+
+  void _recordBeat(PollBeatStatus status) {
+    _beats.add(PollBeat(status, DateTime.now()));
+    while (_beats.length > PollBeat.capacity) {
+      _beats.removeAt(0);
+    }
+  }
 
   final SessionListSource _source;
   final Duration _requestTimeout;
@@ -92,6 +105,7 @@ class SessionMonitor {
       error = null;
       online = true;
       lastRefresh = DateTime.now();
+      _recordBeat(PollBeatStatus.ok);
       if (server.unpaired || server.lastError != null) {
         await settings.patchServer(
           server.id,
@@ -101,6 +115,8 @@ class SessionMonitor {
     } on DshAuthException catch (e) {
       online = false;
       error = e.message;
+      // 机器可达但凭据/数据异常：心跳记橙（degraded 词汇）
+      _recordBeat(PollBeatStatus.warn);
       if (e.unpaired) {
         await settings.patchServer(
           server.id,
@@ -111,6 +127,7 @@ class SessionMonitor {
       // opencode 授权失败一律要重新添加（密码/令牌无效）
       online = false;
       error = e.message;
+      _recordBeat(PollBeatStatus.warn);
       await settings.patchServer(
         server.id,
         (s) => s.copyWith(unpaired: true, lastError: e.message),
@@ -118,6 +135,8 @@ class SessionMonitor {
     } catch (e) {
       online = false;
       error = '$e';
+      // 拉不到数据（网络/超时/意外）：心跳记红（missed）
+      _recordBeat(PollBeatStatus.missed);
     } finally {
       loading = false;
       _refreshing = false;

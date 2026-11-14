@@ -11,21 +11,21 @@ class ConsoleDeviceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: IosTheme.spaceS,
         vertical: IosTheme.spaceXXS,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+        color: p.fill,
+        borderRadius: BorderRadius.circular(IosTheme.radiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IosStatusDot(
-            color: online ? IosTheme.iosGreen : IosTheme.iosGray,
+            color: online ? p.ok : p.label3,
             size: 6,
           ),
           const SizedBox(width: IosTheme.spaceXS),
@@ -36,8 +36,8 @@ class ConsoleDeviceChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 11,
-                color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                fontSize: IosType.caption,
+                color: p.label2,
               ),
             ),
           ),

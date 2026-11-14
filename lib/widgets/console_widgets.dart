@@ -7,14 +7,7 @@ class ConsoleBreathBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: const BoxDecoration(
-        color: Colors.orange,
-        shape: BoxShape.circle,
-      ),
-    );
+    return IosBreathingDot(color: IosPalette.of(context).warnTint);
   }
 }
 
@@ -39,6 +32,7 @@ class ConsoleSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = IosPalette.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         IosTheme.spaceL,
@@ -52,14 +46,15 @@ class ConsoleSectionHeader extends StatelessWidget {
           const SizedBox(width: IosTheme.spaceS),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 15,
+            style: TextStyle(
+              fontSize: IosType.body,
               fontWeight: FontWeight.w600,
+              color: p.label,
             ),
           ),
           const SizedBox(width: IosTheme.spaceS),
           AnimatedSwitcher(
-            duration: IosTheme.durationFast,
+            duration: IosMotion.durationFast,
             child: Container(
               key: ValueKey(count),
               padding: const EdgeInsets.symmetric(
@@ -67,31 +62,19 @@ class ConsoleSectionHeader extends StatelessWidget {
                 vertical: IosTheme.spaceXXS,
               ),
               decoration: BoxDecoration(
-                color: badge
-                    ? IosTheme.iosOrange
-                    : Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF2C2C2E)
-                        : const Color(0xFFF2F2F7),
-                borderRadius: BorderRadius.circular(IosTheme.radiusXS),
+                color: badge ? p.warnSoft : p.fill,
+                borderRadius: BorderRadius.circular(IosTheme.radiusPill),
               ),
               child: Text(
                 '$count',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: badge
-                      ? Colors.white
-                      : Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white70
-                          : Colors.black54,
+                  fontSize: IosType.footnote,
+                  color: badge ? p.warnText : p.label2,
                   fontWeight: badge ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
             ),
           ),
-          if (badge) ...[
-            const SizedBox(width: IosTheme.spaceS),
-            ConsoleBreathBadge(),
-          ],
           const Spacer(),
           if (action != null) action!,
         ],
@@ -112,9 +95,9 @@ class ConsoleQuietLine extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: IosType.footnotePlus,
           fontStyle: FontStyle.italic,
-          color: IosTheme.iosGray,
+          color: IosPalette.of(context).label3,
         ),
       ),
     );

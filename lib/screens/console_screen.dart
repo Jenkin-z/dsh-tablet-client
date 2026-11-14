@@ -49,16 +49,16 @@ class ConsoleScreen extends StatelessWidget {
           builder: (context, _, __) {
             final session = context.read<SessionState>();
             final groups = manager.groups;
-            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final p = IosPalette.of(context);
             return Scaffold(
-              backgroundColor:
-                  isDark ? const Color(0xFF000000) : IosTheme.iosGroupedBg,
+              backgroundColor: p.bg,
               appBar: AppBar(
-                title: const Text(
+                title: Text(
                   '控制台',
                   style: TextStyle(
-                    fontSize: 17,
+                    fontSize: IosType.title3,
                     fontWeight: FontWeight.w600,
+                    color: p.label,
                   ),
                 ),
                 actions: [
@@ -71,14 +71,14 @@ class ConsoleScreen extends StatelessWidget {
                         child: Text(
                           '更新于 ${_clock(manager.lastRefresh!)}',
                           style: TextStyle(
-                            fontSize: 13,
-                            color: IosTheme.iosGray,
+                            fontSize: IosType.footnotePlus,
+                            color: p.label2,
                           ),
                         ),
                       ),
                     ),
                   IconButton(
-                    icon: const Icon(Icons.refresh, size: 22),
+                    icon: Icon(Icons.refresh, size: 22, color: p.label2),
                     tooltip: '刷新',
                     onPressed: manager.refreshAll,
                   ),
@@ -134,10 +134,12 @@ class ConsoleScreen extends StatelessWidget {
             groups: groups,
             // 高亮只看「哪台是当前机器」，与连没连上无关。
             activeServerId: settings.activeServerId,
+            pendingCountOf: (serverId) =>
+                _pendingCountOf(session, groups, serverId),
             onTapDevice: (serverId) => _onTapDevice(context, groups, serverId),
           ),
           const SizedBox(height: IosTheme.spaceS),
-          _recentBlock(settings, session, groups),
+          _recentBlock(context, settings, session, groups),
         ],
       ),
     );
@@ -154,7 +156,7 @@ class ConsoleScreen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _deviceRail(context, settings, groups),
+        _deviceRail(context, settings, session, groups),
         Expanded(
           child: RefreshIndicator(
             onRefresh: manager.refreshAll,
@@ -162,7 +164,7 @@ class ConsoleScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: IosTheme.spaceXXXL),
               children: [
                 const SizedBox(height: IosTheme.spaceS),
-                _recentBlock(settings, session, groups),
+                _recentBlock(context, settings, session, groups),
               ],
             ),
           ),
@@ -174,20 +176,15 @@ class ConsoleScreen extends StatelessWidget {
   Widget _deviceRail(
     BuildContext context,
     SettingsService settings,
+    SessionState session,
     List<ServerGroup> groups,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = IosPalette.of(context);
     return Container(
       width: 260,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0C0C0D) : Colors.white,
-        border: Border(
-          right: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
+        color: p.surface,
+        border: Border(right: BorderSide(color: p.separator)),
       ),
       child: SafeArea(
         top: false,
@@ -198,7 +195,7 @@ class ConsoleScreen extends StatelessWidget {
           children: [
             ConsoleSectionHeader(
               icon: Icons.devices_other,
-              iconColor: IosTheme.iosBlue,
+              iconColor: p.accent,
               title: '设备',
               count: groups.length,
             ),
@@ -207,6 +204,8 @@ class ConsoleScreen extends StatelessWidget {
                 groups: groups,
                 activeServerId: settings.activeServerId,
                 axis: Axis.vertical,
+                pendingCountOf: (serverId) =>
+                    _pendingCountOf(session, groups, serverId),
                 onTapDevice: (serverId) =>
                     _onTapDevice(context, groups, serverId),
               ),
@@ -217,7 +216,31 @@ class ConsoleScreen extends StatelessWidget {
     );
   }
 
+  /// 该机器上等待审批/提问的会话数（设备卡待办角标）
+  ({int approvals, int questions}) _pendingCountOf(
+    SessionState session,
+    List<ServerGroup> groups,
+    String serverId,
+  ) {
+    final group = groups.where((g) => g.server.id == serverId).firstOrNull;
+    if (group == null) return (approvals: 0, questions: 0);
+    var approvals = 0;
+    var questions = 0;
+    for (final s in group.monitor.sessions) {
+      final id = s['sessionId'] as String? ?? '';
+      if (id.isEmpty) continue;
+      switch (session.pendingKindOf(id)) {
+        case 'approval':
+          approvals++;
+        case 'question' || 'plan-review':
+          questions++;
+      }
+    }
+    return (approvals: approvals, questions: questions);
+  }
+
   Widget _recentBlock(
+    BuildContext context,
     SettingsService settings,
     SessionState session,
     List<ServerGroup> groups,
@@ -239,7 +262,7 @@ class ConsoleScreen extends StatelessWidget {
       children: [
         ConsoleSectionHeader(
           icon: Icons.forum_outlined,
-          iconColor: IosTheme.iosBlue,
+          iconColor: IosPalette.of(context).accent,
           title: '最近 3 小时',
           count: recent.length,
           badge: hasRecentUnviewed,
@@ -250,7 +273,13 @@ class ConsoleScreen extends StatelessWidget {
                   onPressed: () => settings.markAllSeen(
                     settings.unviewedIds.toList(growable: false),
                   ),
-                  child: const Text('全部已读'),
+                  child: Text(
+                    '全部已读',
+                    style: TextStyle(
+                      color: IosPalette.of(context).accent,
+                      fontSize: IosType.footnotePlus,
+                    ),
+                  ),
                 )
               : null,
         ),
@@ -268,34 +297,36 @@ class ConsoleScreen extends StatelessWidget {
   }
 
   Widget _emptyState(BuildContext context) {
+    final p = IosPalette.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.computer_outlined,
-            size: 56,
-            color: IosTheme.iosGray,
-          ),
+          Icon(Icons.computer_outlined, size: 56, color: p.label3),
           const SizedBox(height: IosTheme.spaceM),
-          const Text(
+          Text(
             '还没有 PC',
-            style: TextStyle(fontSize: 17, color: IosTheme.iosGray),
+            style: TextStyle(
+              fontSize: IosType.title3,
+              fontWeight: FontWeight.w600,
+              color: p.label2,
+            ),
           ),
           const SizedBox(height: IosTheme.spaceS),
-          const Text(
+          Text(
             '去设置里添加一台运行 DSH 的电脑',
-            style: TextStyle(fontSize: 15, color: IosTheme.iosGray),
+            style: TextStyle(fontSize: IosType.body, color: p.label3),
           ),
           const SizedBox(height: IosTheme.spaceXL),
-          ElevatedButton(
+          IosButton(
+            label: '添加 PC',
+            icon: Icons.add,
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const PairScreen()),
               );
             },
-            child: const Text('添加 PC'),
           ),
         ],
       ),

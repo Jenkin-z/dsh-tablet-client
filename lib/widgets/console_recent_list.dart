@@ -29,21 +29,22 @@ class ConsoleRecentList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final p = IosPalette.of(context);
 
     if (entries.isEmpty) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
         padding: const EdgeInsets.all(IosTheme.spaceXL),
         decoration: BoxDecoration(
-          color: cardColor,
+          color: p.surface,
           borderRadius: BorderRadius.circular(IosTheme.radiusCard),
+          border: p.isDark ? Border.all(color: p.separator, width: 0.5) : null,
+          boxShadow: p.isDark ? null : IosTheme.shadowM,
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             '最近 3 小时没有活跃会话',
-            style: TextStyle(color: IosTheme.iosGray, fontSize: 15),
+            style: TextStyle(color: p.label3, fontSize: IosType.body),
           ),
         ),
       );
@@ -52,9 +53,10 @@ class ConsoleRecentList extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: IosTheme.spaceL),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: p.surface,
         borderRadius: BorderRadius.circular(IosTheme.radiusCard),
-        boxShadow: IosTheme.shadowS,
+        border: p.isDark ? Border.all(color: p.separator, width: 0.5) : null,
+        boxShadow: p.isDark ? null : IosTheme.shadowM,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -64,10 +66,8 @@ class ConsoleRecentList extends StatelessWidget {
               Divider(
                 height: 0.5,
                 thickness: 0.5,
-                indent: 56,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
+                indent: 24,
+                color: p.separator,
               ),
             ConsoleSessionTile(
               entry: entries[i],

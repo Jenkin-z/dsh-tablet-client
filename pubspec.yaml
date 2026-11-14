@@ -1,7 +1,7 @@
 name: dsh_tablet_client
 description: DSH Tablet Client - RK3288平板 AI Agent 前端
 publish_to: 'none'
-version: 1.9.29+81
+version: 1.9.30+82
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
